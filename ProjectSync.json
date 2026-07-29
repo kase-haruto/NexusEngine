@@ -1,0 +1,15 @@
+{
+  "project": "Project/NexusEngine.vcxproj",
+  "roots": [
+    {
+      "path": "Project",
+      "filter": ""
+    }
+  ],
+  "excludeDirectories": [
+    ".vs",
+    "Generated",
+    "obj",
+    "bin"
+  ]
+}

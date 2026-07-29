@@ -20,6 +20,8 @@ generated/
 # Visual Studio intermediate
 ###############################################################################
 ipch/
+**/bin/
+**/obj/
 *.aps
 *.ncb
 *.opendb
