@@ -1,25 +1,19 @@
 #pragma once
 
 namespace NexusEngine {
-
 	/*-----------------------------------------------------------------------------------------
-	 * NexusFramework
-	 * - 本エンジンのフレームワーク
-	 * - エンジンの初期化、シャットダウンなどの基本的な機能を提供する
+	 * Environment
+	 * - 環境情報を提供する
 	 *---------------------------------------------------------------------------------------*/
-	class NexusFramework {
+	class Environment {
 	public:
 		//===================================================================*/
 		//                    public methods
 		//===================================================================*/
-		NexusFramework()noexcept;
-		~NexusFramework()noexcept;
-
-		/**
-		 * @brief engineの実行
-		 */
-		void Run();
-
+		static const char* GetPlatformName() noexcept;
+		static const char* GetPlatformVersion() noexcept;
+		static const char* GetCompilerName() noexcept;
+		static const char* GetCompilerVersion() noexcept;
+		static const char* GetLanguageStandardVersion() noexcept;
 	};
-
-}
+} // namespace NexusEngine
