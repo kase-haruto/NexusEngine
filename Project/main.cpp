@@ -1,6 +1,18 @@
+
+// engine
+#include "Core/Framework/NexusFramework.h"
+
+// c++
 #include <iostream>
 
+/*-----------------------------------------------------------------------------------------
+ * main
+ * - エンジンのエントリーポイント
+ *---------------------------------------------------------------------------------------*/
 int main() {
-	std::cout << "Hello, World!" << std::endl;
+
+	NexusEngine::NexusFramework framework;
+	framework.Run();
+
 	return 0;
 }
