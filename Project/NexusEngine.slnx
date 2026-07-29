@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="NexusEngine.vcxproj" Id="9a729154-4d88-429c-a6a8-ab6ae2b85376" />
+</Solution>
