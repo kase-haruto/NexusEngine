@@ -169,6 +169,12 @@
     <ClInclude Include="Platform\Window\ProjectWindow.h" />
     <ClInclude Include="Platform\Window\WindowDetails.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Agent\AGENT.md">
+      <SubType>
+      </SubType>
+    </None>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

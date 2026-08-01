@@ -1,48 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Core"><UniqueIdentifier>{F26FDB87-BA48-D555-9064-0F32EDA3DB07}</UniqueIdentifier></Filter>
-    <Filter Include="Core\Framework"><UniqueIdentifier>{7ED1987A-3793-2F55-8B10-4AD90162235D}</UniqueIdentifier></Filter>
-    <Filter Include="Foundation"><UniqueIdentifier>{A4A83530-50D5-470E-A149-A9D685A8913E}</UniqueIdentifier></Filter>
-    <Filter Include="Foundation\Error"><UniqueIdentifier>{405A0858-A254-42DE-A95F-B0E1F34DB5D1}</UniqueIdentifier></Filter>
-    <Filter Include="Foundation\Logging"><UniqueIdentifier>{F122FF6A-A565-469B-A8FB-0EEAFB35CF69}</UniqueIdentifier></Filter>
-    <Filter Include="Foundation\Utility"><UniqueIdentifier>{BF33C201-0781-4B3C-B697-E4B90147B94C}</UniqueIdentifier></Filter>
-    <Filter Include="Platform"><UniqueIdentifier>{43451E4B-3B5E-477D-965B-D4F4C916F604}</UniqueIdentifier></Filter>
-    <Filter Include="Platform\Window"><UniqueIdentifier>{4B9C4C0E-1971-4FA4-B641-779AD68A6499}</UniqueIdentifier></Filter>
-    <Filter Include="Graphics"><UniqueIdentifier>{A3EE165F-EA9A-4C4D-A26D-E5F4DB3F9D31}</UniqueIdentifier></Filter>
-    <Filter Include="Graphics\Device"><UniqueIdentifier>{16C7001D-D76C-46D3-96D4-6C25FF3028B8}</UniqueIdentifier></Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{F26FDB87-BA48-D555-9064-0F32EDA3DB07}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\Framework">
+      <UniqueIdentifier>{7ED1987A-3793-2F55-8B10-4AD90162235D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Foundation">
+      <UniqueIdentifier>{A4A83530-50D5-470E-A149-A9D685A8913E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Foundation\Error">
+      <UniqueIdentifier>{405A0858-A254-42DE-A95F-B0E1F34DB5D1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Foundation\Logging">
+      <UniqueIdentifier>{F122FF6A-A565-469B-A8FB-0EEAFB35CF69}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Foundation\Utility">
+      <UniqueIdentifier>{BF33C201-0781-4B3C-B697-E4B90147B94C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{43451E4B-3B5E-477D-965B-D4F4C916F604}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform\Window">
+      <UniqueIdentifier>{4B9C4C0E-1971-4FA4-B641-779AD68A6499}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics">
+      <UniqueIdentifier>{A3EE165F-EA9A-4C4D-A26D-E5F4DB3F9D31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics\Device">
+      <UniqueIdentifier>{16C7001D-D76C-46D3-96D4-6C25FF3028B8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Core\Framework\NexusFramework.cpp"><Filter>Core\Framework</Filter></ClCompile>
-    <ClCompile Include="Foundation\Error\Error.cpp"><Filter>Foundation\Error</Filter></ClCompile>
-    <ClCompile Include="Foundation\Logging\ConsoleLogSink.cpp"><Filter>Foundation\Logging</Filter></ClCompile>
-    <ClCompile Include="Foundation\Logging\DebugOutputLogSink.cpp"><Filter>Foundation\Logging</Filter></ClCompile>
-    <ClCompile Include="Foundation\Logging\Logger.cpp"><Filter>Foundation\Logging</Filter></ClCompile>
-    <ClCompile Include="Foundation\Logging\LogTextFormatter.cpp"><Filter>Foundation\Logging</Filter></ClCompile>
-    <ClCompile Include="Foundation\Utility\String\ConvertString.cpp"><Filter>Foundation\Utility</Filter></ClCompile>
-    <ClCompile Include="Platform\Window\ProjectWindow.cpp"><Filter>Platform\Window</Filter></ClCompile>
-    <ClCompile Include="Graphics\Device\GraphicsAdapterSelector.cpp"><Filter>Graphics\Device</Filter></ClCompile>
-    <ClCompile Include="Graphics\Device\GraphicsDebugConfigurator.cpp"><Filter>Graphics\Device</Filter></ClCompile>
-    <ClCompile Include="Graphics\Device\GraphicsDevice.cpp"><Filter>Graphics\Device</Filter></ClCompile>
+    <ClCompile Include="Core\Framework\NexusFramework.cpp">
+      <Filter>Core\Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="Foundation\Error\Error.cpp">
+      <Filter>Foundation\Error</Filter>
+    </ClCompile>
+    <ClCompile Include="Foundation\Logging\ConsoleLogSink.cpp">
+      <Filter>Foundation\Logging</Filter>
+    </ClCompile>
+    <ClCompile Include="Foundation\Logging\DebugOutputLogSink.cpp">
+      <Filter>Foundation\Logging</Filter>
+    </ClCompile>
+    <ClCompile Include="Foundation\Logging\Logger.cpp">
+      <Filter>Foundation\Logging</Filter>
+    </ClCompile>
+    <ClCompile Include="Foundation\Logging\LogTextFormatter.cpp">
+      <Filter>Foundation\Logging</Filter>
+    </ClCompile>
+    <ClCompile Include="Foundation\Utility\String\ConvertString.cpp">
+      <Filter>Foundation\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Platform\Window\ProjectWindow.cpp">
+      <Filter>Platform\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Device\GraphicsAdapterSelector.cpp">
+      <Filter>Graphics\Device</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Device\GraphicsDebugConfigurator.cpp">
+      <Filter>Graphics\Device</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Device\GraphicsDevice.cpp">
+      <Filter>Graphics\Device</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Core\Environment.h"><Filter>Core</Filter></ClInclude>
-    <ClInclude Include="Core\Framework\NexusFramework.h"><Filter>Core\Framework</Filter></ClInclude>
-    <ClInclude Include="Foundation\Error\Error.h"><Filter>Foundation\Error</Filter></ClInclude>
-    <ClInclude Include="Foundation\Error\Result.h"><Filter>Foundation\Error</Filter></ClInclude>
-    <ClInclude Include="Foundation\Logging\ConsoleLogSink.h"><Filter>Foundation\Logging</Filter></ClInclude>
-    <ClInclude Include="Foundation\Logging\DebugOutputLogSink.h"><Filter>Foundation\Logging</Filter></ClInclude>
-    <ClInclude Include="Foundation\Logging\ILogSink.h"><Filter>Foundation\Logging</Filter></ClInclude>
-    <ClInclude Include="Foundation\Logging\Logger.h"><Filter>Foundation\Logging</Filter></ClInclude>
-    <ClInclude Include="Foundation\Logging\LogRecord.h"><Filter>Foundation\Logging</Filter></ClInclude>
-    <ClInclude Include="Foundation\Logging\LogTextFormatter.h"><Filter>Foundation\Logging</Filter></ClInclude>
-    <ClInclude Include="Foundation\Utility\String\ConvertString.h"><Filter>Foundation\Utility</Filter></ClInclude>
-    <ClInclude Include="Platform\Window\ProjectWindow.h"><Filter>Platform\Window</Filter></ClInclude>
-    <ClInclude Include="Platform\Window\WindowDetails.h"><Filter>Platform\Window</Filter></ClInclude>
-    <ClInclude Include="Graphics\Device\GraphicsAdapterSelector.h"><Filter>Graphics\Device</Filter></ClInclude>
-    <ClInclude Include="Graphics\Device\GraphicsDebugConfigurator.h"><Filter>Graphics\Device</Filter></ClInclude>
-    <ClInclude Include="Graphics\Device\GraphicsDevice.h"><Filter>Graphics\Device</Filter></ClInclude>
-    <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h"><Filter>Graphics\Device</Filter></ClInclude>
+    <ClInclude Include="Core\Environment.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Framework\NexusFramework.h">
+      <Filter>Core\Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Error\Error.h">
+      <Filter>Foundation\Error</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Error\Result.h">
+      <Filter>Foundation\Error</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Logging\ConsoleLogSink.h">
+      <Filter>Foundation\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Logging\DebugOutputLogSink.h">
+      <Filter>Foundation\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Logging\ILogSink.h">
+      <Filter>Foundation\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Logging\Logger.h">
+      <Filter>Foundation\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Logging\LogRecord.h">
+      <Filter>Foundation\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Logging\LogTextFormatter.h">
+      <Filter>Foundation\Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="Foundation\Utility\String\ConvertString.h">
+      <Filter>Foundation\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Window\ProjectWindow.h">
+      <Filter>Platform\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Window\WindowDetails.h">
+      <Filter>Platform\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Device\GraphicsAdapterSelector.h">
+      <Filter>Graphics\Device</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Device\GraphicsDebugConfigurator.h">
+      <Filter>Graphics\Device</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Device\GraphicsDevice.h">
+      <Filter>Graphics\Device</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h">
+      <Filter>Graphics\Device</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Agent\AGENT.md" />
   </ItemGroup>
 </Project>
