@@ -6,11 +6,6 @@
 
 namespace NexusEngine {
 	/**
-	 * @brief ログ出力
-	 * @param message
-	 */
-	void Log(const std::string& message);
-	/**
 	 * @brief string 型変換
 	 * @param str
 	 * @return
