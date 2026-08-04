@@ -110,6 +110,8 @@ namespace NexusEngine {
 		}
 
 		// HWNDを完全に生成してからrunningを公開し、不完全なWindowでループが始まるのを防ぐ。
+		clientWidth_ = detail.clientWidth;
+		clientHeight_ = detail.clientHeight;
 		running_ = true;
 		ShowWindow(window_, SW_SHOW);
 		UpdateWindow(window_);
@@ -139,6 +141,9 @@ namespace NexusEngine {
 
 		className_.clear();
 		instance_ = nullptr;
+		clientWidth_ = 0;
+		clientHeight_ = 0;
+		resizePending_ = false;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -167,6 +172,17 @@ namespace NexusEngine {
 
 	HWND ProjectWindow::GetNativeHandle() const noexcept {
 		return window_;
+	}
+
+	uint32_t ProjectWindow::GetClientWidth() const noexcept { return clientWidth_; }
+	uint32_t ProjectWindow::GetClientHeight() const noexcept { return clientHeight_; }
+
+	std::optional<WindowResizeEvent> ProjectWindow::ConsumeResizeEvent() noexcept {
+		if(!resizePending_) {
+			return std::nullopt;
+		}
+		resizePending_ = false;
+		return WindowResizeEvent { clientWidth_, clientHeight_ };
 	}
 
 	LRESULT CALLBACK ProjectWindow::WindowProcedure(
@@ -198,6 +214,14 @@ namespace NexusEngine {
 		const WPARAM wParam,
 		const LPARAM lParam) noexcept {
 		switch(message) {
+		case WM_SIZE:
+			// 最小化時の0サイズはSwapChainへ渡さず、復元後の有効サイズだけ通知する。
+			if(wParam != SIZE_MINIMIZED) {
+				clientWidth_ = static_cast<uint32_t>(LOWORD(lParam));
+				clientHeight_ = static_cast<uint32_t>(HIWORD(lParam));
+				resizePending_ = clientWidth_ > 0 && clientHeight_ > 0;
+			}
+			return 0;
 		case WM_CLOSE:
 			// 終了要求を先に公開してからHWNDを破棄し、同じフレームのUpdate実行を抑止する。
 			running_ = false;

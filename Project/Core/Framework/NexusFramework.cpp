@@ -13,6 +13,7 @@ namespace NexusEngine {
 		constexpr int kSuccessExitCode = 0;
 		constexpr int kInitializationFailureExitCode = 1;
 		constexpr int kUnhandledExceptionExitCode = 2;
+		constexpr int kRuntimeFailureExitCode = 3;
 		constexpr int32_t kInvalidState = 1;
 		constexpr int32_t kUnsupportedMode = 2;
 
@@ -54,14 +55,26 @@ namespace NexusEngine {
 			// 将来EditorとGameで処理が分岐しても、このライフサイクル自体は維持する。
 			while(IsRunning()) {
 				BeginFrame();
-				ProcessEvents();
+				auto eventResult = ProcessEvents();
+				if(!eventResult) {
+					NEXUS_LOG_CRITICAL("Framework", DescribeError(eventResult.error()));
+					state_ = FrameworkState::Failed;
+					Shutdown();
+					return kRuntimeFailureExitCode;
+				}
 
 				// WM_CLOSEを受けたフレームではUpdate以降を実行せず、破棄対象へ触れない。
 				if(!IsRunning()) {
 					break;
 				}
 				Update();
-				Render();
+				auto renderResult = Render();
+				if(!renderResult) {
+					NEXUS_LOG_CRITICAL("Framework", DescribeError(renderResult.error()));
+					state_ = FrameworkState::Failed;
+					Shutdown();
+					return kRuntimeFailureExitCode;
+				}
 				EndFrame();
 			}
 
@@ -111,8 +124,13 @@ namespace NexusEngine {
 			return std::unexpected(std::move(windowResult.error()));
 		}
 
-		// GraphicsDeviceはWindowに依存させず、Factory・Adapter・Deviceだけを初期化する。
-		auto graphicsResult = graphicsDevice_.Initialize(desc.graphics);
+		// GraphicsへProjectWindow自体を渡さず、Surface生成に必要な値だけを境界Descriptorへ変換する。
+		const WindowSurfaceDesc surface {
+			.nativeHandle = window_.GetNativeHandle(),
+			.width = window_.GetClientWidth(),
+			.height = window_.GetClientHeight()
+		};
+		auto graphicsResult = graphicsSystem_.Initialize(surface, desc.graphics);
 		if(!graphicsResult) {
 			// 初期化済みのWindowだけを逆順で戻し、部分初期化状態を残さない。
 			window_.Shutdown();
@@ -142,7 +160,7 @@ namespace NexusEngine {
 		NEXUS_LOG_INFO("Framework", "NexusEngine shutdown started.");
 
 		// 依存側から先に破棄する。将来SwapChainを追加する場合もWindowより前に解放する。
-		graphicsDevice_.Shutdown();
+		graphicsSystem_.Shutdown();
 		window_.Shutdown();
 
 		// 全所有物の解放後にStoppedへ遷移し、外部から終了完了を観測可能にする。
@@ -159,17 +177,21 @@ namespace NexusEngine {
 		// Command AllocatorやFrame Resource導入時のフレーム開始境界。
 	}
 
-	void NexusFramework::ProcessEvents() noexcept {
+	Result<void> NexusFramework::ProcessEvents() {
 		// Windowが保持する終了状態はIsRunningで直後に評価し、Framework側へ重複状態を持たせない。
 		static_cast<void>(window_.ProcessEvents());
+		if(const auto resize = window_.ConsumeResizeEvent(); resize.has_value()) {
+			return graphicsSystem_.Resize(resize->width, resize->height);
+		}
+		return {};
 	}
 
 	void NexusFramework::Update() noexcept {
 		// GameまたはEditorの更新処理を接続する拡張境界。
 	}
 
-	void NexusFramework::Render() noexcept {
-		// Command Queue、SwapChain導入後にRendererを呼ぶ拡張境界。
+	Result<void> NexusFramework::Render() {
+		return graphicsSystem_.RenderFrame();
 	}
 
 	void NexusFramework::EndFrame() noexcept {

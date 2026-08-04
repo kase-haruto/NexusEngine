@@ -144,9 +144,12 @@
     <ClCompile Include="Foundation\Logging\LogTextFormatter.cpp" />
     <ClCompile Include="Foundation\Utility\String\ConvertString.cpp" />
     <ClCompile Include="Core\Framework\NexusFramework.cpp" />
+	<ClCompile Include="Graphics\Core\CommandQueue.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsAdapterSelector.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDebugConfigurator.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDevice.cpp" />
+	<ClCompile Include="Graphics\Presentation\SwapChain.cpp" />
+	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Platform\Window\ProjectWindow.cpp" />
   </ItemGroup>
@@ -162,10 +165,14 @@
     <ClInclude Include="Foundation\Utility\String\ConvertString.h" />
     <ClInclude Include="Core\Environment.h" />
     <ClInclude Include="Core\Framework\NexusFramework.h" />
+	<ClInclude Include="Graphics\Core\CommandQueue.h" />
     <ClInclude Include="Graphics\Device\GraphicsAdapterSelector.h" />
     <ClInclude Include="Graphics\Device\GraphicsDebugConfigurator.h" />
     <ClInclude Include="Graphics\Device\GraphicsDevice.h" />
     <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h" />
+	<ClInclude Include="Graphics\Presentation\SwapChain.h" />
+	<ClInclude Include="Graphics\Renderer\GraphicsSystem.h" />
+	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h" />
     <ClInclude Include="Platform\Window\ProjectWindow.h" />
     <ClInclude Include="Platform\Window\WindowDetails.h" />
   </ItemGroup>

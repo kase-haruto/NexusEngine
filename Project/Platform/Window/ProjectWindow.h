@@ -9,11 +9,19 @@
 #endif
 #include <Windows.h>
 
+// c++
+#include <optional>
+
 // engine
 #include "Foundation/Error/Result.h"
 #include "WindowDetails.h"
 
 namespace NexusEngine {
+
+	struct WindowResizeEvent {
+		uint32_t width = 0;
+		uint32_t height = 0;
+	};
 
 	/*-----------------------------------------------------------------------------------------
 	 * ProjectWindow
@@ -49,6 +57,9 @@ namespace NexusEngine {
 
 		[[nodiscard]] bool IsRunning() const noexcept;
 		[[nodiscard]] HWND GetNativeHandle() const noexcept;
+		[[nodiscard]] uint32_t GetClientWidth() const noexcept;
+		[[nodiscard]] uint32_t GetClientHeight() const noexcept;
+		[[nodiscard]] std::optional<WindowResizeEvent> ConsumeResizeEvent() noexcept;
 
 	private:
 		static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
@@ -59,6 +70,9 @@ namespace NexusEngine {
 		std::wstring className_;			   //< 登録解除まで保持する一意なクラス名
 		bool	  classRegistered_ = false;	 //< 部分初期化時の登録解除判定
 		bool	  running_		   = false;	 //< WM_CLOSEまたはWM_QUITを反映する実行状態
+		uint32_t clientWidth_ = 0;          //< 現在のクライアント領域幅
+		uint32_t clientHeight_ = 0;         //< 現在のクライアント領域高
+		bool resizePending_ = false;         //< 未消費の有効なResize通知
 	};
 
 } // namespace NexusEngine

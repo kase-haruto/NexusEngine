@@ -31,6 +31,15 @@
     <Filter Include="Graphics\Device">
       <UniqueIdentifier>{16C7001D-D76C-46D3-96D4-6C25FF3028B8}</UniqueIdentifier>
     </Filter>
+	<Filter Include="Graphics\Core">
+	  <UniqueIdentifier>{A337E626-4484-4D73-9373-98C5E43F44E0}</UniqueIdentifier>
+	</Filter>
+	<Filter Include="Graphics\Presentation">
+	  <UniqueIdentifier>{27F193FB-5019-4519-BF48-24618A888FB4}</UniqueIdentifier>
+	</Filter>
+	<Filter Include="Graphics\Renderer">
+	  <UniqueIdentifier>{2E467F7E-89FC-4B24-8B7A-A425FB09B76F}</UniqueIdentifier>
+	</Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -67,6 +76,15 @@
     <ClCompile Include="Graphics\Device\GraphicsDevice.cpp">
       <Filter>Graphics\Device</Filter>
     </ClCompile>
+	<ClCompile Include="Graphics\Core\CommandQueue.cpp">
+	  <Filter>Graphics\Core</Filter>
+	</ClCompile>
+	<ClCompile Include="Graphics\Presentation\SwapChain.cpp">
+	  <Filter>Graphics\Presentation</Filter>
+	</ClCompile>
+	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp">
+	  <Filter>Graphics\Renderer</Filter>
+	</ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Environment.h">
@@ -120,6 +138,18 @@
     <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h">
       <Filter>Graphics\Device</Filter>
     </ClInclude>
+	<ClInclude Include="Graphics\Core\CommandQueue.h">
+	  <Filter>Graphics\Core</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Presentation\SwapChain.h">
+	  <Filter>Graphics\Presentation</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsSystem.h">
+	  <Filter>Graphics\Renderer</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h">
+	  <Filter>Graphics\Renderer</Filter>
+	</ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Agent\AGENT.md" />
