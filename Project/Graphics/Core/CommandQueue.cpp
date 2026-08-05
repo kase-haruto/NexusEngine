@@ -118,6 +118,10 @@ namespace NexusEngine {
 		return Wait(*signalResult);
 	}
 
+	uint64_t CommandQueue::GetCompletedFenceValue() const noexcept {
+		return fence_ ? fence_->GetCompletedValue() : 0;
+	}
+
 	ID3D12CommandQueue* CommandQueue::GetNativeQueue() const noexcept { return queue_.Get(); }
 
 } // namespace NexusEngine

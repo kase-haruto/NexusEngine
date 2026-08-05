@@ -3,6 +3,7 @@
 // c++
 #include <array>
 #include <cstdint>
+#include <filesystem>
 
 namespace NexusEngine {
 
@@ -34,6 +35,9 @@ namespace NexusEngine {
 		bool useWarpAdapter = false;
 		bool enableVSync = true;
 		std::array<float, 4> clearColor = { 0.08f, 0.12f, 0.20f, 1.0f };
+		std::filesystem::path shaderDirectory = L"Shaders";
+		uint32_t bindlessResourceCapacity = 4096; //< CBV/SRV/UAV永続Bindless slot数
+		uint32_t bindlessSamplerCapacity = 128;   //< Sampler永続Bindless slot数
 	};
 
 } // namespace NexusEngine

@@ -40,6 +40,13 @@
 	<Filter Include="Graphics\Renderer">
 	  <UniqueIdentifier>{2E467F7E-89FC-4B24-8B7A-A425FB09B76F}</UniqueIdentifier>
 	</Filter>
+	<Filter Include="Graphics\Descriptor"><UniqueIdentifier>{EF42E9DD-8CD9-4514-AE43-1824C789DD47}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Shader"><UniqueIdentifier>{E1E18133-767B-43E3-AE52-0D78591DF1D3}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Pipeline"><UniqueIdentifier>{87724307-2EB4-4B7F-8F84-970DB1766502}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Resource"><UniqueIdentifier>{AAB88A42-A2F1-40BB-B067-F138C98F9F34}</UniqueIdentifier></Filter>
+	<Filter Include="Shaders"><UniqueIdentifier>{2FBFA148-BB51-458B-8BB7-F3653048B0D8}</UniqueIdentifier></Filter>
+	<Filter Include="Shaders\Primitive"><UniqueIdentifier>{2EFA5561-F631-4B3E-AFFF-D3127A42D98A}</UniqueIdentifier></Filter>
+	<Filter Include="Docs"><UniqueIdentifier>{87093688-17A1-4293-94B3-F10A9592125B}</UniqueIdentifier></Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -85,6 +92,16 @@
 	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp">
 	  <Filter>Graphics\Renderer</Filter>
 	</ClCompile>
+	<ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp"><Filter>Graphics\Renderer</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Shader\Shader.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
+	<ClCompile Include="Graphics\Shader\ShaderCompiler.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
+	<ClCompile Include="Graphics\Shader\ShaderReflector.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
+	<ClCompile Include="Graphics\Pipeline\PipelineLayout.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
+	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
+	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Environment.h">
@@ -150,8 +167,24 @@
 	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h">
 	  <Filter>Graphics\Renderer</Filter>
 	</ClInclude>
+	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\Shader.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\ShaderCompiler.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\ShaderReflector.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\ShaderTypes.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Pipeline\PipelineLayout.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Pipeline\RootSignature.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\VertexBuffer.h"><Filter>Graphics\Resource</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
+	<None Include="Docs\GraphicsREADME.md"><Filter>Docs</Filter></None>
+	<None Include="Shaders\Primitive\Primitive.VS.hlsl"><Filter>Shaders\Primitive</Filter></None>
+	<None Include="Shaders\Primitive\Primitive.PS.hlsl"><Filter>Shaders\Primitive</Filter></None>
+	<None Include="Shaders\Common\Bindless.hlsli"><Filter>Shaders</Filter></None>
     <None Include="Agent\AGENT.md" />
   </ItemGroup>
 </Project>

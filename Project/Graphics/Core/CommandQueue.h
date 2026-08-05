@@ -63,6 +63,8 @@ namespace NexusEngine {
 		 * \return GPU待機結果
 		 */
 		[[nodiscard]] Result<void> WaitForIdle();
+		/** \brief Descriptor retire回収に使用する現在の完了Fence値を取得する */
+		[[nodiscard]] uint64_t GetCompletedFenceValue() const noexcept;
 
 		/**
 		 * \brief Backend内部で使用するCommand Queueを取得する

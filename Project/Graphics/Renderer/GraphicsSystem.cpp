@@ -10,8 +10,10 @@
 // engine
 #include "Foundation/Logging/Logger.h"
 #include "Graphics/Core/CommandQueue.h"
+#include "Graphics/Descriptor/BindlessDescriptorTable.h"
 #include "Graphics/Device/GraphicsDevice.h"
 #include "Graphics/Presentation/SwapChain.h"
+#include "PrimitiveRenderer.h"
 
 namespace NexusEngine {
 	namespace {
@@ -35,6 +37,8 @@ namespace NexusEngine {
 		GraphicsDevice device;
 		CommandQueue commandQueue;
 		SwapChain swapChain;
+		BindlessDescriptorTable bindlessDescriptors;
+		PrimitiveRenderer primitiveRenderer;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
 		bool enableVSync = true;
@@ -101,6 +105,18 @@ namespace NexusEngine {
 			}
 		}
 
+		// Bindless TableがResource/Sampler Heap、null slot、generationを一体で管理する。
+		result = implementation->bindlessDescriptors.Initialize(
+			implementation->device.GetDevice(),
+			desc.bindlessResourceCapacity,
+			desc.bindlessSamplerCapacity);
+		if(!result) return std::unexpected(std::move(result.error()));
+
+		// 基盤検証用GeometryとPipelineは専用Rendererへ委譲し、Systemへ形状データを持たせない。
+		result = implementation->primitiveRenderer.Initialize(
+			implementation->device.GetDevice(), desc.shaderDirectory);
+		if(!result) return std::unexpected(std::move(result.error()));
+
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
 		implementation->enableVSync = desc.enableVSync;
@@ -128,6 +144,9 @@ namespace NexusEngine {
 			frame.allocator.Reset();
 			frame.fenceValue = 0;
 		}
+		// PipelineとVertexBufferはDevice依存ResourceなのでDeviceより先に明示解放する。
+		impl_->primitiveRenderer.Shutdown();
+		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
 		impl_->swapChain.Shutdown();
 		impl_->commandQueue.Shutdown();
@@ -147,6 +166,8 @@ namespace NexusEngine {
 		// DXGIが示す現在のBackBuffer indexと同じFrameContextを選択する。
 		const uint32_t frameIndex = impl_->swapChain.GetCurrentFrameIndex();
 		auto& frame = impl_->frames[frameIndex];
+		// 完了Fenceへ到達したBindless slotだけを回収し、GPU参照中のindex再利用を防ぐ。
+		impl_->bindlessDescriptors.CollectGarbage(impl_->commandQueue.GetCompletedFenceValue());
 		// 同じBackBuffer用AllocatorをGPUが使用中の場合だけ待つ。毎フレームの全面同期は行わない。
 		auto waitResult = impl_->commandQueue.Wait(frame.fenceValue);
 		if(!waitResult) {
@@ -179,6 +200,22 @@ namespace NexusEngine {
 		const D3D12_CPU_DESCRIPTOR_HANDLE rtv = impl_->swapChain.GetCurrentRtv();
 		frame.commandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 		frame.commandList->ClearRenderTargetView(rtv, impl_->clearColor.data(), 0, nullptr);
+
+		// SM 6.6 ShaderがDirect Heap Indexingで参照するResource/Sampler Heapを設定する。
+		impl_->bindlessDescriptors.Bind(frame.commandList.Get());
+
+		// ViewportとScissorは現在のSwapChainサイズから毎フレーム構築し、Resize後の値を即時反映する。
+		const D3D12_VIEWPORT viewport {
+			0.0f, 0.0f, static_cast<float>(impl_->swapChain.GetWidth()),
+			static_cast<float>(impl_->swapChain.GetHeight()), 0.0f, 1.0f
+		};
+		const D3D12_RECT scissor {
+			0, 0, static_cast<LONG>(impl_->swapChain.GetWidth()), static_cast<LONG>(impl_->swapChain.GetHeight())
+		};
+		frame.commandList->RSSetViewports(1, &viewport);
+		frame.commandList->RSSetScissorRects(1, &scissor);
+		// Primitive固有のPipeline、Geometry、Draw手順はPrimitiveRenderer内へ閉じ込める。
+		impl_->primitiveRenderer.Draw(frame.commandList.Get());
 
 		// Present可能な状態へ戻してからCommand Listを閉じ、Queueへ投入する。
 		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
