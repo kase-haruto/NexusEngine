@@ -1,0 +1,5 @@
+Dear ImGui v1.92.9b-docking
+Official tag: v1.92.9b-docking
+Tag object: 9acdfbf46810c0c74ab281ce04122c4149ae8bd1
+Checked-out commit: b48d1afbe8ee8b238e2961dc363a949dd7304e23
+Source: https://github.com/ocornut/imgui

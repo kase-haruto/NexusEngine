@@ -13,28 +13,20 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> BindlessDescriptorTable::Initialize(
 		ID3D12Device* const device,
-		const uint32_t resourceCapacity,
-		const uint32_t samplerCapacity) {
-		if(device == nullptr || resourceCapacity < 2 || samplerCapacity < 2 || device_ != nullptr) {
+		DescriptorManager* const descriptors) {
+		if(device == nullptr || descriptors == nullptr || device_ != nullptr) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Bindless descriptor table arguments are invalid."));
 		}
 
 		// ResourceとSamplerはDirectX 12で異なるHeapを要求されるため、容量と割当状態も分離する。
-		auto result = resources_.Initialize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, resourceCapacity, true);
-		if(!result) return result;
-		result = samplers_.Initialize(device, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, samplerCapacity, true);
-		if(!result) {
-			resources_.Shutdown();
-			return result;
-		}
-
-		resourceSlots_.resize(resourceCapacity);
-		samplerSlots_.resize(samplerCapacity);
+		descriptors_ = descriptors;
+		resourceSlots_.resize(descriptors_->Resources().GetCapacity());
+		samplerSlots_.resize(descriptors_->Samplers().GetCapacity());
 		device_ = device;
 
 		// 最初のAllocationがindex 0になることを利用し、無効参照が安全に指せるnull Descriptorを予約する。
 		DescriptorAllocation nullResource;
-		auto nullResourceResult = resources_.Allocate();
+		auto nullResourceResult = descriptors_->Resources().Allocate();
 		if(!nullResourceResult || nullResourceResult->index != 0) {
 			Shutdown();
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Failed to reserve null resource descriptor."));
@@ -49,7 +41,7 @@ namespace NexusEngine {
 		resourceSlots_[0].active = true;
 
 		DescriptorAllocation nullSampler;
-		auto nullSamplerResult = samplers_.Allocate();
+		auto nullSamplerResult = descriptors_->Samplers().Allocate();
 		if(!nullSamplerResult || nullSamplerResult->index != 0) {
 			Shutdown();
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Failed to reserve null sampler descriptor."));
@@ -74,8 +66,7 @@ namespace NexusEngine {
 		retired_.clear();
 		resourceSlots_.clear();
 		samplerSlots_.clear();
-		samplers_.Shutdown();
-		resources_.Shutdown();
+		descriptors_ = nullptr;
 		device_ = nullptr;
 	}
 
@@ -171,8 +162,7 @@ namespace NexusEngine {
 
 	void BindlessDescriptorTable::Bind(ID3D12GraphicsCommandList* const commandList) const noexcept {
 		// Direct Heap Indexing Shaderはこの2 HeapをResourceDescriptorHeap/SamplerDescriptorHeapとして参照する。
-		ID3D12DescriptorHeap* heaps[] = { resources_.GetHeap(), samplers_.GetHeap() };
-		commandList->SetDescriptorHeaps(static_cast<UINT>(std::size(heaps)), heaps);
+		if(descriptors_ != nullptr) descriptors_->BindShaderVisibleHeaps(commandList);
 	}
 
 	Result<ShaderResourceRef> BindlessDescriptorTable::Allocate(const ShaderResourceClass resourceClass, DescriptorAllocation& allocation) {
@@ -193,7 +183,7 @@ namespace NexusEngine {
 	}
 
 	DescriptorAllocator& BindlessDescriptorTable::GetAllocator(const ShaderResourceClass resourceClass) noexcept {
-		return resourceClass == ShaderResourceClass::Resource ? resources_ : samplers_;
+		return resourceClass == ShaderResourceClass::Resource ? descriptors_->Resources() : descriptors_->Samplers();
 	}
 
 } // namespace NexusEngine

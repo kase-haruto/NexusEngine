@@ -7,15 +7,11 @@
 #include <wrl/client.h>
 
 #include "Foundation/Error/Result.h"
+#include "DescriptorHandle.h"
 
 namespace NexusEngine {
 
-	struct DescriptorAllocation {
-		uint32_t index = 0;                       //< Heap先頭からのIndex
-		uint32_t count = 0;                       //< 所有する連続Descriptor数
-		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle {}; //< Descriptor書込用CPU Handle
-		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle {}; //< Shader-visible時だけ有効なGPU Handle
-	};
+	using DescriptorAllocation = DescriptorHandle;
 
 	/*-----------------------------------------------------------------------------------------
 	 * DescriptorAllocator
@@ -50,12 +46,19 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> Free(const DescriptorAllocation& allocation);
 		/** \brief CommandListへBindするHeapを非所有参照として取得する */
 		[[nodiscard]] ID3D12DescriptorHeap* GetHeap() const noexcept;
+		[[nodiscard]] bool IsShaderVisible() const noexcept { return shaderVisible_; }
+		[[nodiscard]] D3D12_DESCRIPTOR_HEAP_TYPE GetHeapType() const noexcept { return heapType_; }
+		[[nodiscard]] uint32_t GetCapacity() const noexcept { return static_cast<uint32_t>(allocated_.size()); }
+		[[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(const DescriptorHandle& allocation, uint32_t offset = 0) const noexcept;
+		[[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(const DescriptorHandle& allocation, uint32_t offset = 0) const noexcept;
 
 	private:
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> heap_; //< Descriptor Heap所有者
 		std::vector<bool> allocated_; //< 各Indexの割当状態
 		uint32_t descriptorSize_ = 0; //< Handle計算用Device依存増分
 		bool shaderVisible_ = false; //< GPU Handleの有効性
+		D3D12_DESCRIPTOR_HEAP_TYPE heapType_ = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; //< Heap種別
+		uint64_t allocatorId_ = 0; //< 別Heap由来HandleのFreeを拒否する識別子
 	};
 
 } // namespace NexusEngine

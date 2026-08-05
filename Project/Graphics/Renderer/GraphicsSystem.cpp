@@ -11,9 +11,11 @@
 #include "Foundation/Logging/Logger.h"
 #include "Graphics/Core/CommandQueue.h"
 #include "Graphics/Descriptor/BindlessDescriptorTable.h"
+#include "Graphics/Descriptor/DescriptorManager.h"
 #include "Graphics/Device/GraphicsDevice.h"
 #include "Graphics/Presentation/SwapChain.h"
 #include "PrimitiveRenderer.h"
+#include "GraphicsRenderExtension.h"
 
 namespace NexusEngine {
 	namespace {
@@ -36,12 +38,15 @@ namespace NexusEngine {
 
 		GraphicsDevice device;
 		CommandQueue commandQueue;
+		DescriptorManager descriptors;
 		SwapChain swapChain;
 		BindlessDescriptorTable bindlessDescriptors;
 		PrimitiveRenderer primitiveRenderer;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
 		bool enableVSync = true;
+		void* nativeWindow = nullptr;
+		IGraphicsRenderExtension* renderExtension = nullptr;
 	};
 
 	GraphicsSystem::GraphicsSystem() noexcept = default;
@@ -76,10 +81,16 @@ namespace NexusEngine {
 		if(!result) {
 			return std::unexpected(std::move(result.error()));
 		}
+		result = implementation->descriptors.Initialize(
+			implementation->device.GetDevice(), desc.bindlessResourceCapacity,
+			desc.rtvDescriptorCapacity, desc.dsvDescriptorCapacity, desc.bindlessSamplerCapacity);
+		if(!result) return std::unexpected(std::move(result.error()));
+
 		// ProjectWindowそのものではなく、Frameworkが抽出したSurface情報だけで表示経路を生成する。
 		result = implementation->swapChain.Initialize(
 			implementation->device.GetFactory(), implementation->device.GetDevice(),
-			implementation->commandQueue.GetNativeQueue(), surface.nativeHandle, surface.width, surface.height);
+			implementation->commandQueue.GetNativeQueue(), surface.nativeHandle, surface.width, surface.height,
+			&implementation->descriptors.RenderTargets());
 		if(!result) {
 			return std::unexpected(std::move(result.error()));
 		}
@@ -107,9 +118,7 @@ namespace NexusEngine {
 
 		// Bindless TableがResource/Sampler Heap、null slot、generationを一体で管理する。
 		result = implementation->bindlessDescriptors.Initialize(
-			implementation->device.GetDevice(),
-			desc.bindlessResourceCapacity,
-			desc.bindlessSamplerCapacity);
+			implementation->device.GetDevice(), &implementation->descriptors);
 		if(!result) return std::unexpected(std::move(result.error()));
 
 		// 基盤検証用GeometryとPipelineは専用Rendererへ委譲し、Systemへ形状データを持たせない。
@@ -120,6 +129,7 @@ namespace NexusEngine {
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
 		implementation->enableVSync = desc.enableVSync;
+		implementation->nativeWindow = surface.nativeHandle;
 		impl_ = std::move(implementation);
 		NEXUS_LOG_INFO("Graphics", "GraphicsSystem initialized with double-buffered frame contexts.");
 		return {};
@@ -138,6 +148,10 @@ namespace NexusEngine {
 		if(!waitResult) {
 			NEXUS_LOG_ERROR("Graphics", waitResult.error().GetMessageText());
 		}
+		if(impl_->renderExtension != nullptr) {
+			impl_->renderExtension->Shutdown();
+			impl_->renderExtension = nullptr;
+		}
 		// Command ListはAllocatorを参照して生成されるため、Listから先に解放する。
 		for(auto& frame : impl_->frames) {
 			frame.commandList.Reset();
@@ -149,6 +163,7 @@ namespace NexusEngine {
 		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
 		impl_->swapChain.Shutdown();
+		impl_->descriptors.Shutdown();
 		impl_->commandQueue.Shutdown();
 		impl_->device.Shutdown();
 		impl_.reset();
@@ -216,6 +231,10 @@ namespace NexusEngine {
 		frame.commandList->RSSetScissorRects(1, &scissor);
 		// Primitive固有のPipeline、Geometry、Draw手順はPrimitiveRenderer内へ閉じ込める。
 		impl_->primitiveRenderer.Draw(frame.commandList.Get());
+		if(impl_->renderExtension != nullptr) {
+			impl_->renderExtension->BeginFrame();
+			impl_->renderExtension->Record(frame.commandList.Get());
+		}
 
 		// Present可能な状態へ戻してからCommand Listを閉じ、Queueへ投入する。
 		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -265,6 +284,23 @@ namespace NexusEngine {
 		if(impl_) {
 			impl_->clearColor = color;
 		}
+	}
+
+	Result<void> GraphicsSystem::AttachRenderExtension(IGraphicsRenderExtension* const extension) {
+		if(!impl_ || extension == nullptr || impl_->renderExtension != nullptr) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Render extension cannot be attached."));
+		}
+		GraphicsRenderExtensionContext context;
+		context.device = impl_->device.GetDevice();
+		context.commandQueue = impl_->commandQueue.GetNativeQueue();
+		context.resourceDescriptors = &impl_->descriptors.Resources();
+		context.nativeWindow = impl_->nativeWindow;
+		context.framesInFlight = SwapChain::kBufferCount;
+		context.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+		auto result = extension->Initialize(context);
+		if(!result) return result;
+		impl_->renderExtension = extension;
+		return {};
 	}
 
 } // namespace NexusEngine

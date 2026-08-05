@@ -30,9 +30,10 @@ namespace NexusEngine {
 		ID3D12CommandQueue* const queue,
 		void* const nativeWindow,
 		const uint32_t width,
-		const uint32_t height) {
+		const uint32_t height,
+		DescriptorAllocator* const rtvAllocator) {
 		// DXGIへ不完全な値を渡す前に、Surface生成に必要な全依存と有効サイズを検証する。
-		if(factory == nullptr || device == nullptr || queue == nullptr || nativeWindow == nullptr || width == 0 || height == 0) {
+		if(factory == nullptr || device == nullptr || queue == nullptr || nativeWindow == nullptr || width == 0 || height == 0 || rtvAllocator == nullptr) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "SwapChain initialization arguments are invalid."));
 		}
 
@@ -69,16 +70,13 @@ namespace NexusEngine {
 
 		// 現段階ではBackBuffer RTVだけが必要なため、SwapChain専用の小さなHeapを所有する。
 		// 汎用DescriptorAllocatorは用途と割当規則が確定した段階で別責務として導入する。
-		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-		heapDesc.NumDescriptors = kBufferCount;
-		result = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&rtvHeap_));
-		if(FAILED(result)) {
+		rtvAllocator_ = rtvAllocator;
+		auto descriptorResult = rtvAllocator_->Allocate(kBufferCount);
+		if(!descriptorResult) {
 			Shutdown();
-			return std::unexpected(MakeDirectXError(kRtvHeapCreationFailed, result, "Failed to create swap chain RTV heap."));
+			return std::unexpected(std::move(descriptorResult.error()));
 		}
-		// CPU Descriptor Handleはポインタ加算単位がDevice依存なので、Deviceから増分値を取得する。
-		rtvDescriptorSize_ = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		rtvDescriptors_ = *descriptorResult;
 		width_ = width;
 		height_ = height;
 		return CreateRenderTargets(device);
@@ -90,9 +88,12 @@ namespace NexusEngine {
 	void SwapChain::Shutdown() noexcept {
 		// BackBufferはSwapChainが内部所有するBufferへのCOM参照なので最初に手放す。
 		ReleaseRenderTargets();
-		rtvHeap_.Reset();
+		if(rtvAllocator_ != nullptr && rtvDescriptors_.IsValid()) {
+			static_cast<void>(rtvAllocator_->Free(rtvDescriptors_));
+		}
+		rtvDescriptors_ = {};
+		rtvAllocator_ = nullptr;
 		swapChain_.Reset();
-		rtvDescriptorSize_ = 0;
 		width_ = 0;
 		height_ = 0;
 	}
@@ -142,9 +143,7 @@ namespace NexusEngine {
 
 	D3D12_CPU_DESCRIPTOR_HANDLE SwapChain::GetCurrentRtv() const noexcept {
 		// Heap先頭から現在のBackBuffer index分だけDescriptor増分を加算する。
-		auto handle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
-		handle.ptr += static_cast<SIZE_T>(GetCurrentFrameIndex()) * rtvDescriptorSize_;
-		return handle;
+		return rtvAllocator_->GetCpuHandle(rtvDescriptors_, GetCurrentFrameIndex());
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -152,7 +151,6 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> SwapChain::CreateRenderTargets(ID3D12Device* const device) {
 		// RTV Heapは連続配置なので、先頭HandleをDescriptor sizeずつ進めて各Bufferへ対応させる。
-		auto handle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
 		for(uint32_t index = 0; index < kBufferCount; ++index) {
 			const HRESULT result = swapChain_->GetBuffer(index, IID_PPV_ARGS(&backBuffers_[index]));
 			if(FAILED(result)) {
@@ -161,8 +159,7 @@ namespace NexusEngine {
 			}
 			// nullptr DescriptorによりResource formatと一致する既定RTVを生成する。
 			// CreateRenderTargetViewはvoid APIのため、事前にDeviceとResourceの有効性を保証する。
-			device->CreateRenderTargetView(backBuffers_[index].Get(), nullptr, handle);
-			handle.ptr += rtvDescriptorSize_;
+			device->CreateRenderTargetView(backBuffers_[index].Get(), nullptr, rtvAllocator_->GetCpuHandle(rtvDescriptors_, index));
 		}
 		return {};
 	}

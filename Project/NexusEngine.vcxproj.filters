@@ -44,6 +44,9 @@
 	<Filter Include="Graphics\Shader"><UniqueIdentifier>{E1E18133-767B-43E3-AE52-0D78591DF1D3}</UniqueIdentifier></Filter>
 	<Filter Include="Graphics\Pipeline"><UniqueIdentifier>{87724307-2EB4-4B7F-8F84-970DB1766502}</UniqueIdentifier></Filter>
 	<Filter Include="Graphics\Resource"><UniqueIdentifier>{AAB88A42-A2F1-40BB-B067-F138C98F9F34}</UniqueIdentifier></Filter>
+	<Filter Include="Editor"><UniqueIdentifier>{23A768EC-9976-4A19-B5D2-8A6EF2C8A141}</UniqueIdentifier></Filter>
+	<Filter Include="Editor\ImGui"><UniqueIdentifier>{900A2B63-13D7-4F24-B6A5-9B11913585A5}</UniqueIdentifier></Filter>
+	<Filter Include="ThirdParty\ImGui"><UniqueIdentifier>{03038810-2CF3-41AE-A073-213872099A89}</UniqueIdentifier></Filter>
 	<Filter Include="Shaders"><UniqueIdentifier>{2FBFA148-BB51-458B-8BB7-F3653048B0D8}</UniqueIdentifier></Filter>
 	<Filter Include="Shaders\Primitive"><UniqueIdentifier>{2EFA5561-F631-4B3E-AFFF-D3127A42D98A}</UniqueIdentifier></Filter>
 	<Filter Include="Docs"><UniqueIdentifier>{87093688-17A1-4293-94B3-F10A9592125B}</UniqueIdentifier></Filter>
@@ -94,6 +97,7 @@
 	</ClCompile>
 	<ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp"><Filter>Graphics\Renderer</Filter></ClCompile>
 	<ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\DescriptorManager.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
 	<ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
 	<ClCompile Include="Graphics\Shader\Shader.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
 	<ClCompile Include="Graphics\Shader\ShaderCompiler.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
@@ -102,6 +106,14 @@
 	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
 	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
 	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp"><Filter>Editor\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_tables.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Environment.h">
@@ -169,8 +181,12 @@
 	</ClInclude>
 	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\DescriptorHandle.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\DescriptorManager.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h"><Filter>Editor\ImGui</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\Shader.h"><Filter>Graphics\Shader</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\ShaderCompiler.h"><Filter>Graphics\Shader</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\ShaderReflector.h"><Filter>Graphics\Shader</Filter></ClInclude>

@@ -38,17 +38,21 @@ Graphics基盤では、動作することだけでなく、次の原則を優先
 Application
   └─ NexusFramework
        ├─ ProjectWindow
-       │    └─ Win32
+       │    └─ Win32 + 上位Message Handler接続点
+       ├─ ImGuiRenderer
+       │    └─ Dear ImGui Win32 / DX12 backend
        └─ GraphicsSystem
             └─ DirectX 12実装（PImpl）
                  ├─ GraphicsDevice
                  │    ├─ GraphicsDebugConfigurator
                  │    └─ GraphicsAdapterSelector
                  ├─ CommandQueue
+                 ├─ DescriptorManager
+                 │    └─ DescriptorAllocator × 4 Heap種別
                  ├─ SwapChain
                  ├─ FrameContext × BackBuffer数
                  ├─ BindlessDescriptorTable
-                 │    └─ DescriptorAllocator × Heap種別
+                 │    └─ DescriptorManagerのResource/Samplerを参照
                  └─ PrimitiveRenderer
                       ├─ Shader
                       │    ├─ ShaderCompiler
@@ -119,9 +123,9 @@ CommandAllocatorとCommandListは所有しません。これらはBackBufferご�
 - 現在のBackBuffer index
 - Present
 - Resize
-- BackBuffer専用RTV Heap
+- DescriptorManagerから確保したBackBuffer RTV Handle
 
-RTV Heapは現段階ではSwapChain専用です。RTVを汎用Descriptor Systemへ統合しても用途が増えないため、共通Allocatorは導入していません。
+SwapChainはRTV Heapを生成しません。BackBufferごとの連続RTV領域だけを所有し、Resize時は同じ領域へViewを再生成します。
 
 ### FrameContext
 
@@ -251,9 +255,13 @@ Vertex input semanticはReflectionと照合します。ただしCPU Vertex構造
 
 Texture、Material、Pipeline、GPU Resource本体は管理しません。
 
+### DescriptorManager
+
+`DescriptorManager`はGraphics backend全体で共有するCBV/SRV/UAV、RTV、DSV、Sampler Heapを所有します。Resource/Samplerはshader-visible、RTV/DSVはCPU-onlyです。ゲーム描画とImGuiは同じCBV/SRV/UAV Heapを共有します。
+
 ### BindlessDescriptorTable
 
-`BindlessDescriptorTable`はBindless Resource参照に必要な二つのShader-visible Heapを管理します。
+`BindlessDescriptorTable`はDescriptorManagerの二つのshader-visible Heap上で、Bindless参照の世代とFence retireを管理します。
 
 ```text
 BindlessDescriptorTable
@@ -300,6 +308,8 @@ GraphicsDevice
   ↓
 CommandQueue + Fence
   ↓
+DescriptorManager × 4 Heap
+  ↓
 SwapChain + BackBuffer + RTV
   ↓
 FrameContext × BackBuffer数
@@ -316,6 +326,8 @@ PrimitiveRenderer
   ├─ RootSignature 1.1
   ├─ PSO
   └─ VertexBuffer
+  ↓
+ImGuiRenderer（GraphicsRenderExtensionとして接続）
 ```
 
 全要素が成功するまで`GraphicsSystem::Impl`はローカル所有されます。途中で失敗した場合はRAIIによって部分初期化済みResourceを破棄し、不完全なGraphicsSystemを公開しません。
@@ -345,6 +357,12 @@ PrimitiveRenderer::Draw
   ├─ Triangle List設定
   └─ DrawInstanced
   ↓
+ImGuiRenderer::BeginFrame / Record
+  ├─ ImGui_ImplDX12_NewFrame
+  ├─ ImGui_ImplWin32_NewFrame
+  ├─ DockSpace / DemoWindow
+  └─ ImGui_ImplDX12_RenderDrawData
+  ↓
 BackBuffer: RENDER_TARGET → PRESENT
   ↓
 CommandList Close / Execute
@@ -357,6 +375,8 @@ FrameContextへFence値を保存
 ```
 
 ResourceBarrierはDirectX 12 Backend内部に留まり、Frameworkや将来のScene Rendererへ公開しません。
+
+`ProjectWindow`はDear ImGuiをincludeせず、汎用Message Handler経由でWin32 backendへイベントを渡します。InputSystemはまだ存在しないため、`io.WantCaptureMouse`と`io.WantCaptureKeyboard`によるゲーム入力抑止はInputSystem導入時の接続事項です。
 
 ## 7. Bindless Descriptorの寿命
 
@@ -471,6 +491,8 @@ PrimitiveRenderer
 BindlessDescriptorTable
   ↓
 SwapChain / BackBuffer / RTV
+  ↓
+DescriptorManager
   ↓
 CommandQueue / Fence
   ↓

@@ -11,6 +11,7 @@
 
 // engine
 #include "Foundation/Error/Result.h"
+#include "Graphics/Descriptor/DescriptorAllocator.h"
 
 namespace NexusEngine {
 
@@ -45,7 +46,8 @@ namespace NexusEngine {
 			ID3D12CommandQueue* queue,
 			void*				nativeWindow,
 			uint32_t			width,
-			uint32_t			height);
+			uint32_t			height,
+			DescriptorAllocator* rtvAllocator);
 		/**
 		 * \brief SwapChainとBackBufferを解放する
 		 */
@@ -103,10 +105,9 @@ namespace NexusEngine {
 		void ReleaseRenderTargets() noexcept;
 
 		Microsoft::WRL::ComPtr<IDXGISwapChain3>							 swapChain_;   //< 表示とBackBufferローテーション
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>					 rtvHeap_;	   //< BackBuffer専用RTV Heap
 		std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, kBufferCount> backBuffers_; //< 表示用Buffer
-
-		uint32_t rtvDescriptorSize_ = 0; //< RTVハンドル間隔
+		DescriptorAllocator* rtvAllocator_ = nullptr; //< DescriptorManager所有RTV allocator
+		DescriptorHandle rtvDescriptors_; //< BackBuffer用の連続RTV領域
 		uint32_t width_				= 0; //< 現在の描画幅
 		uint32_t height_			= 0; //< 現在の描画高
 	};

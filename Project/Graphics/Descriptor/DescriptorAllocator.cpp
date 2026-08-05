@@ -2,6 +2,7 @@
 
 namespace NexusEngine {
 	namespace {
+		uint64_t gNextAllocatorId = 1;
 		constexpr int32_t kInvalidArgument = 1;
 		constexpr int32_t kHeapCreationFailed = 2;
 		constexpr int32_t kCapacityExceeded = 3;
@@ -32,6 +33,8 @@ namespace NexusEngine {
 		// Handleのbyte増分はHeap種別とDeviceに依存するため、固定値を仮定しない。
 		descriptorSize_ = device->GetDescriptorHandleIncrementSize(type);
 		shaderVisible_ = shaderVisible;
+		heapType_ = type;
+		allocatorId_ = gNextAllocatorId++;
 		allocated_.assign(capacity, false);
 		return {};
 	}
@@ -45,6 +48,8 @@ namespace NexusEngine {
 		heap_.Reset();
 		descriptorSize_ = 0;
 		shaderVisible_ = false;
+		heapType_ = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
+		allocatorId_ = 0;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -70,6 +75,8 @@ namespace NexusEngine {
 			DescriptorAllocation allocation;
 			allocation.index = begin;
 			allocation.count = count;
+			allocation.heapType = heapType_;
+			allocation.allocatorId = allocatorId_;
 			allocation.cpuHandle = heap_->GetCPUDescriptorHandleForHeapStart();
 			allocation.cpuHandle.ptr += static_cast<SIZE_T>(begin) * descriptorSize_;
 			// RTV/DSVなどCPU専用HeapではGPU Handleを0のまま維持し、誤Bindを検出しやすくする。
@@ -87,7 +94,8 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> DescriptorAllocator::Free(const DescriptorAllocation& allocation) {
 		// Indexだけでなくcountも検証し、別Heap由来または破損した範囲による越境を防ぐ。
-		if(allocation.count == 0 || allocation.index + allocation.count > allocated_.size()) {
+		if(allocation.allocatorId != allocatorId_ || allocation.heapType != heapType_ ||
+		   allocation.count == 0 || allocation.index + allocation.count > allocated_.size()) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidFree, "Descriptor allocation range is invalid."));
 		}
 		// 一つでも未割当Indexを含む場合は状態を変更せず、二重解放として返す。
@@ -103,5 +111,19 @@ namespace NexusEngine {
 	}
 
 	ID3D12DescriptorHeap* DescriptorAllocator::GetHeap() const noexcept { return heap_.Get(); }
+
+	D3D12_CPU_DESCRIPTOR_HANDLE DescriptorAllocator::GetCpuHandle(const DescriptorHandle& allocation, const uint32_t offset) const noexcept {
+		if(allocation.allocatorId != allocatorId_ || offset >= allocation.count) return {};
+		auto handle = allocation.cpuHandle;
+		handle.ptr += static_cast<SIZE_T>(offset) * descriptorSize_;
+		return handle;
+	}
+
+	D3D12_GPU_DESCRIPTOR_HANDLE DescriptorAllocator::GetGpuHandle(const DescriptorHandle& allocation, const uint32_t offset) const noexcept {
+		if(!shaderVisible_ || allocation.allocatorId != allocatorId_ || offset >= allocation.count) return {};
+		auto handle = allocation.gpuHandle;
+		handle.ptr += static_cast<UINT64>(offset) * descriptorSize_;
+		return handle;
+	}
 
 } // namespace NexusEngine

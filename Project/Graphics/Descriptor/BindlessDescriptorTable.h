@@ -5,7 +5,7 @@
 
 #include <d3d12.h>
 
-#include "DescriptorAllocator.h"
+#include "DescriptorManager.h"
 #include "Foundation/Error/Result.h"
 #include "ShaderResourceRef.h"
 
@@ -25,7 +25,7 @@ namespace NexusEngine {
 		 * \param samplerCapacity Sampler Heapの固定slot数
 		 * \return 両Heapとindex 0の予約に成功した場合は成功結果
 		 */
-		[[nodiscard]] Result<void> Initialize(ID3D12Device* device, uint32_t resourceCapacity, uint32_t samplerCapacity);
+		[[nodiscard]] Result<void> Initialize(ID3D12Device* device, DescriptorManager* descriptors);
 		/**
 		 * \brief Heap、generation、retire queueを破棄する
 		 * \note 呼び出し側が事前にCommandQueueのGPU完了を保証する
@@ -100,8 +100,7 @@ namespace NexusEngine {
 		[[nodiscard]] DescriptorAllocator& GetAllocator(ShaderResourceClass resourceClass) noexcept;
 
 		ID3D12Device* device_ = nullptr; //< GraphicsDeviceが所有する非所有Device
-		DescriptorAllocator resources_; //< CBV/SRV/UAV Bindless Heap
-		DescriptorAllocator samplers_;  //< Sampler Bindless Heap
+		DescriptorManager* descriptors_ = nullptr; //< GraphicsSystem所有Descriptor管理サービス
 		std::vector<SlotState> resourceSlots_; //< Resource slot generationと状態
 		std::vector<SlotState> samplerSlots_;  //< Sampler slot generationと状態
 		std::vector<RetiredSlot> retired_;     //< Fence完了待ちの遅延解放slot

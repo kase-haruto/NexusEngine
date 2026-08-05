@@ -144,6 +144,8 @@ namespace NexusEngine {
 		clientWidth_ = 0;
 		clientHeight_ = 0;
 		resizePending_ = false;
+		messageHandler_ = nullptr;
+		messageHandlerUserData_ = nullptr;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -185,6 +187,11 @@ namespace NexusEngine {
 		return WindowResizeEvent { clientWidth_, clientHeight_ };
 	}
 
+	void ProjectWindow::SetMessageHandler(const MessageHandler handler, void* const userData) noexcept {
+		messageHandler_ = handler;
+		messageHandlerUserData_ = userData;
+	}
+
 	LRESULT CALLBACK ProjectWindow::WindowProcedure(
 		const HWND window,
 		const UINT message,
@@ -213,6 +220,10 @@ namespace NexusEngine {
 		const UINT message,
 		const WPARAM wParam,
 		const LPARAM lParam) noexcept {
+		// Windowは購読側の型を知らず、ImGuiなど任意の上位層へ入力メッセージを転送する。
+		if(messageHandler_ != nullptr && messageHandler_(messageHandlerUserData_, window, message, wParam, lParam)) {
+			return 1;
+		}
 		switch(message) {
 		case WM_SIZE:
 			// 最小化時の0サイズはSwapChainへ渡さず、復元後の有効サイズだけ通知する。

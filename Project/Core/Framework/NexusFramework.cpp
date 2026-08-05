@@ -138,6 +138,21 @@ namespace NexusEngine {
 			return std::unexpected(std::move(graphicsResult.error()));
 		}
 
+		// Editor GUIはGraphics低層へ依存する上位拡張として接続し、Window/Rendererを所有しない。
+		auto imguiResult = graphicsSystem_.AttachRenderExtension(&imguiRenderer_);
+		if(!imguiResult) {
+			graphicsSystem_.Shutdown();
+			window_.Shutdown();
+			state_ = FrameworkState::Failed;
+			return std::unexpected(std::move(imguiResult.error()));
+		}
+		window_.SetMessageHandler(
+			[](void* userData, HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+				return static_cast<ImGuiRenderer*>(userData)->HandleWindowMessage(
+					window, message, static_cast<uintptr_t>(wParam), static_cast<intptr_t>(lParam));
+			},
+			&imguiRenderer_);
+
 		// 必須サブシステムがすべて成功した時点だけRunningへ遷移させる。
 		state_ = FrameworkState::Running;
 		NEXUS_LOG_INFO("Framework", "NexusEngine initialization completed.");
@@ -160,6 +175,7 @@ namespace NexusEngine {
 		NEXUS_LOG_INFO("Framework", "NexusEngine shutdown started.");
 
 		// 依存側から先に破棄する。将来SwapChainを追加する場合もWindowより前に解放する。
+		window_.SetMessageHandler(nullptr, nullptr);
 		graphicsSystem_.Shutdown();
 		window_.Shutdown();
 
