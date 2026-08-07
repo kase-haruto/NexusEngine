@@ -246,18 +246,18 @@ namespace NexusEngine {
 		}
 		// Close成功後のListだけをQueueへ投入し、記録資源はFrameContextが所有し続ける。
 		impl_->commandQueue.Execute(frame.commandList.Get());
-
-		// 描画命令を同じQueueへ投入した後にPresentし、DXGIへ表示を要求する。
-		auto presentResult = impl_->swapChain.Present(impl_->enableVSync);
-		if(!presentResult) {
-			return presentResult;
-		}
-		// Presentまで投入した位置をFenceへ記録し、次回このFrameContextを再利用する際の待機値にする。
+		// Queue投入済みCommandの完了位置は、後続のPresent成否にかかわらず先に保存する。
 		auto signalResult = impl_->commandQueue.Signal();
 		if(!signalResult) {
 			return std::unexpected(std::move(signalResult.error()));
 		}
 		frame.fenceValue = *signalResult;
+
+		// 描画CommandのFence値を確定した後に、DXGIへ表示を要求する。
+		auto presentResult = impl_->swapChain.Present(impl_->enableVSync);
+		if(!presentResult) {
+			return presentResult;
+		}
 		return {};
 	}
 

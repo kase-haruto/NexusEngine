@@ -138,20 +138,17 @@ namespace NexusEngine {
 			return std::unexpected(std::move(graphicsResult.error()));
 		}
 
-		// Editor GUIはGraphics低層へ依存する上位拡張として接続し、Window/Rendererを所有しない。
-		auto imguiResult = graphicsSystem_.AttachRenderExtension(&imguiRenderer_);
-		if(!imguiResult) {
-			graphicsSystem_.Shutdown();
-			window_.Shutdown();
-			state_ = FrameworkState::Failed;
-			return std::unexpected(std::move(imguiResult.error()));
+		// Editor UIなどの具象拡張はApplicationが所有し、Frameworkは任意拡張として接続する。
+		if(desc.renderExtension != nullptr) {
+			auto extensionResult = graphicsSystem_.AttachRenderExtension(desc.renderExtension);
+			if(!extensionResult) {
+				graphicsSystem_.Shutdown();
+				window_.Shutdown();
+				state_ = FrameworkState::Failed;
+				return std::unexpected(std::move(extensionResult.error()));
+			}
 		}
-		window_.SetMessageHandler(
-			[](void* userData, HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-				return static_cast<ImGuiRenderer*>(userData)->HandleWindowMessage(
-					window, message, static_cast<uintptr_t>(wParam), static_cast<intptr_t>(lParam));
-			},
-			&imguiRenderer_);
+		window_.SetMessageHandler(desc.messageHandler, desc.messageHandlerUserData);
 
 		// 必須サブシステムがすべて成功した時点だけRunningへ遷移させる。
 		state_ = FrameworkState::Running;

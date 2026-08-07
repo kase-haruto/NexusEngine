@@ -1,12 +1,15 @@
 #include "VertexBuffer.h"
 
 #include <cstring>
+#include <limits>
 
 namespace NexusEngine {
 	namespace { constexpr int32_t kInvalidArgument = 1; constexpr int32_t kCreationFailed = 2; constexpr int32_t kMapFailed = 3; }
 
 	Result<void> VertexBuffer::Initialize(ID3D12Device* const device, const std::span<const uint8_t> data, const uint32_t stride) {
-		if(device == nullptr || data.empty() || stride == 0 || data.size() % stride != 0) {
+		if(device == nullptr || data.empty() || stride == 0 || data.size() % stride != 0 ||
+		   data.size() > (std::numeric_limits<UINT>::max)() ||
+		   data.size() / stride > (std::numeric_limits<uint32_t>::max)()) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Vertex buffer arguments are invalid."));
 		}
 		// Primitive確認段階ではUpload Heap常駐とし、Upload Command経路をVertexBufferへ混在させない。
