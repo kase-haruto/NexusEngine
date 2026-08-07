@@ -17,7 +17,7 @@ namespace NexusEngine {
 
 	/*-----------------------------------------------------------------------------------------
 	 * SwapChain
-	 * - DXGI SwapChain、BackBuffer、SwapChain専用RTV Heapを所有する
+	 * - DXGI SwapChainとBackBuffer、共有RTV Heap内の連続Descriptor領域を所有する
 	 * - Command記録、Queue同期、Windowイベント処理は管理しない
 	 *---------------------------------------------------------------------------------------*/
 	class SwapChain final {
@@ -106,7 +106,7 @@ namespace NexusEngine {
 
 		Microsoft::WRL::ComPtr<IDXGISwapChain3>							 swapChain_;   //< 表示とBackBufferローテーション
 		std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, kBufferCount> backBuffers_; //< 表示用Buffer
-		DescriptorAllocator* rtvAllocator_ = nullptr; //< DescriptorManager所有RTV allocator
+		DescriptorAllocator* rtvAllocator_ = nullptr; //< DescriptorManager所有RTV allocatorの非所有参照
 		DescriptorHandle rtvDescriptors_; //< BackBuffer用の連続RTV領域
 		uint32_t width_				= 0; //< 現在の描画幅
 		uint32_t height_			= 0; //< 現在の描画高

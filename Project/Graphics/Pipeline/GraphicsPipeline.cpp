@@ -3,16 +3,27 @@
 #include <utility>
 
 namespace NexusEngine {
-	namespace { constexpr int32_t kPipelineCreationFailed = 1; constexpr int32_t kInputMismatch = 2; }
+	namespace {
+		constexpr int32_t kPipelineCreationFailed = 1;
+		constexpr int32_t kInputMismatch = 2;
+		constexpr int32_t kInvalidState = 3;
+	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Shader Metadataと明示Vertex LayoutからGraphics Pipelineを生成する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> GraphicsPipeline::Initialize(ID3D12Device* const device, Shader vertexShader, Shader pixelShader, const std::vector<VertexAttribute>& vertexLayout) {
+		if(device == nullptr || pipelineState_) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidState, "Graphics pipeline arguments or state are invalid."));
+		}
+
+		// 全要素の生成成功後だけメンバへコミットし、再試行可能な失敗状態を保つ。
+		PipelineLayout layout;
 		// Stage Bindingを先に統合し、register衝突をRootSignature生成前に検出する。
-		auto layoutResult = layout_.Build(vertexShader.GetMetadata(), pixelShader.GetMetadata());
+		auto layoutResult = layout.Build(vertexShader.GetMetadata(), pixelShader.GetMetadata());
 		if(!layoutResult) return layoutResult;
-		auto rootResult = rootSignature_.Initialize(device, layout_);
+		RootSignature rootSignature;
+		auto rootResult = rootSignature.Initialize(device, layout);
 		if(!rootResult) return rootResult;
 
 		// Reflectionはsemanticを検証するために使い、CPU構造のstrideやoffsetは明示Layoutを正とする。
@@ -38,7 +49,7 @@ namespace NexusEngine {
 		const auto ps = pixelShader.GetBytecode();
 		// 第一段階のPrimitiveに必要な固定機能状態だけを明示し、MaterialやRenderPass設定は先行実装しない。
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
-		desc.pRootSignature = rootSignature_.GetNative();
+		desc.pRootSignature = rootSignature.GetNative();
 		desc.VS = { vs.data(), vs.size() };
 		desc.PS = { ps.data(), ps.size() };
 		desc.BlendState.AlphaToCoverageEnable = FALSE;
@@ -55,11 +66,15 @@ namespace NexusEngine {
 		desc.NumRenderTargets = 1;
 		desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		desc.SampleDesc.Count = 1;
-		const HRESULT result = device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState_));
+		Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+		const HRESULT result = device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState));
 		if(FAILED(result)) return std::unexpected(MakeDirectXError(kPipelineCreationFailed, result, "Failed to create graphics pipeline state."));
-		// PSO生成成功後だけShader所有権を確定し、失敗したPipelineを公開しない。
+		// PSO生成成功後だけ所有権を確定し、部分初期化状態を公開しない。
 		vertexShader_ = std::move(vertexShader);
 		pixelShader_ = std::move(pixelShader);
+		layout_ = std::move(layout);
+		rootSignature_ = std::move(rootSignature);
+		pipelineState_ = std::move(pipelineState);
 		return {};
 	}
 

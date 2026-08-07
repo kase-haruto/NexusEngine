@@ -36,11 +36,11 @@ Graphics基盤では、動作することだけでなく、次の原則を優先
 
 ```text
 Application
+  ├─ ImGuiRenderer
+  │    └─ Dear ImGui Win32 / DX12 backend
   └─ NexusFramework
        ├─ ProjectWindow
        │    └─ Win32 + 上位Message Handler接続点
-       ├─ ImGuiRenderer
-       │    └─ Dear ImGui Win32 / DX12 backend
        └─ GraphicsSystem
             └─ DirectX 12実装（PImpl）
                  ├─ GraphicsDevice
@@ -292,6 +292,8 @@ CPU/GPU Descriptor HandleをMaterialやShaderデータへ直接保存しませ�
 ## 5. 初期化フロー
 
 ```text
+Applicationが任意のGraphicsRenderExtensionをFrameworkDescへ設定
+  ↓
 NexusFramework::Initialize
   ↓
 ProjectWindow::Initialize
@@ -327,7 +329,7 @@ PrimitiveRenderer
   ├─ PSO
   └─ VertexBuffer
   ↓
-ImGuiRenderer（GraphicsRenderExtensionとして接続）
+任意のGraphicsRenderExtensionを接続
 ```
 
 全要素が成功するまで`GraphicsSystem::Impl`はローカル所有されます。途中で失敗した場合はRAIIによって部分初期化済みResourceを破棄し、不完全なGraphicsSystemを公開しません。
@@ -357,7 +359,7 @@ PrimitiveRenderer::Draw
   ├─ Triangle List設定
   └─ DrawInstanced
   ↓
-ImGuiRenderer::BeginFrame / Record
+任意のGraphicsRenderExtension::BeginFrame / Record
   ├─ ImGui_ImplDX12_NewFrame
   ├─ ImGui_ImplWin32_NewFrame
   ├─ DockSpace / DemoWindow
@@ -367,11 +369,9 @@ BackBuffer: RENDER_TARGET → PRESENT
   ↓
 CommandList Close / Execute
   ↓
+Fence Signal / FrameContextへFence値を保存
+  ↓
 Present
-  ↓
-Fence Signal
-  ↓
-FrameContextへFence値を保存
 ```
 
 ResourceBarrierはDirectX 12 Backend内部に留まり、Frameworkや将来のScene Rendererへ公開しません。
@@ -512,9 +512,10 @@ COM Objectは`Microsoft::WRL::ComPtr`で所有し、raw pointerは非所有参�
 将来の目標構造は次のとおりです。
 
 ```text
-NexusFramework（Composition Root）
-  ├─ GraphicsSystem
-  └─ Renderer
+Application（Composition Root）
+  ├─ NexusFramework
+  │    └─ GraphicsSystem
+  └─ Renderer / GraphicsRenderExtension
        ├─ PrimitiveRenderer
        ├─ ModelRenderer
        └─ SpriteRenderer

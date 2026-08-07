@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "Foundation/Logging/Logger.h"
+
 namespace NexusEngine {
 	namespace {
 		constexpr int32_t kInvalidArgument = 1;
@@ -126,7 +128,7 @@ namespace NexusEngine {
 		auto& slot = GetSlots(reference.resourceClass)[reference.index];
 		slot.active = false;
 		slot.retiring = true;
-		retired_.push_back({ reference, retireFenceValue });
+		retired_.push_back({ reference, slot.allocation, retireFenceValue });
 		return {};
 	}
 
@@ -139,10 +141,15 @@ namespace NexusEngine {
 				continue;
 			}
 			auto& slot = GetSlots(retired.reference.resourceClass)[retired.reference.index];
-			// DescriptorAllocator::FreeはHandle値を必要とせず、元のindex/countだけで割当状態を戻す。
-			DescriptorAllocation allocation { .index = retired.reference.index, .count = 1 };
-			static_cast<void>(GetAllocator(retired.reference.resourceClass).Free(allocation));
+			auto freeResult = GetAllocator(retired.reference.resourceClass).Free(retired.allocation);
+			if(!freeResult) {
+				// TableとAllocatorの状態を食い違わせない。内部不変条件違反は残して次フレームでも検出する。
+				NEXUS_LOG_ERROR("Graphics", freeResult.error().GetMessageText());
+				++index;
+				continue;
+			}
 			slot.retiring = false;
+			slot.allocation = {};
 			// 世代を進めることで、同じindexを保持する古いShaderResourceRefをCPU側で拒否できる。
 			++slot.generation;
 			if(slot.generation == 0) ++slot.generation;
@@ -175,6 +182,7 @@ namespace NexusEngine {
 		// この関数の成功後に各Create*Viewを実行すれば部分公開状態は残らない。
 		slot.active = true;
 		slot.retiring = false;
+		slot.allocation = allocation;
 		return ShaderResourceRef { allocation.index, slot.generation, resourceClass };
 	}
 

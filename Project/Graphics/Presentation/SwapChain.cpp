@@ -68,8 +68,7 @@ namespace NexusEngine {
 			return std::unexpected(MakeDirectXError(kSwapChainCreationFailed, result, "Failed to acquire IDXGISwapChain3."));
 		}
 
-		// 現段階ではBackBuffer RTVだけが必要なため、SwapChain専用の小さなHeapを所有する。
-		// 汎用DescriptorAllocatorは用途と割当規則が確定した段階で別責務として導入する。
+		// Renderer共有RTV HeapからBackBuffer数分の連続領域を確保し、Resize後も同じ位置を再利用する。
 		rtvAllocator_ = rtvAllocator;
 		auto descriptorResult = rtvAllocator_->Allocate(kBufferCount);
 		if(!descriptorResult) {

@@ -21,8 +21,7 @@ namespace NexusEngine {
 		/**
 		 * \brief Direct Heap Indexing用のResource/Sampler Heapを初期化する
 		 * \param device Heapとnull Descriptorの生成に使用する非所有Device
-		 * \param resourceCapacity CBV/SRV/UAV Heapの固定slot数
-		 * \param samplerCapacity Sampler Heapの固定slot数
+		 * \param descriptors Resource/Sampler Heapを所有する非所有DescriptorManager
 		 * \return 両Heapとindex 0の予約に成功した場合は成功結果
 		 */
 		[[nodiscard]] Result<void> Initialize(ID3D12Device* device, DescriptorManager* descriptors);
@@ -88,9 +87,11 @@ namespace NexusEngine {
 			uint32_t generation = 1; //< 再利用ごとに更新する世代番号
 			bool active = false;     //< 新しい描画へ公開中か
 			bool retiring = false;   //< GPU完了待ちでAllocatorへ未返却か
+			DescriptorAllocation allocation; //< Allocatorへ返す元の割当情報
 		};
 		struct RetiredSlot {
 			ShaderResourceRef reference; //< 解放要求時のindexとgeneration
+			DescriptorAllocation allocation; //< Allocatorへ返却する完全な割当情報
 			uint64_t fenceValue = 0;     //< 再利用可能になるFence値
 		};
 
