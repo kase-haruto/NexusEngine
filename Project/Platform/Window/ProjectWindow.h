@@ -9,11 +9,19 @@
 #endif
 #include <Windows.h>
 
+// c++
+#include <optional>
+
 // engine
 #include "Foundation/Error/Result.h"
 #include "WindowDetails.h"
 
 namespace NexusEngine {
+
+	struct WindowResizeEvent {
+		uint32_t width	= 0;
+		uint32_t height = 0;
+	};
 
 	/*-----------------------------------------------------------------------------------------
 	 * ProjectWindow
@@ -22,12 +30,13 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class ProjectWindow {
 	public:
+		using MessageHandler	 = bool (*)(void* userData, HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 		ProjectWindow() noexcept = default;
 		~ProjectWindow() noexcept;
-		ProjectWindow(const ProjectWindow&) = delete;
+		ProjectWindow(const ProjectWindow&)			   = delete;
 		ProjectWindow& operator=(const ProjectWindow&) = delete;
-		ProjectWindow(ProjectWindow&&) = delete;
-		ProjectWindow& operator=(ProjectWindow&&) = delete;
+		ProjectWindow(ProjectWindow&&)				   = delete;
+		ProjectWindow& operator=(ProjectWindow&&)	   = delete;
 
 		/**
 		 * \brief ウィンドウクラスを登録してウィンドウを生成する
@@ -47,18 +56,28 @@ namespace NexusEngine {
 		 */
 		[[nodiscard]] bool ProcessEvents() noexcept;
 
-		[[nodiscard]] bool IsRunning() const noexcept;
-		[[nodiscard]] HWND GetNativeHandle() const noexcept;
+		[[nodiscard]] bool							   IsRunning() const noexcept;
+		[[nodiscard]] HWND							   GetNativeHandle() const noexcept;
+		[[nodiscard]] uint32_t						   GetClientWidth() const noexcept;
+		[[nodiscard]] uint32_t						   GetClientHeight() const noexcept;
+		[[nodiscard]] std::optional<WindowResizeEvent> ConsumeResizeEvent() noexcept;
+		/** \brief Platform非依存な所有者からWin32メッセージ処理を接続する */
+		void SetMessageHandler(MessageHandler handler, void* userData) noexcept;
 
 	private:
 		static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
-		LRESULT HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
+		LRESULT					HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
 
-		HINSTANCE instance_		   = nullptr; //< クラス登録とウィンドウ生成に使用するモジュール
-		HWND	  window_		   = nullptr; //< ProjectWindowが所有するネイティブウィンドウ
-		std::wstring className_;			   //< 登録解除まで保持する一意なクラス名
-		bool	  classRegistered_ = false;	 //< 部分初期化時の登録解除判定
-		bool	  running_		   = false;	 //< WM_CLOSEまたはWM_QUITを反映する実行状態
+		HINSTANCE	   instance_ = nullptr;				  //< クラス登録とウィンドウ生成に使用するモジュール
+		HWND		   window_	 = nullptr;				  //< ProjectWindowが所有するネイティブウィンドウ
+		std::wstring   className_;						  //< 登録解除まで保持する一意なクラス名
+		bool		   classRegistered_		   = false;	  //< 部分初期化時の登録解除判定
+		bool		   running_				   = false;	  //< WM_CLOSEまたはWM_QUITを反映する実行状態
+		uint32_t	   clientWidth_			   = 0;		  //< 現在のクライアント領域幅
+		uint32_t	   clientHeight_		   = 0;		  //< 現在のクライアント領域高
+		bool		   resizePending_		   = false;	  //< 未消費の有効なResize通知
+		MessageHandler messageHandler_		   = nullptr; //< 外部メッセージ購読関数
+		void*		   messageHandlerUserData_ = nullptr; //< 購読側の非所有Context
 	};
 
 } // namespace NexusEngine

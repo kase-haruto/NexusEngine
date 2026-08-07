@@ -78,17 +78,20 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)ThirdParty\imgui;$(ProjectDir)ThirdParty\imgui\backends</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+	<PostBuildEvent>
+	  <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
+	</PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">
     <ClCompile>
@@ -100,17 +103,20 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)ThirdParty\imgui;$(ProjectDir)ThirdParty\imgui\backends</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+	<PostBuildEvent>
+	  <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
+	</PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -124,17 +130,20 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)ThirdParty\imgui;$(ProjectDir)ThirdParty\imgui\backends</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+	<PostBuildEvent>
+	  <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
+	</PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Foundation\Error\Error.cpp" />
@@ -144,11 +153,33 @@
     <ClCompile Include="Foundation\Logging\LogTextFormatter.cpp" />
     <ClCompile Include="Foundation\Utility\String\ConvertString.cpp" />
     <ClCompile Include="Core\Framework\NexusFramework.cpp" />
+	<ClCompile Include="Graphics\Core\CommandQueue.cpp" />
+	<ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp" />
+	<ClCompile Include="Graphics\Descriptor\DescriptorManager.cpp" />
+	<ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsAdapterSelector.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDebugConfigurator.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDevice.cpp" />
+	<ClCompile Include="Graphics\Presentation\SwapChain.cpp" />
+	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp" />
+	<ClCompile Include="Graphics\Pipeline\PipelineLayout.cpp" />
+	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp" />
+	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp" />
+	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
+	<ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp" />
+	<ClCompile Include="Graphics\Shader\Shader.cpp" />
+	<ClCompile Include="Graphics\Shader\ShaderCompiler.cpp" />
+	<ClCompile Include="Graphics\Shader\ShaderReflector.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Platform\Window\ProjectWindow.cpp" />
+	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
+	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_tables.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Foundation\Error\Error.h" />
@@ -162,14 +193,38 @@
     <ClInclude Include="Foundation\Utility\String\ConvertString.h" />
     <ClInclude Include="Core\Environment.h" />
     <ClInclude Include="Core\Framework\NexusFramework.h" />
+	<ClInclude Include="Graphics\Core\CommandQueue.h" />
+	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h" />
+	<ClInclude Include="Graphics\Descriptor\DescriptorHandle.h" />
+	<ClInclude Include="Graphics\Descriptor\DescriptorManager.h" />
+	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h" />
+	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h" />
     <ClInclude Include="Graphics\Device\GraphicsAdapterSelector.h" />
     <ClInclude Include="Graphics\Device\GraphicsDebugConfigurator.h" />
     <ClInclude Include="Graphics\Device\GraphicsDevice.h" />
     <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h" />
+	<ClInclude Include="Graphics\Presentation\SwapChain.h" />
+	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h" />
+	<ClInclude Include="Graphics\Pipeline\PipelineLayout.h" />
+	<ClInclude Include="Graphics\Pipeline\RootSignature.h" />
+	<ClInclude Include="Graphics\Resource\VertexBuffer.h" />
+	<ClInclude Include="Graphics\Renderer\GraphicsSystem.h" />
+	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h" />
+	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h" />
+	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h" />
+	<ClInclude Include="Graphics\Shader\Shader.h" />
+	<ClInclude Include="Graphics\Shader\ShaderCompiler.h" />
+	<ClInclude Include="Graphics\Shader\ShaderReflector.h" />
+	<ClInclude Include="Graphics\Shader\ShaderTypes.h" />
     <ClInclude Include="Platform\Window\ProjectWindow.h" />
     <ClInclude Include="Platform\Window\WindowDetails.h" />
+	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
   </ItemGroup>
   <ItemGroup>
+	<None Include="Docs\GraphicsREADME.md" />
+	<None Include="Shaders\Primitive\Primitive.VS.hlsl" />
+	<None Include="Shaders\Primitive\Primitive.PS.hlsl" />
+	<None Include="Shaders\Common\Bindless.hlsli" />
     <None Include="Agent\AGENT.md">
       <SubType>
       </SubType>

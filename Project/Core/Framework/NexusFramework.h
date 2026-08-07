@@ -5,7 +5,8 @@
 
 // engine
 #include "Foundation/Error/Result.h"
-#include "Graphics/Device/GraphicsDevice.h"
+#include "Graphics/Renderer/GraphicsSystem.h"
+#include "Editor/ImGui/ImGuiRenderer.h"
 #include "Platform/Window/ProjectWindow.h"
 
 namespace NexusEngine {
@@ -33,7 +34,7 @@ namespace NexusEngine {
 	struct FrameworkDesc {
 		FrameworkMode	   mode = FrameworkMode::Game;
 		WindowDetail	   window;
-		GraphicsDeviceDesc graphics;
+		GraphicsSystemDesc graphics;
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -64,13 +65,14 @@ namespace NexusEngine {
 		void Shutdown() noexcept;
 		[[nodiscard]] bool IsRunning() const noexcept;
 		void BeginFrame() noexcept;
-		void ProcessEvents() noexcept;
+		[[nodiscard]] Result<void> ProcessEvents();
 		void Update() noexcept;
-		void Render() noexcept;
+		[[nodiscard]] Result<void> Render();
 		void EndFrame() noexcept;
 
 		ProjectWindow  window_;						   //< Gameモードのイベントと終了要求を所有するWindow
-		GraphicsDevice graphicsDevice_;				   //< Factory、Adapter、D3D12 Deviceの所有者
+		GraphicsSystem graphicsSystem_;                 //< Graphicsのライフサイクルとフレーム描画の所有者
+		ImGuiRenderer imguiRenderer_; //< Framework上位に置くEditor GUI統合層
 		FrameworkMode mode_  = FrameworkMode::Game;	   //< 現在実行中のFrameworkモード
 		FrameworkState state_ = FrameworkState::Uninitialized; //< 不正遷移と二重終了を防ぐ状態
 	};

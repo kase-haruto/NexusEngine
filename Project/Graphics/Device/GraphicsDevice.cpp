@@ -14,6 +14,7 @@ namespace NexusEngine {
 		constexpr int32_t kAlreadyInitialized = 1;
 		constexpr int32_t kFactoryCreationFailed = 2;
 		constexpr int32_t kDeviceCreationFailed = 3;
+		constexpr int32_t kShaderModelUnsupported = 4;
 
 	} // namespace
 
@@ -80,6 +81,18 @@ namespace NexusEngine {
 			Shutdown();
 			return std::unexpected(MakeDirectXError(
 				kDeviceCreationFailed, result, "Failed to create D3D12 Device."));
+		}
+
+		// Bindless Direct Heap Indexingで必要なShader Model 6.6をDevice初期化時に保証する。
+		// 対応しない環境ではShader CompileやPSO生成まで進まず、明確な初期化エラーとして返す。
+		D3D12_FEATURE_DATA_SHADER_MODEL shaderModel { D3D_SHADER_MODEL_6_6 };
+		result = device_->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+		if(FAILED(result) || shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_6) {
+			Shutdown();
+			return std::unexpected(MakeDirectXError(
+				kShaderModelUnsupported,
+				FAILED(result) ? result : E_NOINTERFACE,
+				"Shader Model 6.6 is required for bindless descriptor indexing."));
 		}
 
 		// Info QueueはDeviceのインターフェースなので、Device生成成功後にのみ設定できる。

@@ -110,6 +110,8 @@ namespace NexusEngine {
 		}
 
 		// HWNDを完全に生成してからrunningを公開し、不完全なWindowでループが始まるのを防ぐ。
+		clientWidth_ = detail.clientWidth;
+		clientHeight_ = detail.clientHeight;
 		running_ = true;
 		ShowWindow(window_, SW_SHOW);
 		UpdateWindow(window_);
@@ -139,6 +141,11 @@ namespace NexusEngine {
 
 		className_.clear();
 		instance_ = nullptr;
+		clientWidth_ = 0;
+		clientHeight_ = 0;
+		resizePending_ = false;
+		messageHandler_ = nullptr;
+		messageHandlerUserData_ = nullptr;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -169,6 +176,22 @@ namespace NexusEngine {
 		return window_;
 	}
 
+	uint32_t ProjectWindow::GetClientWidth() const noexcept { return clientWidth_; }
+	uint32_t ProjectWindow::GetClientHeight() const noexcept { return clientHeight_; }
+
+	std::optional<WindowResizeEvent> ProjectWindow::ConsumeResizeEvent() noexcept {
+		if(!resizePending_) {
+			return std::nullopt;
+		}
+		resizePending_ = false;
+		return WindowResizeEvent { clientWidth_, clientHeight_ };
+	}
+
+	void ProjectWindow::SetMessageHandler(const MessageHandler handler, void* const userData) noexcept {
+		messageHandler_ = handler;
+		messageHandlerUserData_ = userData;
+	}
+
 	LRESULT CALLBACK ProjectWindow::WindowProcedure(
 		const HWND window,
 		const UINT message,
@@ -197,7 +220,19 @@ namespace NexusEngine {
 		const UINT message,
 		const WPARAM wParam,
 		const LPARAM lParam) noexcept {
+		// Windowは購読側の型を知らず、ImGuiなど任意の上位層へ入力メッセージを転送する。
+		if(messageHandler_ != nullptr && messageHandler_(messageHandlerUserData_, window, message, wParam, lParam)) {
+			return 1;
+		}
 		switch(message) {
+		case WM_SIZE:
+			// 最小化時の0サイズはSwapChainへ渡さず、復元後の有効サイズだけ通知する。
+			if(wParam != SIZE_MINIMIZED) {
+				clientWidth_ = static_cast<uint32_t>(LOWORD(lParam));
+				clientHeight_ = static_cast<uint32_t>(HIWORD(lParam));
+				resizePending_ = clientWidth_ > 0 && clientHeight_ > 0;
+			}
+			return 0;
 		case WM_CLOSE:
 			// 終了要求を先に公開してからHWNDを破棄し、同じフレームのUpdate実行を抑止する。
 			running_ = false;

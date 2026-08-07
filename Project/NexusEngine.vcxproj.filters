@@ -31,6 +31,25 @@
     <Filter Include="Graphics\Device">
       <UniqueIdentifier>{16C7001D-D76C-46D3-96D4-6C25FF3028B8}</UniqueIdentifier>
     </Filter>
+	<Filter Include="Graphics\Core">
+	  <UniqueIdentifier>{A337E626-4484-4D73-9373-98C5E43F44E0}</UniqueIdentifier>
+	</Filter>
+	<Filter Include="Graphics\Presentation">
+	  <UniqueIdentifier>{27F193FB-5019-4519-BF48-24618A888FB4}</UniqueIdentifier>
+	</Filter>
+	<Filter Include="Graphics\Renderer">
+	  <UniqueIdentifier>{2E467F7E-89FC-4B24-8B7A-A425FB09B76F}</UniqueIdentifier>
+	</Filter>
+	<Filter Include="Graphics\Descriptor"><UniqueIdentifier>{EF42E9DD-8CD9-4514-AE43-1824C789DD47}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Shader"><UniqueIdentifier>{E1E18133-767B-43E3-AE52-0D78591DF1D3}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Pipeline"><UniqueIdentifier>{87724307-2EB4-4B7F-8F84-970DB1766502}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Resource"><UniqueIdentifier>{AAB88A42-A2F1-40BB-B067-F138C98F9F34}</UniqueIdentifier></Filter>
+	<Filter Include="Editor"><UniqueIdentifier>{23A768EC-9976-4A19-B5D2-8A6EF2C8A141}</UniqueIdentifier></Filter>
+	<Filter Include="Editor\ImGui"><UniqueIdentifier>{900A2B63-13D7-4F24-B6A5-9B11913585A5}</UniqueIdentifier></Filter>
+	<Filter Include="ThirdParty\ImGui"><UniqueIdentifier>{03038810-2CF3-41AE-A073-213872099A89}</UniqueIdentifier></Filter>
+	<Filter Include="Shaders"><UniqueIdentifier>{2FBFA148-BB51-458B-8BB7-F3653048B0D8}</UniqueIdentifier></Filter>
+	<Filter Include="Shaders\Primitive"><UniqueIdentifier>{2EFA5561-F631-4B3E-AFFF-D3127A42D98A}</UniqueIdentifier></Filter>
+	<Filter Include="Docs"><UniqueIdentifier>{87093688-17A1-4293-94B3-F10A9592125B}</UniqueIdentifier></Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -67,6 +86,34 @@
     <ClCompile Include="Graphics\Device\GraphicsDevice.cpp">
       <Filter>Graphics\Device</Filter>
     </ClCompile>
+	<ClCompile Include="Graphics\Core\CommandQueue.cpp">
+	  <Filter>Graphics\Core</Filter>
+	</ClCompile>
+	<ClCompile Include="Graphics\Presentation\SwapChain.cpp">
+	  <Filter>Graphics\Presentation</Filter>
+	</ClCompile>
+	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp">
+	  <Filter>Graphics\Renderer</Filter>
+	</ClCompile>
+	<ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp"><Filter>Graphics\Renderer</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\DescriptorManager.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Shader\Shader.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
+	<ClCompile Include="Graphics\Shader\ShaderCompiler.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
+	<ClCompile Include="Graphics\Shader\ShaderReflector.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
+	<ClCompile Include="Graphics\Pipeline\PipelineLayout.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
+	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
+	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp"><Filter>Editor\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_tables.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
+	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Environment.h">
@@ -120,8 +167,40 @@
     <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h">
       <Filter>Graphics\Device</Filter>
     </ClInclude>
+	<ClInclude Include="Graphics\Core\CommandQueue.h">
+	  <Filter>Graphics\Core</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Presentation\SwapChain.h">
+	  <Filter>Graphics\Presentation</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsSystem.h">
+	  <Filter>Graphics\Renderer</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h">
+	  <Filter>Graphics\Renderer</Filter>
+	</ClInclude>
+	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\DescriptorHandle.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\DescriptorManager.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h"><Filter>Editor\ImGui</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\Shader.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\ShaderCompiler.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\ShaderReflector.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Shader\ShaderTypes.h"><Filter>Graphics\Shader</Filter></ClInclude>
+	<ClInclude Include="Graphics\Pipeline\PipelineLayout.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Pipeline\RootSignature.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\VertexBuffer.h"><Filter>Graphics\Resource</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
+	<None Include="Docs\GraphicsREADME.md"><Filter>Docs</Filter></None>
+	<None Include="Shaders\Primitive\Primitive.VS.hlsl"><Filter>Shaders\Primitive</Filter></None>
+	<None Include="Shaders\Primitive\Primitive.PS.hlsl"><Filter>Shaders\Primitive</Filter></None>
+	<None Include="Shaders\Common\Bindless.hlsli"><Filter>Shaders</Filter></None>
     <None Include="Agent\AGENT.md" />
   </ItemGroup>
 </Project>
