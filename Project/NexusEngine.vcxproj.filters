@@ -46,6 +46,9 @@
 	<Filter Include="Graphics\Resource"><UniqueIdentifier>{AAB88A42-A2F1-40BB-B067-F138C98F9F34}</UniqueIdentifier></Filter>
 	<Filter Include="Editor"><UniqueIdentifier>{23A768EC-9976-4A19-B5D2-8A6EF2C8A141}</UniqueIdentifier></Filter>
 	<Filter Include="Editor\ImGui"><UniqueIdentifier>{900A2B63-13D7-4F24-B6A5-9B11913585A5}</UniqueIdentifier></Filter>
+	<Filter Include="Editor\Core"><UniqueIdentifier>{6D8F47AB-3D23-4DF4-AB09-3A3F16586415}</UniqueIdentifier></Filter>
+	<Filter Include="Editor\Gui"><UniqueIdentifier>{F44053F5-B50A-49CC-849C-8B0D52C37693}</UniqueIdentifier></Filter>
+	<Filter Include="Editor\Gui\Core"><UniqueIdentifier>{CE798927-A2E8-45AE-9DF9-2AC0F07C9DFD}</UniqueIdentifier></Filter>
 	<Filter Include="ThirdParty\ImGui"><UniqueIdentifier>{03038810-2CF3-41AE-A073-213872099A89}</UniqueIdentifier></Filter>
 	<Filter Include="Shaders"><UniqueIdentifier>{2FBFA148-BB51-458B-8BB7-F3653048B0D8}</UniqueIdentifier></Filter>
 	<Filter Include="Shaders\Primitive"><UniqueIdentifier>{2EFA5561-F631-4B3E-AFFF-D3127A42D98A}</UniqueIdentifier></Filter>
@@ -107,6 +110,8 @@
 	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
 	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
 	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp"><Filter>Editor\ImGui</Filter></ClCompile>
+	<ClCompile Include="Editor\Core\EditorApplication.cpp"><Filter>Editor\Core</Filter></ClCompile>
+	<ClCompile Include="Editor\Gui\Core\GuiContext.cpp"><Filter>Editor\Gui\Core</Filter></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
@@ -187,6 +192,12 @@
 	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h"><Filter>Editor\ImGui</Filter></ClInclude>
+	<ClInclude Include="Editor\Core\EditorApplication.h"><Filter>Editor\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Gui\Core\GuiContext.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Gui\Core\GuiItem.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Gui\Core\GuiTheme.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Gui\Core\GuiTypes.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Gui\Core\IGuiTextureProvider.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\Shader.h"><Filter>Graphics\Shader</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\ShaderCompiler.h"><Filter>Graphics\Shader</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\ShaderReflector.h"><Filter>Graphics\Shader</Filter></ClInclude>

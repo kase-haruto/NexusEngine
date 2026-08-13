@@ -173,6 +173,8 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Platform\Window\ProjectWindow.cpp" />
 	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
+	<ClCompile Include="Editor\Core\EditorApplication.cpp" />
+	<ClCompile Include="Editor\Gui\Core\GuiContext.cpp" />
 	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
@@ -219,6 +221,12 @@
     <ClInclude Include="Platform\Window\ProjectWindow.h" />
     <ClInclude Include="Platform\Window\WindowDetails.h" />
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
+	<ClInclude Include="Editor\Core\EditorApplication.h" />
+	<ClInclude Include="Editor\Gui\Core\GuiContext.h" />
+	<ClInclude Include="Editor\Gui\Core\GuiItem.h" />
+	<ClInclude Include="Editor\Gui\Core\GuiTheme.h" />
+	<ClInclude Include="Editor\Gui\Core\GuiTypes.h" />
+	<ClInclude Include="Editor\Gui\Core\IGuiTextureProvider.h" />
   </ItemGroup>
   <ItemGroup>
 	<None Include="Docs\GraphicsREADME.md" />
