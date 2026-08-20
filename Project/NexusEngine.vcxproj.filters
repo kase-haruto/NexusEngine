@@ -16,6 +16,7 @@
     <Filter Include="Foundation\Logging">
       <UniqueIdentifier>{F122FF6A-A565-469B-A8FB-0EEAFB35CF69}</UniqueIdentifier>
     </Filter>
+	<Filter Include="Foundation\Math"><UniqueIdentifier>{C0992855-F7FD-481B-93A4-1D93E733603A}</UniqueIdentifier></Filter>
     <Filter Include="Foundation\Utility">
       <UniqueIdentifier>{BF33C201-0781-4B3C-B697-E4B90147B94C}</UniqueIdentifier>
     </Filter>
@@ -46,6 +47,10 @@
 	<Filter Include="Graphics\Resource"><UniqueIdentifier>{AAB88A42-A2F1-40BB-B067-F138C98F9F34}</UniqueIdentifier></Filter>
 	<Filter Include="Editor"><UniqueIdentifier>{23A768EC-9976-4A19-B5D2-8A6EF2C8A141}</UniqueIdentifier></Filter>
 	<Filter Include="Editor\ImGui"><UniqueIdentifier>{900A2B63-13D7-4F24-B6A5-9B11913585A5}</UniqueIdentifier></Filter>
+	<Filter Include="Runtime"><UniqueIdentifier>{BFEC86CD-BD1C-4835-A242-C04E18FF4166}</UniqueIdentifier></Filter>
+	<Filter Include="Runtime\Scene"><UniqueIdentifier>{9F9FB536-8DF8-418B-A3FB-99E65DD597A6}</UniqueIdentifier></Filter>
+	<Filter Include="Runtime\Scene\Components"><UniqueIdentifier>{29281196-AABD-41C8-8542-FEA674733A7B}</UniqueIdentifier></Filter>
+	<Filter Include="Runtime\Rendering"><UniqueIdentifier>{52B53E81-69AF-491B-BD63-0DCC9F4C2A29}</UniqueIdentifier></Filter>
 	<Filter Include="ThirdParty\ImGui"><UniqueIdentifier>{03038810-2CF3-41AE-A073-213872099A89}</UniqueIdentifier></Filter>
 	<Filter Include="Shaders"><UniqueIdentifier>{2FBFA148-BB51-458B-8BB7-F3653048B0D8}</UniqueIdentifier></Filter>
 	<Filter Include="Shaders\Primitive"><UniqueIdentifier>{2EFA5561-F631-4B3E-AFFF-D3127A42D98A}</UniqueIdentifier></Filter>
@@ -107,6 +112,9 @@
 	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
 	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
 	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp"><Filter>Editor\ImGui</Filter></ClCompile>
+	<ClCompile Include="Runtime\Scene\Scene.cpp"><Filter>Runtime\Scene</Filter></ClCompile>
+	<ClCompile Include="Runtime\Scene\TransformSystem.cpp"><Filter>Runtime\Scene</Filter></ClCompile>
+	<ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp"><Filter>Runtime\Rendering</Filter></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
 	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><Filter>ThirdParty\ImGui</Filter></ClCompile>
@@ -146,6 +154,9 @@
     <ClInclude Include="Foundation\Logging\LogTextFormatter.h">
       <Filter>Foundation\Logging</Filter>
     </ClInclude>
+	<ClInclude Include="Foundation\Math\Matrix4x4.h"><Filter>Foundation\Math</Filter></ClInclude>
+	<ClInclude Include="Foundation\Math\Quaternion.h"><Filter>Foundation\Math</Filter></ClInclude>
+	<ClInclude Include="Foundation\Math\Vector3.h"><Filter>Foundation\Math</Filter></ClInclude>
     <ClInclude Include="Foundation\Utility\String\ConvertString.h">
       <Filter>Foundation\Utility</Filter>
     </ClInclude>
@@ -186,6 +197,7 @@
 	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Graphics\Renderer\RenderScene.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h"><Filter>Editor\ImGui</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\Shader.h"><Filter>Graphics\Shader</Filter></ClInclude>
 	<ClInclude Include="Graphics\Shader\ShaderCompiler.h"><Filter>Graphics\Shader</Filter></ClInclude>
@@ -195,9 +207,20 @@
 	<ClInclude Include="Graphics\Pipeline\RootSignature.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
 	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
 	<ClInclude Include="Graphics\Resource\VertexBuffer.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\EntityId.h"><Filter>Runtime\Scene</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Entity.h"><Filter>Runtime\Scene</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Scene.h"><Filter>Runtime\Scene</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\TransformSystem.h"><Filter>Runtime\Scene</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Components\NameComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Components\HierarchyComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Components\TransformComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Components\CameraComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
+	<ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
+	<ClInclude Include="Runtime\Rendering\RenderSceneExtractor.h"><Filter>Runtime\Rendering</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
 	<None Include="Docs\GraphicsREADME.md"><Filter>Docs</Filter></None>
+	<None Include="Docs\SceneREADME.md"><Filter>Docs</Filter></None>
 	<None Include="Shaders\Primitive\Primitive.VS.hlsl"><Filter>Shaders\Primitive</Filter></None>
 	<None Include="Shaders\Primitive\Primitive.PS.hlsl"><Filter>Shaders\Primitive</Filter></None>
 	<None Include="Shaders\Common\Bindless.hlsli"><Filter>Shaders</Filter></None>
