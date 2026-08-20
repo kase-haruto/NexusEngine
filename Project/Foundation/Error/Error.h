@@ -19,7 +19,8 @@ namespace NexusEngine {
 		Graphics,
 		DirectX,
 		FileSystem,
-		Resource
+		Resource,
+		Scene
 	};
 
 	/*-----------------------------------------------------------------------------------------

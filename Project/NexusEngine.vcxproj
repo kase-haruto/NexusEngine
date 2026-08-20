@@ -172,6 +172,9 @@
 	<ClCompile Include="Graphics\Shader\ShaderReflector.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Platform\Window\ProjectWindow.cpp" />
+	<ClCompile Include="Runtime\Scene\Scene.cpp" />
+	<ClCompile Include="Runtime\Scene\TransformSystem.cpp" />
+	<ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp" />
 	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
 	<ClCompile Include="Editor\Core\EditorApplication.cpp" />
 	<ClCompile Include="Editor\Gui\Core\GuiContext.cpp" />
@@ -192,6 +195,9 @@
     <ClInclude Include="Foundation\Logging\Logger.h" />
     <ClInclude Include="Foundation\Logging\LogRecord.h" />
     <ClInclude Include="Foundation\Logging\LogTextFormatter.h" />
+	<ClInclude Include="Foundation\Math\Matrix4x4.h" />
+	<ClInclude Include="Foundation\Math\Quaternion.h" />
+	<ClInclude Include="Foundation\Math\Vector3.h" />
     <ClInclude Include="Foundation\Utility\String\ConvertString.h" />
     <ClInclude Include="Core\Environment.h" />
     <ClInclude Include="Core\Framework\NexusFramework.h" />
@@ -214,12 +220,23 @@
 	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h" />
 	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h" />
 	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h" />
+	<ClInclude Include="Graphics\Renderer\RenderScene.h" />
 	<ClInclude Include="Graphics\Shader\Shader.h" />
 	<ClInclude Include="Graphics\Shader\ShaderCompiler.h" />
 	<ClInclude Include="Graphics\Shader\ShaderReflector.h" />
 	<ClInclude Include="Graphics\Shader\ShaderTypes.h" />
     <ClInclude Include="Platform\Window\ProjectWindow.h" />
     <ClInclude Include="Platform\Window\WindowDetails.h" />
+	<ClInclude Include="Runtime\Scene\Components\NameComponent.h" />
+	<ClInclude Include="Runtime\Scene\Components\HierarchyComponent.h" />
+	<ClInclude Include="Runtime\Scene\Components\TransformComponent.h" />
+	<ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
+	<ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
+	<ClInclude Include="Runtime\Scene\Entity.h" />
+	<ClInclude Include="Runtime\Scene\EntityId.h" />
+	<ClInclude Include="Runtime\Scene\Scene.h" />
+	<ClInclude Include="Runtime\Scene\TransformSystem.h" />
+	<ClInclude Include="Runtime\Rendering\RenderSceneExtractor.h" />
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
 	<ClInclude Include="Editor\Core\EditorApplication.h" />
 	<ClInclude Include="Editor\Gui\Core\GuiContext.h" />
@@ -230,6 +247,7 @@
   </ItemGroup>
   <ItemGroup>
 	<None Include="Docs\GraphicsREADME.md" />
+	<None Include="Docs\SceneREADME.md" />
 	<None Include="Shaders\Primitive\Primitive.VS.hlsl" />
 	<None Include="Shaders\Primitive\Primitive.PS.hlsl" />
 	<None Include="Shaders\Common\Bindless.hlsli" />
