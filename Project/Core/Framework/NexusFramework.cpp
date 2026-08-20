@@ -109,8 +109,9 @@ namespace NexusEngine {
 		mode_ = desc.mode;
 		NEXUS_LOG_INFO("Framework", "NexusEngine initialization started.");
 
-		// Editor/Headlessの具体的な要件は未確定のため、推測実装せず明示的に拒否する。
-		if(mode_ != FrameworkMode::Game) {
+		// EditorはGameと同じWindow/Graphics基盤を使い、Editor固有処理をRenderExtensionへ委譲する。
+		// Windowを持たないHeadless実行には専用ループが必要なため、現時点では拒否する。
+		if(mode_ == FrameworkMode::Headless) {
 			state_ = FrameworkState::Failed;
 			return std::unexpected(Error(
 				ErrorCategory::Framework, kUnsupportedMode, "Requested Framework mode is not implemented."));

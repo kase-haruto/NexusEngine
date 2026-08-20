@@ -222,12 +222,6 @@ namespace NexusEngine {
 		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
-		// 中央Dock領域ではMain RenderTargetをそのまま表示し、Editor UI背景でゲーム描画を覆わない。
-		ImGui::DockSpaceOverViewport(
-			0,
-			ImGui::GetMainViewport(),
-			ImGuiDockNodeFlags_PassthruCentralNode);
-		ImGui::ShowDemoWindow();
 	}
 
 	void ImGuiRenderer::Record(ID3D12GraphicsCommandList* const commandList) {
