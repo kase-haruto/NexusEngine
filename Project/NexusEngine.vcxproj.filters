@@ -17,6 +17,7 @@
       <UniqueIdentifier>{F122FF6A-A565-469B-A8FB-0EEAFB35CF69}</UniqueIdentifier>
     </Filter>
 	<Filter Include="Foundation\Math"><UniqueIdentifier>{C0992855-F7FD-481B-93A4-1D93E733603A}</UniqueIdentifier></Filter>
+	<Filter Include="Foundation\Memory"><UniqueIdentifier>{7A058B65-3EDF-4EC4-94A7-AFB42EC2678E}</UniqueIdentifier></Filter>
     <Filter Include="Foundation\Utility">
       <UniqueIdentifier>{BF33C201-0781-4B3C-B697-E4B90147B94C}</UniqueIdentifier>
     </Filter>
@@ -44,6 +45,7 @@
 	<Filter Include="Graphics\Descriptor"><UniqueIdentifier>{EF42E9DD-8CD9-4514-AE43-1824C789DD47}</UniqueIdentifier></Filter>
 	<Filter Include="Graphics\Shader"><UniqueIdentifier>{E1E18133-767B-43E3-AE52-0D78591DF1D3}</UniqueIdentifier></Filter>
 	<Filter Include="Graphics\Pipeline"><UniqueIdentifier>{87724307-2EB4-4B7F-8F84-970DB1766502}</UniqueIdentifier></Filter>
+	<Filter Include="Graphics\Material"><UniqueIdentifier>{F1F62C43-6F33-4DC8-9EDC-B7A09797E17D}</UniqueIdentifier></Filter>
 	<Filter Include="Graphics\Resource"><UniqueIdentifier>{AAB88A42-A2F1-40BB-B067-F138C98F9F34}</UniqueIdentifier></Filter>
 	<Filter Include="Editor"><UniqueIdentifier>{23A768EC-9976-4A19-B5D2-8A6EF2C8A141}</UniqueIdentifier></Filter>
 	<Filter Include="Editor\ImGui"><UniqueIdentifier>{900A2B63-13D7-4F24-B6A5-9B11913585A5}</UniqueIdentifier></Filter>
@@ -104,9 +106,12 @@
 	  <Filter>Graphics\Renderer</Filter>
 	</ClCompile>
 	<ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp"><Filter>Graphics\Renderer</Filter></ClCompile>
+	<ClCompile Include="Graphics\Renderer\GraphicsContext.cpp"><Filter>Graphics\Renderer</Filter></ClCompile>
+	<ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp"><Filter>Graphics\Renderer</Filter></ClCompile>
 	<ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
 	<ClCompile Include="Graphics\Descriptor\DescriptorManager.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
 	<ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
+	<ClCompile Include="Graphics\Descriptor\TransientDescriptorArena.cpp"><Filter>Graphics\Descriptor</Filter></ClCompile>
 	<ClCompile Include="Graphics\Shader\Shader.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
 	<ClCompile Include="Graphics\Shader\ShaderCompiler.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
 	<ClCompile Include="Graphics\Shader\ShaderReflector.cpp"><Filter>Graphics\Shader</Filter></ClCompile>
@@ -114,6 +119,11 @@
 	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
 	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp"><Filter>Graphics\Pipeline</Filter></ClCompile>
 	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\VertexBufferUploader.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\ImmediateUploadContext.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\ConstantBuffer.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\TextureResource.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+	<ClCompile Include="Graphics\Resource\TextureUploader.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
 	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp"><Filter>Editor\ImGui</Filter></ClCompile>
 	<ClCompile Include="Editor\Core\EditorApplication.cpp"><Filter>Editor\Core</Filter></ClCompile>
 	<ClCompile Include="Editor\Gui\Core\GuiContext.cpp"><Filter>Editor\Gui\Core</Filter></ClCompile>
@@ -162,6 +172,7 @@
 	<ClInclude Include="Foundation\Math\Matrix4x4.h"><Filter>Foundation\Math</Filter></ClInclude>
 	<ClInclude Include="Foundation\Math\Quaternion.h"><Filter>Foundation\Math</Filter></ClInclude>
 	<ClInclude Include="Foundation\Math\Vector3.h"><Filter>Foundation\Math</Filter></ClInclude>
+	<ClInclude Include="Foundation\Memory\Alignment.h"><Filter>Foundation\Memory</Filter></ClInclude>
     <ClInclude Include="Foundation\Utility\String\ConvertString.h">
       <Filter>Foundation\Utility</Filter>
     </ClInclude>
@@ -196,11 +207,15 @@
 	  <Filter>Graphics\Renderer</Filter>
 	</ClInclude>
 	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsContext.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsRenderer.h"><Filter>Graphics\Renderer</Filter></ClInclude>
+	<ClInclude Include="Graphics\Renderer\GraphicsResourceFactory.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\DescriptorHandle.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\DescriptorManager.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
+	<ClInclude Include="Graphics\Descriptor\TransientDescriptorArena.h"><Filter>Graphics\Descriptor</Filter></ClInclude>
 	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Graphics\Renderer\RenderScene.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h"><Filter>Editor\ImGui</Filter></ClInclude>
@@ -217,7 +232,15 @@
 	<ClInclude Include="Graphics\Pipeline\PipelineLayout.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
 	<ClInclude Include="Graphics\Pipeline\RootSignature.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
 	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h"><Filter>Graphics\Pipeline</Filter></ClInclude>
+	<ClInclude Include="Graphics\Material\MaterialDrawData.h"><Filter>Graphics\Material</Filter></ClInclude>
 	<ClInclude Include="Graphics\Resource\VertexBuffer.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\VertexBufferUploader.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\ImmediateUploadContext.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\ConstantBuffer.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\TextureResource.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\TextureUploader.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\TextureFormatDx12.h"><Filter>Graphics\Resource</Filter></ClInclude>
+	<ClInclude Include="Graphics\Resource\SamplerDesc.h"><Filter>Graphics\Resource</Filter></ClInclude>
 	<ClInclude Include="Runtime\Scene\EntityId.h"><Filter>Runtime\Scene</Filter></ClInclude>
 	<ClInclude Include="Runtime\Scene\Entity.h"><Filter>Runtime\Scene</Filter></ClInclude>
 	<ClInclude Include="Runtime\Scene\Scene.h"><Filter>Runtime\Scene</Filter></ClInclude>

@@ -10,6 +10,7 @@
 #include "GraphicsSystemDesc.h"
 
 namespace NexusEngine {
+	class IGraphicsRenderer;
 	class IGraphicsRenderExtension;
 
 	/*-----------------------------------------------------------------------------------------
@@ -52,6 +53,11 @@ namespace NexusEngine {
 		 * \param color RGBA順のClear Color
 		 */
 		void SetClearColor(const std::array<float, 4>& color) noexcept;
+		/**
+		 * \brief Backend非依存Rendererを初期化してFrame記録経路へ接続する
+		 * \param renderer Applicationが所有し、GraphicsSystemより長く生存するRenderer
+		 */
+		[[nodiscard]] Result<void> AttachRenderer(IGraphicsRenderer* renderer);
 		/** \brief 上位描画拡張を初期化してPresent前の記録経路へ接続する */
 		[[nodiscard]] Result<void> AttachRenderExtension(IGraphicsRenderExtension* extension);
 

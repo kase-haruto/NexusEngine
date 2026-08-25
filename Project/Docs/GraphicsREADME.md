@@ -353,7 +353,7 @@ Bindless Resource/Sampler Heapを設定
   ↓
 Viewport / Scissor設定
   ↓
-PrimitiveRenderer::Draw
+IGraphicsRenderer::Render(GraphicsContext&)
   ├─ RootSignature / PSO Bind
   ├─ VertexBuffer Bind
   ├─ Triangle List設定
@@ -428,9 +428,11 @@ float4 SampleMaterialTexture(
 }
 ```
 
-CPU側の`ShaderResourceRef.index`をConstantBuffer、StructuredBuffer、Root Constantなどを通してShaderへ渡します。どの転送方式を標準とするかは、MaterialとDraw Dataの設計時に決定します。
+CPU側の`ShaderResourceRef.index`は現在、frame slice付きMaterial Constant Bufferを通してShaderへ渡します。
+大量のObject/Materialを描画する段階では、Draw数と更新頻度を計測してStructured BufferまたはRoot Constantとの役割分担を決定します。
 
-現在はTexture LoaderとMaterial Bufferが未実装なので、Bindless indexの生成・安全な寿命・Shaderアクセス規約までが実装範囲です。
+現在は1x1検証TextureとMaterial Draw Dataまで接続済みです。画像ファイルをdecodeするTexture Loader、
+複数MaterialのAsset管理、Model Loaderは未実装です。
 
 ## 9. Shader追加フロー
 
@@ -505,9 +507,28 @@ COM Objectは`Microsoft::WRL::ComPtr`で所有し、raw pointerは非所有参�
 
 ## 12. PrimitiveRendererの現在位置
 
-現在、`GraphicsSystem::Impl`は基盤検証用の`PrimitiveRenderer`を所有しています。
+基盤検証用の`PrimitiveRenderer`は`Application`が所有し、`IGraphicsRenderer`として
+`GraphicsSystem`へ非所有接続します。`GraphicsSystem`はRendererの初期化、Frame記録、終了順序だけを
+制御し、具象Rendererや形状データを所有しません。
 
-これはClear、Shader、Pipeline、Vertex Buffer、Draw、Presentの経路を検証する第一段階の構造です。正式なScene Renderer構造として、今後`ModelRenderer`や`SpriteRenderer`をすべて`GraphicsSystem`へ追加することは想定していません。
+これはClear、Shader、Pipeline、Vertex Buffer、Draw、Presentの経路を検証する第一段階の構造です。
+正式なScene Renderer構造として、今後`ModelRenderer`や`SpriteRenderer`を
+`GraphicsSystem::Impl`へ追加することは想定していません。
+
+RendererのFrame記録にはDX非依存の`GraphicsContext`を渡します。現在の最小契約は次の操作です。
+
+- Graphics Pipeline設定
+- Vertex Buffer設定
+- Primitive topology設定
+- 非Index Draw
+
+GPU Resource生成は`GraphicsResourceFactory`を経由します。これによりRenderer初期化時にも
+`ID3D12Device`を渡しません。既存の`GraphicsPipeline`と`VertexBuffer`内部はDX12実装ですが、
+その生成に必要なNative DeviceはFactory実装内へ留めています。
+
+Dear ImGuiは公式DX12 backendがNative Device、Queue、Command Listを必要とするため、
+通常Rendererとは別の`IGraphicsRenderExtension`経路へ限定します。このnative拡張境界を
+Scene RendererやMaterial Rendererへ使用してはいけません。
 
 将来の目標構造は次のとおりです。
 
@@ -525,9 +546,13 @@ Application（Composition Root）
        GraphicsSystem / DirectX12 Backend
 ```
 
-FrameworkがRendererを所有する場合も、Frameworkの責務は`Initialize / Render / Shutdown`のライフサイクル管理に限定します。Shader Compile、Material Bind、Draw詳細をFrameworkへ追加してはいけません。
+FrameworkがRendererを接続する場合も、Frameworkの責務は`Initialize / Render / Shutdown`の
+ライフサイクル管理に限定します。所有権はApplicationに残し、Shader Compile、Material Bind、
+Draw詳細をFrameworkへ追加してはいけません。
 
-RendererをGraphicsSystemから分離するには、`ID3D12GraphicsCommandList`を直接渡すのではなく、DX非依存の`GraphicsContext`またはCommand Encoder境界が必要です。この境界が確定する前に大規模なRHI Interfaceを先行実装しない方針です。
+`GraphicsContext`は現在必要な命令だけを持つ小さなCommand Encoder境界として導入しています。
+Texture、Index Buffer、Constant Bufferなどは実際の利用側を実装するときに追加し、
+将来利用を理由に巨大なRHI Interfaceを先行実装しない方針です。
 
 ## 13. 現在実装しないもの
 
@@ -537,7 +562,6 @@ RendererをGraphicsSystemから分離するには、`ID3D12GraphicsCommandList`�
 - Texture Loader
 - Model Loader
 - Default Heapへの非同期Upload
-- Transient Descriptor Arena
 - Bindless Heap自動拡張
 - Shader Hot Reload
 - Shader/Pipeline Cache
@@ -547,13 +571,186 @@ RendererをGraphicsSystemから分離するには、`ID3D12GraphicsCommandList`�
 
 ## 14. 今後の推奨実装順序
 
-1. DX非依存のGraphicsContext境界を定義する
-2. RendererをGraphicsSystemの所有から分離する
-3. ConstantBufferと共通Alignment Utilityを追加する
-4. Texture ResourceとUpload処理を追加する
-5. Texture/Samplerから`ShaderResourceRef`を生成する
-6. Material Draw DataへBindless indexを格納する
-7. Default HeapとUpload stagingへVertex/Texture転送を移行する
-8. Persistent DescriptorとTransient Descriptorを明確に分離する
+1. ~~DX非依存のGraphicsContext境界を定義する~~（完了）
+2. ~~RendererをGraphicsSystemの所有から分離する~~（完了）
+3. ~~ConstantBufferと共通Alignment Utilityを追加する~~（完了）
+4. ~~Texture ResourceとUpload処理を追加する~~（完了）
+5. ~~Texture/Samplerから`ShaderResourceRef`を生成する~~（完了）
+6. ~~Material Draw DataへBindless indexを格納する~~（完了）
+7. ~~Default HeapとUpload stagingへVertex/Texture転送を移行する~~（完了）
+8. ~~Persistent DescriptorとTransient Descriptorを明確に分離する~~（完了）
 
 この順序により、現在のDirectX 12 Backend境界を保ちながら、Material、Texture、Model Rendererへ段階的に拡張できます。
+
+### Constant Bufferの現在の規約
+
+`ConstantBuffer`はCPU更新用Upload Resourceを所有し、BackBufferごとに独立したsliceを確保します。
+各sliceはDirectX 12のCBV要件に合わせて256byte境界へ整列します。
+
+```text
+ConstantBuffer Upload Resource
+  ├─ Frame 0 slice（256byte alignment）
+  └─ Frame 1 slice（256byte alignment）
+```
+
+CPUはGPUが利用を終えた現在のFrameContextに対応するsliceだけを更新します。これにより、
+GPUが前Frameの定数を読み取っている間に同じmemoryを上書きしません。
+
+共通のoverflow検査付き切り上げ処理は`Foundation/Memory/Alignment.h`の`TryAlignUp`を使用します。
+Rendererは`GraphicsResourceFactory::CreateConstantBuffer`から生成するため、Native Deviceと
+FrameContext数を知る必要がありません。
+
+現在の`ConstantBuffer`はGPU Resourceとmappingだけを所有します。描画用CBVは
+`TransientDescriptorArena`がFrame中に生成し、対応Fence完了後にまとめて再利用します。
+Descriptor寿命をBuffer本体へ暗黙に混在させない方針です。
+
+### Texture Uploadの現在の規約
+
+`TextureResource`はupload完了済みのDefault Heap Textureだけを所有します。ファイル形式のdecode、
+Upload staging、Descriptor、Sampler、Materialは所有しません。公開記述には`TextureDesc`と
+`TextureFormat`を使用し、DXGI formatや`ID3D12Resource`を上位へ公開しません。
+
+```text
+Asset Loader（将来）
+  ↓ decoded tightly-packed RGBA pixels
+GraphicsResourceFactory::CreateTexture2D
+  ↓
+TextureUploader
+  ├─ Default Heap Texture（COPY_DEST）
+  ├─ Upload Buffer + copy footprint
+  ├─ 一時CommandAllocator / CommandList
+  ├─ CopyTextureRegion
+  ├─ PIXEL_SHADER_RESOURCEへBarrier
+  └─ Queue Signal / Fence Wait
+       ↓
+TextureResourceへ完成Resourceをcommit
+```
+
+現在はRenderer初期化時の同期uploadです。一時Upload ResourceとCommand資源をFence完了まで保持するため、
+GPU参照中にstaging memoryを破棄しません。非同期Asset Streamingが必要になった時点で、
+`TextureUploader`の完了待機をupload request／retire queueへ拡張します。
+
+第一段階は1 mip、1 array slice、RGBA8 UNORMまたはsRGBを対象とします。Mip生成や圧縮formatを
+利用側が存在する前に抽象化へ追加しない方針です。
+
+### Texture/Sampler Bindless参照の規約
+
+完成済み`TextureResource`は`GraphicsResourceFactory::CreatePersistentTextureShaderResource`によって
+CBV/SRV/UAV Heap上のSRVへ変換します。SamplerはBackend非依存の`SamplerDesc`から
+Sampler Heap上へ生成します。どちらも結果は同じ`ShaderResourceRef`ですが、
+`resourceClass`によってHeap分類を保持します。
+
+```text
+TextureResource ─ CreatePersistentTextureShaderResource ─┐
+                                               ├─ ShaderResourceRef
+SamplerDesc ───── CreatePersistentSampler ────────────────┘
+                                                      │
+                              index      → Shaderへ渡す
+                              generation → CPUで古い参照を検出
+                              class      → Resource/Sampler Heapを識別
+```
+
+TextureやMaterialへCPU/GPU Descriptor Handleを保存してはいけません。Shaderへ渡すのは
+`ShaderResourceRef.index`だけです。CPU側で利用する前にはFactoryの
+`IsPersistentShaderResourceValid`でgenerationを含めて検証できます。
+
+解放は`RetirePersistentShaderResource`を使用します。この関数はDirect Queue末尾へFenceをSignalし、
+参照を直ちにCPU側で無効化します。Descriptor slotはFence完了後の`CollectGarbage`まで
+Allocatorへ返さないため、GPUが古いindexを参照中に別Resourceへ再割当されません。
+
+Retireを呼ぶ前に、MaterialやDraw Dataから対象参照を除去し、以降のCommandへ記録されないことを
+呼び出し側が保証します。Texture Resource本体も、参照を使用したGPU処理の完了前に破棄してはいけません。
+
+### Material Draw Dataの現在の規約
+
+`MaterialDrawData`はGPU Constant Bufferへ転送する32byteの値型です。TextureとSamplerは
+`ShaderResourceRef.index`だけを保持し、generationやDescriptor HandleをShaderへ渡しません。
+
+```text
+MaterialDrawData（CPU / HLSL共通layout）
+  ├─ uint textureIndex
+  ├─ uint samplerIndex
+  ├─ float2 padding
+  └─ float4 tint
+```
+
+`PrimitiveRenderer`は1x1 white Textureを実際にDefault Heapへuploadし、Texture SRV、Sampler、
+frame別Material Constant Bufferを生成します。描画時は現在の`GraphicsContext::GetFrameIndex`に
+対応するsliceだけを更新し、一時CBVをPipelineのresource descriptor tableへ設定します。
+
+Pixel ShaderはCBVからTexture/Sampler indexを読み、`ResourceDescriptorHeap`と
+`SamplerDescriptorHeap`を直接indexしてsampleします。これにより次の経路が実際の描画で接続されます。
+
+```text
+Texture upload
+  ↓
+ShaderResourceRef
+  ↓ index
+MaterialDrawData
+  ↓ frame-local Constant Buffer / CBV
+Pixel Shader
+  ↓ Direct Heap Indexing
+Texture sample
+```
+
+`GraphicsContext`はRoot parameter番号やGPU Descriptor Handleを公開せず、Pipelineと
+世代検証済み`ShaderResourceRef`からdescriptor tableを設定します。
+
+### Persistent / Transient Descriptorの規約
+
+TextureやSamplerのように複数Frameをまたいで同じindexを参照するDescriptorは、
+`BindlessDescriptorTable`がgenerationとretire Fenceを持つPersistent領域へ配置します。
+一方、Material CBVのようにDraw時に現在Frameの内容を指せばよいDescriptorは、
+`TransientDescriptorArena`のFrame専用領域へ順番に配置します。
+
+```text
+Shader-visible Resource Heap
+  ├─ Persistent領域
+  │    └─ Texture SRVなど（個別allocate / generation / Fence retire）
+  └─ Transient Frame領域
+       ├─ Frame 0 bump arena ─ Fence 0完了後に一括Reset
+       └─ Frame 1 bump arena ─ Fence 1完了後に一括Reset
+```
+
+この分離により、Drawごとに変化するCBVが永続slotとgeneration管理を消費せず、個別Freeも不要になります。
+また、FrameContext、ConstantBuffer slice、Descriptor Arenaを同じindexとFence寿命へ揃えるため、
+GPU参照中のDescriptor上書きを構造的に防げます。Arenaの所有とResetは`GraphicsSystem`、
+描画側への公開は`GraphicsContext::SetGraphicsConstantBufferTable`が担当し、Rendererへ
+DirectX 12 HandleやFenceを公開しません。
+
+現在は必要性が確認できたCBVのみをTransient生成対象としています。Transient SRV/UAVや連続table構築は、
+Model/Material描画で実際のbinding要件が決まった段階でArenaへ追加します。
+
+### Default Heapへ静的Resourceを配置する理由
+
+静的VertexとTextureは、初期転送後にCPUから継続更新しないためDefault Heapへ配置します。
+Upload HeapはCPU書き込みに最適化されたCPU可視memoryであり、GPUが毎Drawで頂点を読む
+恒久的な保管先には適していません。
+
+Default Heapへ移行するメリットは次のとおりです。
+
+- GPUローカルmemoryに配置されやすく、継続的なvertex fetchとtexture sampleに適する
+- 転送完了後にUpload stagingを破棄でき、CPU可視memoryを静的Assetごとに保持しない
+- Resource本体からMap、CPU copy、Command記録、Fence同期の責務を除去できる
+- TextureとVertexで同じUpload寿命規約を使用できる
+- 将来のModel Loader、非同期Asset streaming、Copy Queue化へ拡張しやすい
+
+一方、生成時にstaging Resource、copy command、Resource Barrier、Fence同期が必要になり、
+小さなResourceの初期化コストは増えます。毎Frame CPU更新するConstant Bufferはこの方式へ移さず、
+frame slice付きUpload Heapへ残します。Resourceの更新頻度に応じてHeapを選択する方針です。
+
+`ImmediateUploadContext`は同期Upload用の一時CommandAllocator／CommandList生成、Close、Execute、
+Signal、Waitだけを共通化します。copy内容とResource Barrierは`TextureUploader`または
+`VertexBufferUploader`が決定し、Resource固有知識を共通Contextへ集めません。
+
+```text
+CPU Asset Data
+  ↓ Upload staging（Upload Heap）
+Copy command
+  ↓
+Static Resource（Default Heap）
+  ↓ Resource固有の利用状態へBarrier
+Fence Wait
+  ↓
+Upload stagingを破棄
+```

@@ -167,6 +167,14 @@ namespace NexusEngine {
 		       slots[reference.index].generation == reference.generation;
 	}
 
+	D3D12_GPU_DESCRIPTOR_HANDLE BindlessDescriptorTable::GetGpuHandle(const ShaderResourceRef reference) const noexcept {
+		if(!IsValid(reference)) {
+			return {};
+		}
+		const auto& slots = reference.resourceClass == ShaderResourceClass::Resource ? resourceSlots_ : samplerSlots_;
+		return slots[reference.index].allocation.gpuHandle;
+	}
+
 	void BindlessDescriptorTable::Bind(ID3D12GraphicsCommandList* const commandList) const noexcept {
 		// Direct Heap Indexing Shaderはこの2 HeapをResourceDescriptorHeap/SamplerDescriptorHeapとして参照する。
 		if(descriptors_ != nullptr) descriptors_->BindShaderVisibleHeaps(commandList);
