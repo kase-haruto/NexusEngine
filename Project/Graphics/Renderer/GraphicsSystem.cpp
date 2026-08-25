@@ -12,9 +12,12 @@
 #include "Graphics/Core/CommandQueue.h"
 #include "Graphics/Descriptor/BindlessDescriptorTable.h"
 #include "Graphics/Descriptor/DescriptorManager.h"
+#include "Graphics/Descriptor/TransientDescriptorArena.h"
 #include "Graphics/Device/GraphicsDevice.h"
 #include "Graphics/Presentation/SwapChain.h"
-#include "PrimitiveRenderer.h"
+#include "GraphicsContext.h"
+#include "GraphicsRenderer.h"
+#include "GraphicsResourceFactory.h"
 #include "GraphicsRenderExtension.h"
 
 namespace NexusEngine {
@@ -41,11 +44,14 @@ namespace NexusEngine {
 		DescriptorManager descriptors;
 		SwapChain swapChain;
 		BindlessDescriptorTable bindlessDescriptors;
-		PrimitiveRenderer primitiveRenderer;
+		TransientDescriptorArena transientDescriptors;
+		GraphicsResourceFactory resourceFactory;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
+		std::filesystem::path shaderDirectory;
 		bool enableVSync = true;
 		void* nativeWindow = nullptr;
+		IGraphicsRenderer* renderer = nullptr;
 		IGraphicsRenderExtension* renderExtension = nullptr;
 	};
 
@@ -121,13 +127,22 @@ namespace NexusEngine {
 			implementation->device.GetDevice(), &implementation->descriptors);
 		if(!result) return std::unexpected(std::move(result.error()));
 
-		// 基盤検証用GeometryとPipelineは専用Rendererへ委譲し、Systemへ形状データを持たせない。
-		result = implementation->primitiveRenderer.Initialize(
-			implementation->device.GetDevice(), desc.shaderDirectory);
+		// null slotを含む永続Bindless領域の確立後に、残りの同一HeapからFrame専用領域を予約する。
+		// 容量不足を起動時に検出することで、描画途中の部分的な初期化を避ける。
+		result = implementation->transientDescriptors.Initialize(
+			implementation->device.GetDevice(), &implementation->descriptors.Resources(),
+			SwapChain::kBufferCount, desc.transientResourceDescriptorsPerFrame);
 		if(!result) return std::unexpected(std::move(result.error()));
+
+		// RendererへNative Deviceを公開せずResourceを生成できるよう、Device寿命に従うFactoryを用意する。
+		// Factory自体はResourceを所有せず、生成物は接続されたRendererが明示的に破棄する。
+		implementation->resourceFactory.ConnectBackend(
+			implementation->device.GetDevice(), &implementation->commandQueue,
+			&implementation->bindlessDescriptors, SwapChain::kBufferCount);
 
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
+		implementation->shaderDirectory = desc.shaderDirectory;
 		implementation->enableVSync = desc.enableVSync;
 		implementation->nativeWindow = surface.nativeHandle;
 		impl_ = std::move(implementation);
@@ -152,14 +167,19 @@ namespace NexusEngine {
 			impl_->renderExtension->Shutdown();
 			impl_->renderExtension = nullptr;
 		}
+		if(impl_->renderer != nullptr) {
+			impl_->renderer->Shutdown();
+			impl_->renderer = nullptr;
+		}
 		// Command ListはAllocatorを参照して生成されるため、Listから先に解放する。
 		for(auto& frame : impl_->frames) {
 			frame.commandList.Reset();
 			frame.allocator.Reset();
 			frame.fenceValue = 0;
 		}
-		// PipelineとVertexBufferはDevice依存ResourceなのでDeviceより先に明示解放する。
-		impl_->primitiveRenderer.Shutdown();
+		// Renderer Resourceの破棄完了後に、非所有Device参照だけを持つFactoryを破棄する。
+		impl_->resourceFactory.ConnectBackend(nullptr, nullptr, nullptr, 0);
+		impl_->transientDescriptors.Shutdown();
 		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
 		impl_->swapChain.Shutdown();
@@ -188,6 +208,9 @@ namespace NexusEngine {
 		if(!waitResult) {
 			return waitResult;
 		}
+		// このFrameが以前発行したDrawは完了済みなので、一時Descriptor領域を安全に再利用できる。
+		// ResetをFence待機より前に移動するとGPUが参照中のDescriptorを書き換えるため順序を維持する。
+		impl_->transientDescriptors.ResetFrame(frameIndex);
 
 		// 対応Fenceの完了後なので、このAllocatorが保持していた前回の記録領域を再利用できる。
 		HRESULT result = frame.allocator->Reset();
@@ -229,8 +252,13 @@ namespace NexusEngine {
 		};
 		frame.commandList->RSSetViewports(1, &viewport);
 		frame.commandList->RSSetScissorRects(1, &scissor);
-		// Primitive固有のPipeline、Geometry、Draw手順はPrimitiveRenderer内へ閉じ込める。
-		impl_->primitiveRenderer.Draw(frame.commandList.Get());
+		// Frame中だけ有効なContextへCommand Listを隠し、上位RendererにはBackend非依存命令だけを公開する。
+		GraphicsContext graphicsContext(
+			frame.commandList.Get(), &impl_->bindlessDescriptors,
+			&impl_->transientDescriptors, frameIndex);
+		if(impl_->renderer != nullptr) {
+			impl_->renderer->Render(graphicsContext);
+		}
 		if(impl_->renderExtension != nullptr) {
 			impl_->renderExtension->BeginFrame();
 			impl_->renderExtension->Record(frame.commandList.Get());
@@ -284,6 +312,24 @@ namespace NexusEngine {
 		if(impl_) {
 			impl_->clearColor = color;
 		}
+	}
+
+	Result<void> GraphicsSystem::AttachRenderer(IGraphicsRenderer* const renderer) {
+		if(!impl_ || renderer == nullptr || impl_->renderer != nullptr || impl_->resourceFactory.nativeDevice_ == nullptr) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Graphics renderer cannot be attached."));
+		}
+
+		// 初期化に成功するまで非所有pointerを公開せず、失敗時に半接続状態を残さない。
+		const GraphicsRendererInitializationContext context {
+			.resources = impl_->resourceFactory,
+			.shaderDirectory = impl_->shaderDirectory
+		};
+		auto result = renderer->Initialize(context);
+		if(!result) {
+			return result;
+		}
+		impl_->renderer = renderer;
+		return {};
 	}
 
 	Result<void> GraphicsSystem::AttachRenderExtension(IGraphicsRenderExtension* const extension) {

@@ -76,6 +76,8 @@ namespace NexusEngine {
 		 * \return 現在Shader Resourceとして利用可能な場合true
 		 */
 		[[nodiscard]] bool IsValid(ShaderResourceRef reference) const noexcept;
+		/** \brief Root Descriptor Table設定用のGPU Handleを世代検証後に取得する */
+		[[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(ShaderResourceRef reference) const noexcept;
 		/**
 		 * \brief ResourceDescriptorHeapとSamplerDescriptorHeapをCommandListへ設定する
 		 * \param commandList Heapを使用する非所有CommandList

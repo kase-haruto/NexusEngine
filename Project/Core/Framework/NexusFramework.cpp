@@ -139,6 +139,18 @@ namespace NexusEngine {
 			return std::unexpected(std::move(graphicsResult.error()));
 		}
 
+		// Scene/Primitiveなど通常描画はBackend非依存Renderer境界へ接続する。
+		// Applicationが所有権を保持し、FrameworkはGraphicsSystemとの寿命順だけを調整する。
+		if(desc.renderer != nullptr) {
+			auto rendererResult = graphicsSystem_.AttachRenderer(desc.renderer);
+			if(!rendererResult) {
+				graphicsSystem_.Shutdown();
+				window_.Shutdown();
+				state_ = FrameworkState::Failed;
+				return std::unexpected(std::move(rendererResult.error()));
+			}
+		}
+
 		// Editor UIなどの具象拡張はApplicationが所有し、Frameworkは任意拡張として接続する。
 		if(desc.renderExtension != nullptr) {
 			auto extensionResult = graphicsSystem_.AttachRenderExtension(desc.renderExtension);

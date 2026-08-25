@@ -38,6 +38,7 @@ namespace NexusEngine {
 		std::filesystem::path shaderDirectory = L"Shaders";
 		uint32_t bindlessResourceCapacity = 4096; //< CBV/SRV/UAV永続Bindless slot数
 		uint32_t bindlessSamplerCapacity = 128;   //< Sampler永続Bindless slot数
+		uint32_t transientResourceDescriptorsPerFrame = 256; //< Draw中に生成しFence完了後に再利用するCBV/SRV/UAV数
 		uint32_t rtvDescriptorCapacity = 256; //< BackBufferとRenderTarget用RTV数
 		uint32_t dsvDescriptorCapacity = 128; //< Depth/Shadow用DSV数
 	};

@@ -7,6 +7,12 @@
 #include <utility>
 #include <vector>
 
+// engine
+#include "GraphicsContext.h"
+#include "GraphicsResourceFactory.h"
+#include "Graphics/Resource/SamplerDesc.h"
+#include "Foundation/Logging/Logger.h"
+
 namespace NexusEngine {
 	namespace {
 
@@ -31,13 +37,13 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Primitive描画に必要なShader、Pipeline、VertexBufferを初期化する
 	/////////////////////////////////////////////////////////////////////////////////////////
-	Result<void> PrimitiveRenderer::Initialize(
-		ID3D12Device* const device,
-		const std::filesystem::path& shaderDirectory) {
+Result<void> PrimitiveRenderer::Initialize(
+		const GraphicsRendererInitializationContext& context) {
+		resources_ = &context.resources;
 		// Shaderはこの初期化時にCompileとReflectionを一度だけ行い、Draw中には解析しない。
 		Shader vertexShader;
 		auto result = vertexShader.Initialize(
-			{ shaderDirectory / L"Primitive/Primitive.VS.hlsl", L"main", L"vs_6_6" },
+			{ context.shaderDirectory / L"Primitive/Primitive.VS.hlsl", L"main", L"vs_6_6" },
 			ShaderStage::Vertex);
 		if(!result) {
 			return std::unexpected(std::move(result.error()));
@@ -45,7 +51,7 @@ namespace NexusEngine {
 
 		Shader pixelShader;
 		result = pixelShader.Initialize(
-			{ shaderDirectory / L"Primitive/Primitive.PS.hlsl", L"main", L"ps_6_6" },
+			{ context.shaderDirectory / L"Primitive/Primitive.PS.hlsl", L"main", L"ps_6_6" },
 			ShaderStage::Pixel);
 		if(!result) {
 			return std::unexpected(std::move(result.error()));
@@ -56,36 +62,104 @@ namespace NexusEngine {
 			{ "POSITION", 0, VertexFormat::Float3, offsetof(PrimitiveVertex, position) },
 			{ "COLOR", 0, VertexFormat::Float4, offsetof(PrimitiveVertex, color) }
 		};
-		result = pipeline_.Initialize(device, std::move(vertexShader), std::move(pixelShader), vertexLayout);
+		result = context.resources.CreateGraphicsPipeline(
+			pipeline_, std::move(vertexShader), std::move(pixelShader), vertexLayout);
 		if(!result) {
 			return std::unexpected(std::move(result.error()));
 		}
 
 		// 型付き配列をbyte viewへ変換し、VertexBufferへ形状データのGPU所有を移す。
 		const auto vertexBytes = std::as_bytes(std::span(kTriangleVertices));
-		result = vertexBuffer_.Initialize(
-			device,
+		result = context.resources.CreateVertexBuffer(
+			vertexBuffer_,
 			{ reinterpret_cast<const uint8_t*>(vertexBytes.data()), vertexBytes.size() },
 			sizeof(PrimitiveVertex));
 		if(!result) {
 			pipeline_.Shutdown();
 			return std::unexpected(std::move(result.error()));
 		}
+
+		// 1x1 white Textureでも実際のDefault Heap upload、SRV、Sampler、Material index転送経路を通す。
+		// 見た目は従来の頂点色を維持しつつ、将来Texture Assetへ差し替える境界を検証できる。
+		constexpr std::array<uint8_t, 4> kWhitePixel = { 255, 255, 255, 255 };
+		result = resources_->CreateTexture2D(
+			texture_, TextureDesc { 1, 1, TextureFormat::Rgba8Unorm }, kWhitePixel);
+		if(!result) {
+			Shutdown();
+			return std::unexpected(std::move(result.error()));
+		}
+		auto textureReference = resources_->CreatePersistentTextureShaderResource(texture_);
+		if(!textureReference) {
+			Shutdown();
+			return std::unexpected(std::move(textureReference.error()));
+		}
+		textureRef_ = *textureReference;
+
+		auto samplerReference = resources_->CreatePersistentSampler(SamplerDesc {});
+		if(!samplerReference) {
+			Shutdown();
+			return std::unexpected(std::move(samplerReference.error()));
+		}
+		samplerRef_ = *samplerReference;
+
+		result = resources_->CreateConstantBuffer(materialBuffer_, sizeof(MaterialDrawData));
+		if(!result) {
+			Shutdown();
+			return std::unexpected(std::move(result.error()));
+		}
+		materialDrawData_.textureIndex = textureRef_.index;
+		materialDrawData_.samplerIndex = samplerRef_.index;
 		return {};
 	}
 
 	void PrimitiveRenderer::Shutdown() noexcept {
+		// GraphicsSystemは通常Shutdown前にGPU idleを保証する。参照はそれでも共通retire経路へ渡し、
+		// 実行中のRenderer差し替えへ拡張した場合にも即時slot再利用を起こさない。
+		if(resources_ != nullptr) {
+			try {
+				auto retire = [&](ShaderResourceRef& reference) {
+					if(!reference.IsValid()) return;
+					auto result = resources_->RetirePersistentShaderResource(reference);
+					if(!result) NEXUS_LOG_ERROR("Graphics", result.error().GetMessageText());
+					reference = {};
+				};
+				retire(textureRef_);
+				retire(samplerRef_);
+			} catch(...) {
+				NEXUS_LOG_ERROR("Graphics", "Unexpected exception while retiring PrimitiveRenderer descriptors.");
+			}
+		}
+		materialBuffer_.Shutdown();
+		texture_.Shutdown();
 		// PipelineとBufferはいずれもDevice依存なので、GraphicsSystemがDeviceより先に呼び出す。
 		vertexBuffer_.Shutdown();
 		pipeline_.Shutdown();
+		resources_ = nullptr;
 	}
 
-	void PrimitiveRenderer::Draw(ID3D12GraphicsCommandList* const commandList) const noexcept {
-		// RootSignature/PSOとGeometryを揃えてから、一つのTriangle Listとして描画する。
-		pipeline_.Bind(commandList);
-		vertexBuffer_.Bind(commandList);
-		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		commandList->DrawInstanced(vertexBuffer_.GetVertexCount(), 1, 0, 0);
+	void PrimitiveRenderer::Render(GraphicsContext& context) {
+		const uint32_t frameIndex = context.GetFrameIndex();
+		if(frameIndex >= materialBuffer_.GetFrameCount()) {
+			return;
+		}
+		const auto materialBytes = std::as_bytes(std::span(&materialDrawData_, 1));
+		auto writeResult = materialBuffer_.Write(
+			frameIndex,
+			{ reinterpret_cast<const uint8_t*>(materialBytes.data()), materialBytes.size() });
+		if(!writeResult) {
+			NEXUS_LOG_ERROR("Graphics", writeResult.error().GetMessageText());
+			return;
+		}
+		// Rendererは描画意図だけを記述し、Native Command List操作はGraphicsContextへ委譲する。
+		context.SetGraphicsPipeline(pipeline_);
+		auto descriptorResult = context.SetGraphicsConstantBufferTable(pipeline_, materialBuffer_);
+		if(!descriptorResult) {
+			NEXUS_LOG_ERROR("Graphics", descriptorResult.error().GetMessageText());
+			return;
+		}
+		context.SetVertexBuffer(vertexBuffer_);
+		context.SetPrimitiveTopology(PrimitiveTopology::TriangleList);
+		context.Draw(vertexBuffer_.GetVertexCount());
 	}
 
 } // namespace NexusEngine

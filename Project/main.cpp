@@ -2,6 +2,7 @@
 // engine
 #include "Core/Framework/NexusFramework.h"
 #include "Editor/Core/EditorApplication.h"
+#include "Graphics/Renderer/PrimitiveRenderer.h"
 
 /*-----------------------------------------------------------------------------------------
  * main
@@ -9,8 +10,10 @@
  *---------------------------------------------------------------------------------------*/
 int main() {
 	NexusEngine::EditorApplication editor;
+	NexusEngine::PrimitiveRenderer primitiveRenderer;
 	NexusEngine::FrameworkDesc desc;
 	desc.mode = NexusEngine::FrameworkMode::Editor;
+	desc.renderer = &primitiveRenderer;
 	desc.renderExtension = &editor;
 	desc.messageHandler = [](void* userData, HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
 		return static_cast<NexusEngine::EditorApplication*>(userData)->HandleWindowMessage(

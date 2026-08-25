@@ -1,41 +1,34 @@
 #pragma once
-
 #include <cstdint>
-#include <span>
-
-#include <d3d12.h>
-#include <wrl/client.h>
-
-#include "Foundation/Error/Result.h"
+#include <memory>
 
 namespace NexusEngine {
+	class GraphicsContext;
+	class VertexBufferUploader;
 
 	/*-----------------------------------------------------------------------------------------
 	 * VertexBuffer
-	 * - Vertex dataを保持するGPU ResourceとVertexBufferViewを所有する
-	 * - Primitive形状やPipelineは管理しない
+	 * - Upload完了済みDefault Heap Vertex ResourceとViewを所有する
+	 * - CPU data、staging、Command記録、Primitive形状、Pipelineは担当しない
 	 *---------------------------------------------------------------------------------------*/
 	class VertexBuffer final {
 	public:
-		/**
-		 * \brief 第一段階としてUpload HeapへVertex dataを作成する
-		 * \param device Buffer生成に使う非所有Device
-		 * \param data コピーするVertex byte列
-		 * \param stride 1 Vertexあたりのbyte数
-		 * \return Resource生成とMap結果
-		 */
-		[[nodiscard]] Result<void> Initialize(ID3D12Device* device, std::span<const uint8_t> data, uint32_t stride);
-		/** \brief Device破棄前にVertex Resourceを解放する */
-		void Shutdown() noexcept;
-		/** \brief Input Assemblerのslot 0へVertex Buffer Viewを設定する */
-		void Bind(ID3D12GraphicsCommandList* commandList) const noexcept;
-		/** \brief DrawInstancedへ渡すVertex数を取得する */
+		VertexBuffer() noexcept;
+		~VertexBuffer() noexcept;
+		VertexBuffer(const VertexBuffer&)				 = delete;
+		VertexBuffer& operator=(const VertexBuffer&)	 = delete;
+		VertexBuffer(VertexBuffer&&)					 = delete;
+		VertexBuffer&		   operator=(VertexBuffer&&) = delete;
+		void				   Shutdown() noexcept;
+		[[nodiscard]] bool	   IsInitialized() const noexcept;
 		[[nodiscard]] uint32_t GetVertexCount() const noexcept;
 
 	private:
-		Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
-		D3D12_VERTEX_BUFFER_VIEW view_ {};
-		uint32_t vertexCount_ = 0;
+		friend class GraphicsContext;
+		friend class VertexBufferUploader;
+		void Commit(void* nativeResource, uint32_t sizeInBytes, uint32_t stride, uint32_t vertexCount);
+		void Bind(void* nativeCommandList) const noexcept;
+		class Impl;
+		std::unique_ptr<Impl> impl_; //< Native Resource/Viewを公開Headerから隠す唯一の所有者
 	};
-
 } // namespace NexusEngine

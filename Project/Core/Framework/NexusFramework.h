@@ -9,6 +9,7 @@
 #include "Platform/Window/ProjectWindow.h"
 
 namespace NexusEngine {
+	class IGraphicsRenderer;
 	class IGraphicsRenderExtension;
 
 	enum class FrameworkState : uint8_t {
@@ -35,6 +36,7 @@ namespace NexusEngine {
 		FrameworkMode	   mode = FrameworkMode::Game;
 		WindowDetail	   window;
 		GraphicsSystemDesc graphics;
+		IGraphicsRenderer* renderer = nullptr; //< Application所有の通常描画Renderer
 		IGraphicsRenderExtension* renderExtension = nullptr; //< Application所有の任意描画拡張
 		ProjectWindow::MessageHandler messageHandler = nullptr; //< 任意の上位Window message購読関数
 		void* messageHandlerUserData = nullptr; //< messageHandlerへ渡す非所有Context
