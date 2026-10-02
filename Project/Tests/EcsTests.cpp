@@ -1,11 +1,14 @@
 // c++
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 
 // engine
 #include "Runtime/Level/Level.h"
+#include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Model/ModelInstance.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
@@ -36,6 +39,33 @@ namespace NexusEngine::Tests {
 	 * \note 専用Test runner導入後に自動実行へ接続する。Runtime本体からは呼び出さない
 	 */
 	void RunEcsTests() {
+		// SceneのCPU姿勢更新にGPU Resourceが不要なことを検証する。
+		ModelAssetData asset;
+		asset.nodes.emplace_back();
+		AnimationClip clip;
+		clip.duration = 1.0f;
+		NodeAnimationChannel channel;
+		channel.translations = { { 0.0f, { 0.0f, 0.0f, 0.0f }, {}, {} },
+			{ 1.0f, { 2.0f, 0.0f, 0.0f }, {}, {} } };
+		clip.channels.push_back(channel);
+		asset.animations.push_back(clip);
+		ModelInstance pose;
+		assert(pose.Initialize(asset).has_value());
+		assert(pose.Play(0).has_value());
+		pose.Update(0.25f);
+		assert(std::abs(pose.GetNodeWorldTransforms()[0].At(3, 0) - 0.5f) < 0.0001f);
+		pose.Update(1.0f);
+		assert(std::abs(pose.GetNodeWorldTransforms()[0].At(3, 0) - 0.5f) < 0.0001f);
+		assert(pose.Play(0, false).has_value());
+		pose.Update(2.0f);
+		assert(pose.GetNodeWorldTransforms()[0].At(3, 0) == 2.0f);
+		pose.Shutdown();
+		asset.nodes[0].parentIndex = 0;
+		assert(!pose.Initialize(asset).has_value()); // 不正な階層をGPU生成前に拒否する。
+		asset.nodes[0].parentIndex = ModelNodeAssetData::kNoParent;
+		asset.skins.push_back(ModelSkin { "invalid", { 1 }, { Matrix4x4::Identity() } });
+		assert(!pose.Initialize(asset).has_value());
+
 		Scene scene;
 		Entity first = scene.CreateEntity("first");
 		const EntityId staleId = first.GetId();

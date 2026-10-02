@@ -14,6 +14,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EcsTests.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
     <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />

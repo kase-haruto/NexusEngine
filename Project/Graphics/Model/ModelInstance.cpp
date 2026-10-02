@@ -5,7 +5,7 @@
 #include <cmath>
 
 // engine
-#include "ModelResource.h"
+#include "ModelAssetData.h"
 
 namespace NexusEngine {
 	namespace {
@@ -97,18 +97,33 @@ namespace NexusEngine {
 		}
 	} // namespace
 
-	Result<void> ModelInstance::Initialize(const ModelResource& resource) {
-		if(resource_ != nullptr || !resource.IsInitialized()) {
+	Result<void> ModelInstance::Initialize(const ModelAssetData& resource) {
+		if(resource_ != nullptr || resource.nodes.empty()) {
 			return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance,
-				"Cannot initialize a model instance from an uninitialized resource."));
+				"Model instance requires a nonempty CPU asset and must not be initialized twice."));
+		}
+
+		// GPU生成に依存せず姿勢を評価するため、CPU階層とSkinの参照範囲をここで検証する。
+		for(std::size_t index = 0; index < resource.nodes.size(); ++index) {
+			const auto parent = resource.nodes[index].parentIndex;
+			if(parent != ModelNodeAssetData::kNoParent && parent >= index)
+				return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid CPU model hierarchy."));
+		}
+		for(const auto& skin : resource.skins) {
+			if(skin.joints.size() != skin.inverseBindMatrices.size())
+				return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid CPU skin matrices."));
+			for(const auto joint : skin.joints) {
+				if(joint >= resource.nodes.size())
+					return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid CPU skin joint."));
+			}
 		}
 		resource_ = &resource;
-		localTransforms_.reserve(resource.GetNodes().size());
-		for(const ModelNode& node : resource.GetNodes()) localTransforms_.push_back(node.bindTransform);
-		nodeWorldTransforms_.resize(resource.GetNodes().size());
-		skinPalettes_.resize(resource.GetSkins().size());
-		for(std::size_t skinIndex = 0; skinIndex < resource.GetSkins().size(); ++skinIndex) {
-			skinPalettes_[skinIndex].resize(resource.GetSkins()[skinIndex].joints.size());
+		localTransforms_.reserve(resource.nodes.size());
+		for(const ModelNodeAssetData& node : resource.nodes) localTransforms_.push_back(node.localTransform);
+		nodeWorldTransforms_.resize(resource.nodes.size());
+		skinPalettes_.resize(resource.skins.size());
+		for(std::size_t skinIndex = 0; skinIndex < resource.skins.size(); ++skinIndex) {
+			skinPalettes_[skinIndex].resize(resource.skins[skinIndex].joints.size());
 		}
 		EvaluatePose();
 		return {};
@@ -124,7 +139,7 @@ namespace NexusEngine {
 	}
 
 	Result<void> ModelInstance::Play(const uint32_t animationIndex, const bool loop) noexcept {
-		if(resource_ == nullptr || animationIndex >= resource_->GetAnimations().size()) {
+		if(resource_ == nullptr || animationIndex >= resource_->animations.size()) {
 			return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance,
 				"Model animation index is invalid."));
 		}
@@ -136,8 +151,8 @@ namespace NexusEngine {
 	}
 
 	void ModelInstance::Update(const float deltaTime) noexcept {
-		if(resource_ == nullptr || animationIndex_ >= resource_->GetAnimations().size()) return;
-		const AnimationClip& clip = resource_->GetAnimations()[animationIndex_];
+		if(resource_ == nullptr || animationIndex_ >= resource_->animations.size()) return;
+		const AnimationClip& clip = resource_->animations[animationIndex_];
 		animationTime_ += (std::max)(deltaTime, 0.0f);
 		if(clip.duration > 0.0f) {
 			animationTime_ = loop_ ? std::fmod(animationTime_, clip.duration)
@@ -146,7 +161,7 @@ namespace NexusEngine {
 		EvaluatePose();
 	}
 
-	const ModelResource* ModelInstance::GetResource() const noexcept { return resource_; }
+	const ModelAssetData* ModelInstance::GetAsset() const noexcept { return resource_; }
 	const std::vector<Matrix4x4>& ModelInstance::GetNodeWorldTransforms() const noexcept {
 		return nodeWorldTransforms_;
 	}
@@ -156,11 +171,11 @@ namespace NexusEngine {
 
 	void ModelInstance::EvaluatePose() noexcept {
 		if(resource_ == nullptr) return;
-		const auto& nodes = resource_->GetNodes();
-		for(std::size_t index = 0; index < nodes.size(); ++index) localTransforms_[index] = nodes[index].bindTransform;
+		const auto& nodes = resource_->nodes;
+		for(std::size_t index = 0; index < nodes.size(); ++index) localTransforms_[index] = nodes[index].localTransform;
 
-		if(animationIndex_ < resource_->GetAnimations().size()) {
-			const AnimationClip& clip = resource_->GetAnimations()[animationIndex_];
+		if(animationIndex_ < resource_->animations.size()) {
+			const AnimationClip& clip = resource_->animations[animationIndex_];
 			for(const NodeAnimationChannel& channel : clip.channels) {
 				if(channel.nodeIndex >= localTransforms_.size()) continue;
 				ModelNodeTransform& transform = localTransforms_[channel.nodeIndex];
@@ -179,19 +194,19 @@ namespace NexusEngine {
 			}
 		}
 
-		// Resource生成時に親indexが子より前になることを検証済みなので、1 passでhierarchyを合成できる。
+		// Initialize時に親indexが子より前になることを検証済みなので、1 passでhierarchyを合成できる。
 		for(std::size_t index = 0; index < nodes.size(); ++index) {
 			nodeWorldTransforms_[index] = MakeAffineMatrix(
 				localTransforms_[index].scale, localTransforms_[index].rotation, localTransforms_[index].translation);
-			if(nodes[index].parentIndex != ModelNode::kNoParent) {
+			if(nodes[index].parentIndex != ModelNodeAssetData::kNoParent) {
 				nodeWorldTransforms_[index] = Multiply(
 					nodeWorldTransforms_[index], nodeWorldTransforms_[nodes[index].parentIndex]);
 			}
 		}
 
 		// row-vector規約ではvertex * inverseBind * currentJointの順でModel空間へ戻す。
-		for(std::size_t skinIndex = 0; skinIndex < resource_->GetSkins().size(); ++skinIndex) {
-			const ModelSkin& skin = resource_->GetSkins()[skinIndex];
+		for(std::size_t skinIndex = 0; skinIndex < resource_->skins.size(); ++skinIndex) {
+			const ModelSkin& skin = resource_->skins[skinIndex];
 			for(std::size_t jointIndex = 0; jointIndex < skin.joints.size(); ++jointIndex) {
 				skinPalettes_[skinIndex][jointIndex] = Multiply(
 					skin.inverseBindMatrices[jointIndex], nodeWorldTransforms_[skin.joints[jointIndex]]);

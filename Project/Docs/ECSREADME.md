@@ -176,7 +176,11 @@ FrameworkはWindowとGraphicsSystemを値所有し、Application所有Renderer/E
 
 Frameworkに非所有UpdateClientを追加し、EditorApplication→Level.Update→System Scheduler、続いてPrepareRender→再利用RenderSceneを抽出する。PrimitiveRendererはSceneやEntity型を参照せず、そのsnapshotの全Primitiveのworld/tintとCamera行列を描画へ反映する。複数Drawが同じConstantBufferの最後の値を読む問題を避けるため、objectごとのframe安全なGPU bufferを高水位まで保持する。これは最小描画統合であり、大量描画向けinstancingやframe arenaは今後のRenderer側課題である。
 
-既存デモのモデル/アニメーションResource所有をRendererに残し、SceneのCamera/Primitiveデータへ描画配置を移した。GPU fence、Descriptor、Asset importer、Editor UI基盤は既存責務を維持した。
+デモのモデル選択・CPUロード・Clip選択・回転・アニメーション更新はEditorApplicationのScene構築／Update側に置く。ModelInstanceはCPU ModelAssetDataから姿勢を評価し、GPU ModelResourceには依存しない。RendererはScene指定AssetのGPUアップロードとGPU所有、更新済み姿勢の読み取り、描画だけを担当する。GPU fence、Descriptor、Asset importer、Editor UI基盤は既存責務を維持した。
+
+コードでのScene編集箇所は`Editor/Core/EditorApplication.cpp`の`CreateScene`（モデルパス、Clip、Entity、Transform、Camera）と`Update`（回転）、同ヘッダーの`rotationSpeed_`（rad/s）。`main`はGPU初期化より先にCPU Sceneを構築して非所有入力を接続する。AssetはModelInstanceとRendererより長く保持し、更新と描画は現状同一スレッドで実行する。
+
+この接続は単一共有モデルを使うデモ用。モデルのパス・Clip・角速度は現在のLevelファイルには保存されない。異なるモデル／Entity別Clip、実行中のAsset差し替え、並列描画にはAsset Handleとcache、Entity別姿勢snapshot、追加Serializationが必要。`CreateScene`は起動前だけに呼び、Renderer稼働中のモデル変更には使用しない。
 
 ## PDFの記述と採用判断
 

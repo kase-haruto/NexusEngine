@@ -1,7 +1,6 @@
 #pragma once
 
 // c++
-#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -39,12 +38,19 @@ namespace NexusEngine {
 		void Shutdown() noexcept override;
 
 		/**
-		 * \brief PipelineとVertexBufferをBindし、組み込みCubeのDraw命令を記録する
+		 * \brief PipelineとVertexBufferをBindし、Scene指定モデルのDraw命令を記録する
 		 * \param context 現在Frameに描画命令を記録するBackend非依存Context
 		 */
 		void Render(GraphicsContext& context) override;
 		/** \brief Application所有の値snapshotを接続する。Rendererより長く生存すること */
 		void SetRenderScene(const RenderScene* scene) noexcept { renderScene_ = scene; }
+
+
+		/** \brief Scene所有のCPUモデルと更新済み姿勢を接続する。初期化前に設定し、Shutdownまで保持すること */
+		void SetModelInput(const ModelAssetData* asset, const ModelInstance* pose) noexcept {
+			modelAsset_ = asset;
+			modelPose_ = pose;
+		}
 
 	private:
 		struct MaterialGpuResource {
@@ -55,15 +61,14 @@ namespace NexusEngine {
 
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
-		ModelResource cubeModel_; //< OBJ Loaderとmulti-mesh経路の検証用Cube asset
-		ModelInstance cubeInstance_; //< Node animationのinstance固有再生状態
+		ModelResource model_; //< Scene指定モデルのGPU Resource
+		const ModelAssetData* modelAsset_ = nullptr; //< Sceneが選択・ロードしたCPU Asset（非所有）
+		const ModelInstance* modelPose_ = nullptr; //< Sceneが更新するCPU姿勢（非所有）
 		std::vector<MaterialGpuResource> materialResources_; //< Material slot別Texture/Sampler所有
 		std::vector<std::vector<std::unique_ptr<ConstantBuffer>>> meshDrawBuffers_; //< SubmeshごとのFrame安全なDraw Data
-		PrimitiveDrawData drawData_; //< 回転行列とMaterial parameterのCPU側転送値
+		PrimitiveDrawData drawData_; //< 抽出済み行列とMaterial parameterのCPU側転送値
 		const RenderScene* renderScene_ = nullptr; //< Component参照を持たないApplication所有snapshot
 		std::vector<std::vector<std::vector<std::unique_ptr<ConstantBuffer>>>> extraDrawBuffers_; //< 2件目以降のframe安全なobject/mesh/submesh転送領域
-		std::chrono::steady_clock::time_point animationStartTime_; //< FPSに依存しない回転時間の起点
-		std::chrono::steady_clock::time_point lastAnimationUpdateTime_; //< Clipのdelta time計算起点
 	};
 
 } // namespace NexusEngine
