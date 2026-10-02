@@ -57,6 +57,11 @@ namespace NexusEngine {
 		          uint32_t firstVertex = 0, uint32_t firstInstance = 0) noexcept;
 		/** \brief Frame-local Resource slice選択に使用する現在のFrameContext index */
 		[[nodiscard]] uint32_t GetFrameIndex() const noexcept { return frameIndex_; }
+		/**
+		 * \brief Native backendと直接接続するRender Extension用のCommand List参照
+		 * \note 通常のRendererはこの逃げ道を使用せず、GraphicsContextの意味ベースAPIを使用すること
+		 */
+		[[nodiscard]] void* GetNativeCommandList() const noexcept { return nativeCommandList_; }
 
 	private:
 		friend class GraphicsSystem;

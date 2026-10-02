@@ -261,7 +261,7 @@ namespace NexusEngine {
 		}
 		if(impl_->renderExtension != nullptr) {
 			impl_->renderExtension->BeginFrame();
-			impl_->renderExtension->Record(frame.commandList.Get());
+			impl_->renderExtension->Record(graphicsContext);
 		}
 
 		// Present可能な状態へ戻してからCommand Listを閉じ、Queueへ投入する。
@@ -337,12 +337,12 @@ namespace NexusEngine {
 			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Render extension cannot be attached."));
 		}
 		GraphicsRenderExtensionContext context;
-		context.device = impl_->device.GetDevice();
-		context.commandQueue = impl_->commandQueue.GetNativeQueue();
+		context.nativeDevice = impl_->device.GetDevice();
+		context.nativeCommandQueue = impl_->commandQueue.GetNativeQueue();
 		context.resourceDescriptors = &impl_->descriptors.Resources();
 		context.nativeWindow = impl_->nativeWindow;
 		context.framesInFlight = SwapChain::kBufferCount;
-		context.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+		context.renderTargetFormat = TextureFormat::Rgba8Unorm;
 		auto result = extension->Initialize(context);
 		if(!result) return result;
 		impl_->renderExtension = extension;

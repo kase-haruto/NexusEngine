@@ -10,6 +10,8 @@
 
 #include "Foundation/Logging/Logger.h"
 #include "Graphics/Descriptor/DescriptorAllocator.h"
+#include "Graphics/Renderer/GraphicsContext.h"
+#include "Graphics/Resource/TextureFormatDx12.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
@@ -164,7 +166,7 @@ namespace NexusEngine {
 	}
 
 	Result<void> ImGuiRenderer::Initialize(const GraphicsRenderExtensionContext& context) {
-		if(initialized_ || context.device == nullptr || context.commandQueue == nullptr ||
+		if(initialized_ || context.nativeDevice == nullptr || context.nativeCommandQueue == nullptr ||
 		   context.resourceDescriptors == nullptr || context.nativeWindow == nullptr) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidContext, "ImGui renderer context is invalid."));
 		}
@@ -199,15 +201,38 @@ namespace NexusEngine {
 		}
 
 		ImGui_ImplDX12_InitInfo info;
-		info.Device = context.device;
-		info.CommandQueue = context.commandQueue;
+		info.Device = static_cast<ID3D12Device*>(context.nativeDevice);
+		info.CommandQueue = static_cast<ID3D12CommandQueue*>(context.nativeCommandQueue);
 		info.NumFramesInFlight = static_cast<int>(context.framesInFlight);
-		info.RTVFormat = context.renderTargetFormat;
+		info.RTVFormat = ToNativeTextureFormat(context.renderTargetFormat);
 		info.DSVFormat = DXGI_FORMAT_UNKNOWN;
 		info.UserData = this;
 		info.SrvDescriptorHeap = descriptors_->GetHeap();
-		info.SrvDescriptorAllocFn = &ImGuiRenderer::AllocateDescriptor;
-		info.SrvDescriptorFreeFn = &ImGuiRenderer::FreeDescriptor;
+		info.SrvDescriptorAllocFn = [](
+			ImGui_ImplDX12_InitInfo* const backendInfo,
+			D3D12_CPU_DESCRIPTOR_HANDLE* const cpu,
+			D3D12_GPU_DESCRIPTOR_HANDLE* const gpu) {
+			auto* self = static_cast<ImGuiRenderer*>(backendInfo->UserData);
+			auto result = self->descriptors_->Allocate();
+			if(!result) {
+				*cpu = {};
+				*gpu = {};
+				NEXUS_LOG_ERROR("ImGui", "Shared CBV/SRV/UAV descriptor heap is exhausted.");
+				return;
+			}
+			self->allocations_.push_back(*result);
+			*cpu = result->cpuHandle;
+			*gpu = result->gpuHandle;
+		};
+		info.SrvDescriptorFreeFn = [](
+			ImGui_ImplDX12_InitInfo* const backendInfo,
+			const D3D12_CPU_DESCRIPTOR_HANDLE cpu,
+			const D3D12_GPU_DESCRIPTOR_HANDLE gpu) {
+			// GPU参照中の可能性があるためslotは保持し、GPU idle後のShutdownで解放する。
+			static_cast<void>(backendInfo);
+			static_cast<void>(cpu);
+			static_cast<void>(gpu);
+		};
 		if(!ImGui_ImplDX12_Init(&info)) {
 			ImGui_ImplWin32_Shutdown();
 			Shutdown();
@@ -224,7 +249,8 @@ namespace NexusEngine {
 		ImGui::NewFrame();
 	}
 
-	void ImGuiRenderer::Record(ID3D12GraphicsCommandList* const commandList) {
+	void ImGuiRenderer::Record(GraphicsContext& context) {
+		auto* const commandList = static_cast<ID3D12GraphicsCommandList*>(context.GetNativeCommandList());
 		if(!initialized_ || commandList == nullptr) return;
 		ImGui::Render();
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
@@ -250,6 +276,7 @@ namespace NexusEngine {
 		return ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(window), message, static_cast<WPARAM>(wParam), static_cast<LPARAM>(lParam)) != 0;
 	}
 
+#if 0
 	void ImGuiRenderer::AllocateDescriptor(ImGui_ImplDX12_InitInfo* const info, D3D12_CPU_DESCRIPTOR_HANDLE* const cpu, D3D12_GPU_DESCRIPTOR_HANDLE* const gpu) {
 		auto* self = static_cast<ImGuiRenderer*>(info->UserData);
 		auto result = self->descriptors_->Allocate();
@@ -272,4 +299,5 @@ namespace NexusEngine {
 		static_cast<void>(gpu);
 		static_cast<void>(self);
 	}
+#endif
 } // namespace NexusEngine

@@ -22,9 +22,9 @@ namespace NexusEngine {
 		if(showDemoWindow_) ImGui::ShowDemoWindow(&showDemoWindow_);
 	}
 
-	void EditorApplication::Record(ID3D12GraphicsCommandList* const commandList) {
+	void EditorApplication::Record(GraphicsContext& context) {
 		guiContext_.EndFrame();
-		imguiRenderer_.Record(commandList);
+		imguiRenderer_.Record(context);
 	}
 
 	void EditorApplication::Shutdown() noexcept {

@@ -5,8 +5,6 @@
 #include "Graphics/Descriptor/DescriptorHandle.h"
 #include "Graphics/Renderer/GraphicsRenderExtension.h"
 
-struct ImGui_ImplDX12_InitInfo;
-
 namespace NexusEngine {
 	class DescriptorAllocator;
 
@@ -29,7 +27,7 @@ namespace NexusEngine {
 		/**
 		 * \brief ImGui描画コマンドをCommandListへ記録する
 		 */
-		void Record(ID3D12GraphicsCommandList* commandList) override;
+		void Record(GraphicsContext& context) override;
 		/**
 		 * \brief ImGui backendを終了する
 		 */
@@ -43,16 +41,6 @@ namespace NexusEngine {
 		 * \return ImGuiがMessageを処理した場合true
 		 */
 		[[nodiscard]] bool HandleWindowMessage(void* window, uint32_t message, uintptr_t wParam, intptr_t lParam) noexcept;
-
-	private:
-		/**
-		 * \brief ImGui backendから呼ばれるDescriptor確保コールバック
-		 */
-		static void AllocateDescriptor(::ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* cpu, D3D12_GPU_DESCRIPTOR_HANDLE* gpu);
-		/**
-		 * \brief ImGui backendから呼ばれるDescriptor解放コールバック
-		 */
-		static void FreeDescriptor(::ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu);
 
 	private:
 		DescriptorAllocator*		  descriptors_ = nullptr; //< GraphicsSystem所有の共有Resource allocator
