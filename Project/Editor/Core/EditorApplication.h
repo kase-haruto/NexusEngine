@@ -48,8 +48,8 @@ namespace NexusEngine {
 		void DrawDockSpace();
 		void DrawMainMenuBar();
 
-		ImGuiRenderer imguiRenderer_; //< imgui描画
-		UI::Context	  guiContext_;	  //< gui
-		bool		  showDemoWindow_ = false;
+		ImGuiRenderer imguiRenderer_;		   //< imgui描画
+		UI::Context	  guiContext_;			   //< gui
+		bool		  showDemoWindow_ = false; //< ImGui Demo Windowの表示フラグ
 	};
 } // namespace NexusEngine

@@ -10,6 +10,8 @@
 namespace NexusEngine {
 	class GraphicsPipeline;
 	class VertexBuffer;
+	class IndexBuffer;
+	class MeshResource;
 	class ConstantBuffer;
 	class BindlessDescriptorTable;
 	class TransientDescriptorArena;
@@ -50,13 +52,35 @@ namespace NexusEngine {
 			const ConstantBuffer& constantBuffer);
 		/** \brief Input Assemblerのslot 0へVertex Bufferを設定する */
 		void SetVertexBuffer(const VertexBuffer& vertexBuffer) noexcept;
+		/** \brief Input AssemblerへIndex Bufferを設定する */
+		void SetIndexBuffer(const IndexBuffer& indexBuffer) noexcept;
+		/** \brief Meshが所有するVertex/Index BufferをInput Assemblerへ同時に設定する */
+		void SetMesh(const MeshResource& mesh) noexcept;
 		/** \brief 後続DrawのPrimitive topologyを設定する */
 		void SetPrimitiveTopology(PrimitiveTopology topology) noexcept;
 		/** \brief 非Index描画命令を現在のFrameへ記録する */
 		void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
 		          uint32_t firstVertex = 0, uint32_t firstInstance = 0) noexcept;
+		/**
+		 * \brief Index Bufferを使用したinstance描画命令を記録する
+		 * \param indexCount 参照するIndex数
+		 * \param instanceCount 描画するinstance数
+		 * \param firstIndex Index Buffer内の開始Index
+		 * \param vertexOffset Index値へ加算するVertex offset
+		 * \param firstInstance 開始instance番号
+		 */
+		void DrawIndexed(
+			uint32_t indexCount,
+			uint32_t instanceCount = 1,
+			uint32_t firstIndex = 0,
+			int32_t vertexOffset = 0,
+			uint32_t firstInstance = 0) noexcept;
 		/** \brief Frame-local Resource slice選択に使用する現在のFrameContext index */
 		[[nodiscard]] uint32_t GetFrameIndex() const noexcept { return frameIndex_; }
+		/** \brief 現在の描画先のpixel幅 */
+		[[nodiscard]] uint32_t GetRenderWidth() const noexcept { return renderWidth_; }
+		/** \brief 現在の描画先のpixel高さ */
+		[[nodiscard]] uint32_t GetRenderHeight() const noexcept { return renderHeight_; }
 		/**
 		 * \brief Native backendと直接接続するRender Extension用のCommand List参照
 		 * \note 通常のRendererはこの逃げ道を使用せず、GraphicsContextの意味ベースAPIを使用すること
@@ -69,11 +93,15 @@ namespace NexusEngine {
 			void* nativeCommandList,
 			BindlessDescriptorTable* bindlessDescriptors,
 			TransientDescriptorArena* transientDescriptors,
-			uint32_t frameIndex) noexcept;
+			uint32_t frameIndex,
+			uint32_t renderWidth,
+			uint32_t renderHeight) noexcept;
 
 		void* nativeCommandList_ = nullptr; //< GraphicsSystem所有Command ListのFrame中だけ有効な非所有参照
 		BindlessDescriptorTable* bindlessDescriptors_ = nullptr; //< Descriptor世代検証とGPU Handle解決先
 		TransientDescriptorArena* transientDescriptors_ = nullptr; //< Fence後に再利用する一時Descriptor生成先
 		uint32_t frameIndex_ = 0; //< 現在再利用可能になったFrameContext index
+		uint32_t renderWidth_ = 0; //< Viewportと同じ描画幅
+		uint32_t renderHeight_ = 0; //< Viewportと同じ描画高さ
 	};
 } // namespace NexusEngine

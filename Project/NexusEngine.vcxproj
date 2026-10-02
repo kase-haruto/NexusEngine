@@ -84,7 +84,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+		<AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -109,7 +109,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+		<AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -136,7 +136,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+		<AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -167,10 +167,19 @@
 	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp" />
 	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp" />
 	<ClCompile Include="Graphics\Resource\VertexBufferUploader.cpp" />
+	<ClCompile Include="Graphics\Resource\IndexBuffer.cpp" />
+	<ClCompile Include="Graphics\Resource\IndexBufferUploader.cpp" />
+	<ClCompile Include="Graphics\Resource\MeshResource.cpp" />
+	<ClCompile Include="Graphics\Model\ModelResource.cpp" />
+	<ClCompile Include="Graphics\Model\ModelLoader.cpp" />
+	<ClCompile Include="Graphics\Model\ModelInstance.cpp" />
+	<ClCompile Include="Graphics\Model\GltfModelLoader.cpp" />
 	<ClCompile Include="Graphics\Resource\ImmediateUploadContext.cpp" />
 	<ClCompile Include="Graphics\Resource\ConstantBuffer.cpp" />
 	<ClCompile Include="Graphics\Resource\TextureResource.cpp" />
 	<ClCompile Include="Graphics\Resource\TextureUploader.cpp" />
+	<ClCompile Include="Graphics\Resource\WicImageDecoder.cpp" />
+	<ClCompile Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
 	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
 	<ClCompile Include="Graphics\Renderer\GraphicsContext.cpp" />
 	<ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp" />
@@ -224,16 +233,30 @@
 	<ClInclude Include="Graphics\Presentation\SwapChain.h" />
 	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h" />
 	<ClInclude Include="Graphics\Material\MaterialDrawData.h" />
+	<ClInclude Include="Graphics\Material\PrimitiveDrawData.h" />
+	<ClInclude Include="Graphics\Model\ModelAssetData.h" />
+	<ClInclude Include="Graphics\Model\ModelResource.h" />
+	<ClInclude Include="Graphics\Model\ModelLoader.h" />
+	<ClInclude Include="Graphics\Model\ModelAnimation.h" />
+	<ClInclude Include="Graphics\Model\ModelInstance.h" />
+	<ClInclude Include="ThirdParty\cgltf\cgltf.h" />
 	<ClInclude Include="Graphics\Pipeline\PipelineLayout.h" />
 	<ClInclude Include="Graphics\Pipeline\RootSignature.h" />
 	<ClInclude Include="Graphics\Resource\VertexBuffer.h" />
 	<ClInclude Include="Graphics\Resource\VertexBufferUploader.h" />
+	<ClInclude Include="Graphics\Resource\IndexBuffer.h" />
+	<ClInclude Include="Graphics\Resource\IndexBufferUploader.h" />
+	<ClInclude Include="Graphics\Resource\MeshResource.h" />
 	<ClInclude Include="Graphics\Resource\ImmediateUploadContext.h" />
 	<ClInclude Include="Graphics\Resource\ConstantBuffer.h" />
 	<ClInclude Include="Graphics\Resource\TextureResource.h" />
 	<ClInclude Include="Graphics\Resource\TextureUploader.h" />
+	<ClInclude Include="Graphics\Resource\WicImageDecoder.h" />
 	<ClInclude Include="Graphics\Resource\TextureFormatDx12.h" />
 	<ClInclude Include="Graphics\Resource\SamplerDesc.h" />
+	<ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.h" />
+	<ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilTypes.h" />
+	<ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilFormatDx12.h" />
 	<ClInclude Include="Graphics\Renderer\GraphicsSystem.h" />
 	<ClInclude Include="Graphics\Renderer\GraphicsContext.h" />
 	<ClInclude Include="Graphics\Renderer\GraphicsRenderer.h" />
@@ -271,6 +294,7 @@
 	<None Include="Docs\SceneREADME.md" />
 	<None Include="Shaders\Primitive\Primitive.VS.hlsl" />
 	<None Include="Shaders\Primitive\Primitive.PS.hlsl" />
+	<None Include="Shaders\Primitive\PrimitiveDrawData.hlsli" />
 	<None Include="Shaders\Common\Bindless.hlsli" />
     <None Include="Agent\AGENT.md">
       <SubType>

@@ -12,6 +12,7 @@
 #include "Graphics/Descriptor/DescriptorAllocator.h"
 #include "Graphics/Renderer/GraphicsContext.h"
 #include "Graphics/Resource/TextureFormatDx12.h"
+#include "Graphics/Resource/Depthstencil/DepthstencilFormatDx12.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
@@ -205,7 +206,8 @@ namespace NexusEngine {
 		info.CommandQueue = static_cast<ID3D12CommandQueue*>(context.nativeCommandQueue);
 		info.NumFramesInFlight = static_cast<int>(context.framesInFlight);
 		info.RTVFormat = ToNativeTextureFormat(context.renderTargetFormat);
-		info.DSVFormat = DXGI_FORMAT_UNKNOWN;
+		// Output MergerにDepth Targetが接続されたままなので、Depth Test無効でもPSOのFormatを合わせる。
+		info.DSVFormat = ToNativeDepthStencilFormat(context.depthStencilFormat);
 		info.UserData = this;
 		info.SrvDescriptorHeap = descriptors_->GetHeap();
 		info.SrvDescriptorAllocFn = [](

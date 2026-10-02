@@ -15,6 +15,7 @@
 #include "Graphics/Descriptor/TransientDescriptorArena.h"
 #include "Graphics/Device/GraphicsDevice.h"
 #include "Graphics/Presentation/SwapChain.h"
+#include "Graphics/Resource/Depthstencil/DepthstencilBuffer.h"
 #include "GraphicsContext.h"
 #include "GraphicsRenderer.h"
 #include "GraphicsResourceFactory.h"
@@ -43,12 +44,14 @@ namespace NexusEngine {
 		CommandQueue commandQueue;
 		DescriptorManager descriptors;
 		SwapChain swapChain;
+		DepthStencilBuffer depthStencilBuffer;
 		BindlessDescriptorTable bindlessDescriptors;
 		TransientDescriptorArena transientDescriptors;
 		GraphicsResourceFactory resourceFactory;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
 		std::filesystem::path shaderDirectory;
+		std::filesystem::path assetDirectory;
 		bool enableVSync = true;
 		void* nativeWindow = nullptr;
 		IGraphicsRenderer* renderer = nullptr;
@@ -103,6 +106,16 @@ namespace NexusEngine {
 
 		// BackBufferごとにAllocatorとCommand Listを分離し、別フレームのGPU実行中でも
 		// CPUが次の利用可能なFrameContextへ命令を記録できる構造にする。
+		// Main Depth BufferはSwapChainと同じ描画サイズで作成し、全BackBufferから共有する。
+		// Direct QueueでClear/Drawが順序実行されるため、BackBuffer別のDepth Resourceは必要ない。
+		result = implementation->depthStencilBuffer.Initialize(
+			implementation->device.GetDevice(),
+			&implementation->descriptors.DepthStencils(),
+			DepthStencilBufferDesc { surface.width, surface.height, DepthStencilFormat::D32Float });
+		if(!result) {
+			return std::unexpected(std::move(result.error()));
+		}
+
 		for(auto& frame : implementation->frames) {
 			HRESULT nativeResult = implementation->device.GetDevice()->CreateCommandAllocator(
 				D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&frame.allocator));
@@ -143,6 +156,7 @@ namespace NexusEngine {
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
 		implementation->shaderDirectory = desc.shaderDirectory;
+		implementation->assetDirectory = desc.assetDirectory;
 		implementation->enableVSync = desc.enableVSync;
 		implementation->nativeWindow = surface.nativeHandle;
 		impl_ = std::move(implementation);
@@ -182,6 +196,8 @@ namespace NexusEngine {
 		impl_->transientDescriptors.Shutdown();
 		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
+		// DSV allocatorの所有者であるDescriptorManagerより先にDepth Bufferを破棄する。
+		impl_->depthStencilBuffer.Shutdown();
 		impl_->swapChain.Shutdown();
 		impl_->descriptors.Shutdown();
 		impl_->commandQueue.Shutdown();
@@ -236,8 +252,12 @@ namespace NexusEngine {
 
 		// 現在Bufferに対応するRTVだけをOutput Mergerへ設定し、設定色で全面Clearする。
 		const D3D12_CPU_DESCRIPTOR_HANDLE rtv = impl_->swapChain.GetCurrentRtv();
-		frame.commandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+		// ColorとDepthを同一PassのOutput Mergerへ設定し、3D描画前に両方を初期化する。
+		const D3D12_CPU_DESCRIPTOR_HANDLE dsv { impl_->depthStencilBuffer.GetNativeDsvHandle() };
+		frame.commandList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
 		frame.commandList->ClearRenderTargetView(rtv, impl_->clearColor.data(), 0, nullptr);
+		frame.commandList->ClearDepthStencilView(
+			dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		// SM 6.6 ShaderがDirect Heap Indexingで参照するResource/Sampler Heapを設定する。
 		impl_->bindlessDescriptors.Bind(frame.commandList.Get());
@@ -255,7 +275,8 @@ namespace NexusEngine {
 		// Frame中だけ有効なContextへCommand Listを隠し、上位RendererにはBackend非依存命令だけを公開する。
 		GraphicsContext graphicsContext(
 			frame.commandList.Get(), &impl_->bindlessDescriptors,
-			&impl_->transientDescriptors, frameIndex);
+			&impl_->transientDescriptors, frameIndex,
+			impl_->swapChain.GetWidth(), impl_->swapChain.GetHeight());
 		if(impl_->renderer != nullptr) {
 			impl_->renderer->Render(graphicsContext);
 		}
@@ -304,7 +325,10 @@ namespace NexusEngine {
 			frame.fenceValue = 0;
 		}
 		// DeviceはRTV再生成にだけ非所有参照として渡し、SwapChainがDeviceを所有しない構造を保つ。
-		return impl_->swapChain.Resize(impl_->device.GetDevice(), width, height);
+		// GPU idle保証後にColorとDepthを同じサイズへ再生成する。
+		auto resizeResult = impl_->swapChain.Resize(impl_->device.GetDevice(), width, height);
+		if(!resizeResult) return resizeResult;
+		return impl_->depthStencilBuffer.Resize(impl_->device.GetDevice(), width, height);
 	}
 
 	void GraphicsSystem::SetClearColor(const std::array<float, 4>& color) noexcept {
@@ -322,7 +346,8 @@ namespace NexusEngine {
 		// 初期化に成功するまで非所有pointerを公開せず、失敗時に半接続状態を残さない。
 		const GraphicsRendererInitializationContext context {
 			.resources = impl_->resourceFactory,
-			.shaderDirectory = impl_->shaderDirectory
+			.shaderDirectory = impl_->shaderDirectory,
+			.assetDirectory = impl_->assetDirectory
 		};
 		auto result = renderer->Initialize(context);
 		if(!result) {
@@ -343,6 +368,7 @@ namespace NexusEngine {
 		context.nativeWindow = impl_->nativeWindow;
 		context.framesInFlight = SwapChain::kBufferCount;
 		context.renderTargetFormat = TextureFormat::Rgba8Unorm;
+		context.depthStencilFormat = impl_->depthStencilBuffer.GetFormat();
 		auto result = extension->Initialize(context);
 		if(!result) return result;
 		impl_->renderExtension = extension;

@@ -1,16 +1,21 @@
 #pragma once
 
 // c++
+#include <chrono>
 #include <filesystem>
+#include <memory>
+#include <vector>
 
 // engine
 #include "Foundation/Error/Result.h"
 #include "Graphics/Pipeline/GraphicsPipeline.h"
-#include "Graphics/Resource/VertexBuffer.h"
+#include "Graphics/Resource/MeshResource.h"
+#include "Graphics/Model/ModelResource.h"
+#include "Graphics/Model/ModelInstance.h"
 #include "Graphics/Resource/ConstantBuffer.h"
 #include "Graphics/Resource/TextureResource.h"
 #include "Graphics/Descriptor/ShaderResourceRef.h"
-#include "Graphics/Material/MaterialDrawData.h"
+#include "Graphics/Material/PrimitiveDrawData.h"
 #include "GraphicsRenderer.h"
 
 namespace NexusEngine {
@@ -24,8 +29,7 @@ namespace NexusEngine {
 	public:
 		/**
 		 * \brief Primitive用Shader、Pipeline、Geometry Bufferを初期化する
-		 * \param device GPU Resource生成に使用する非所有Device
-		 * \param shaderDirectory Shaderルートディレクトリ
+		 * \param context GPU Resource FactoryとShader/Assetルートを持つ初期化Context
 		 * \return Shader CompileからVertexBuffer生成までの初期化結果
 		 */
 		[[nodiscard]] Result<void> Initialize(const GraphicsRendererInitializationContext& context) override;
@@ -34,20 +38,27 @@ namespace NexusEngine {
 		void Shutdown() noexcept override;
 
 		/**
-		 * \brief PipelineとVertexBufferをBindしてPrimitiveのDraw命令を記録する
-		 * \param commandList 描画命令を記録する非所有CommandList
+		 * \brief PipelineとVertexBufferをBindし、組み込みCubeのDraw命令を記録する
+		 * \param context 現在Frameに描画命令を記録するBackend非依存Context
 		 */
 		void Render(GraphicsContext& context) override;
 
 	private:
+		struct MaterialGpuResource {
+			std::unique_ptr<TextureResource> texture;
+			ShaderResourceRef textureRef;
+			ShaderResourceRef samplerRef;
+		};
+
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
-		VertexBuffer vertexBuffer_; //< Primitive形状と頂点色を保持するGPU Buffer
-		TextureResource texture_; //< Material検証用の1x1 white Texture
-		ConstantBuffer materialBuffer_; //< FrameごとのMaterialDrawData転送先
-		ShaderResourceRef textureRef_; //< MaterialDrawDataへindexを渡すTexture SRV
-		ShaderResourceRef samplerRef_; //< MaterialDrawDataへindexを渡すSampler
-		MaterialDrawData materialDrawData_; //< CPU側Material parameter
+		ModelResource cubeModel_; //< OBJ Loaderとmulti-mesh経路の検証用Cube asset
+		ModelInstance cubeInstance_; //< Node animationのinstance固有再生状態
+		std::vector<MaterialGpuResource> materialResources_; //< Material slot別Texture/Sampler所有
+		std::vector<std::vector<std::unique_ptr<ConstantBuffer>>> meshDrawBuffers_; //< SubmeshごとのFrame安全なDraw Data
+		PrimitiveDrawData drawData_; //< 回転行列とMaterial parameterのCPU側転送値
+		std::chrono::steady_clock::time_point animationStartTime_; //< FPSに依存しない回転時間の起点
+		std::chrono::steady_clock::time_point lastAnimationUpdateTime_; //< Clipのdelta time計算起点
 	};
 
 } // namespace NexusEngine

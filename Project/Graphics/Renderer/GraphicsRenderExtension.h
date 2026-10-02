@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "Foundation/Error/Result.h"
 #include "Graphics/Resource/TextureResource.h"
+#include "Graphics/Resource/Depthstencil/DepthstencilTypes.h"
 
 namespace NexusEngine {
 	class DescriptorAllocator;
@@ -15,6 +16,7 @@ namespace NexusEngine {
 		void* nativeWindow = nullptr; //< Platform Windowの非所有Handle
 		uint32_t framesInFlight = 0; //< FrameContext数
 		TextureFormat renderTargetFormat = TextureFormat::Rgba8Unorm; //< Main BackBuffer形式
+		DepthStencilFormat depthStencilFormat = DepthStencilFormat::None; //< Main Depth Target形式
 	};
 
 	/*-----------------------------------------------------------------------------------------

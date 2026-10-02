@@ -50,6 +50,17 @@ namespace NexusEngine {
 		return result;
 	}
 
+	/** \brief 行列を転置し、法線行列などrow/columnの入れ替えが必要な用途へ使用する */
+	[[nodiscard]] constexpr Matrix4x4 Transpose(const Matrix4x4& matrix) noexcept {
+		Matrix4x4 result;
+		for(std::size_t row = 0; row < 4; ++row) {
+			for(std::size_t column = 0; column < 4; ++column) {
+				result.At(row, column) = matrix.At(column, row);
+			}
+		}
+		return result;
+	}
+
 	[[nodiscard]] constexpr Matrix4x4 MakeScaleMatrix(const Vector3& scale) noexcept {
 		Matrix4x4 result;
 		result.At(0, 0) = scale.x;

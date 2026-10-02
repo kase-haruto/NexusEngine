@@ -1,5 +1,7 @@
 #include "GraphicsPipeline.h"
 
+#include "Graphics/Resource/Depthstencil/DepthstencilFormatDx12.h"
+
 #include <utility>
 
 namespace NexusEngine {
@@ -7,15 +9,41 @@ namespace NexusEngine {
 		constexpr int32_t kPipelineCreationFailed = 1;
 		constexpr int32_t kInputMismatch = 2;
 		constexpr int32_t kInvalidState = 3;
+		constexpr int32_t kInvalidDepthState = 4;
+
+		[[nodiscard]] constexpr D3D12_COMPARISON_FUNC ToNativeCompareOperation(const CompareOperation operation) noexcept {
+			switch(operation) {
+			case CompareOperation::Never: return D3D12_COMPARISON_FUNC_NEVER;
+			case CompareOperation::Equal: return D3D12_COMPARISON_FUNC_EQUAL;
+			case CompareOperation::LessEqual: return D3D12_COMPARISON_FUNC_LESS_EQUAL;
+			case CompareOperation::Greater: return D3D12_COMPARISON_FUNC_GREATER;
+			case CompareOperation::NotEqual: return D3D12_COMPARISON_FUNC_NOT_EQUAL;
+			case CompareOperation::GreaterEqual: return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+			case CompareOperation::Always: return D3D12_COMPARISON_FUNC_ALWAYS;
+			case CompareOperation::Less:
+			default: return D3D12_COMPARISON_FUNC_LESS;
+			}
+		}
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Shader Metadataと明示Vertex LayoutからGraphics Pipelineを生成する
 	/////////////////////////////////////////////////////////////////////////////////////////
-	Result<void> GraphicsPipeline::Initialize(ID3D12Device* const device, Shader vertexShader, Shader pixelShader, const std::vector<VertexAttribute>& vertexLayout) {
+	Result<void> GraphicsPipeline::Initialize(
+		ID3D12Device* const device,
+		Shader vertexShader,
+		Shader pixelShader,
+		const GraphicsPipelineDesc& pipelineDesc) {
 		if(device == nullptr || pipelineState_) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidState, "Graphics pipeline arguments or state are invalid."));
 		}
+		// Depth TargetのFormatがないPSOでTest/Writeを有効にすると、Output MergerとPSOの契約が成立しない。
+		if((pipelineDesc.depthStencil.depthTestEnabled || pipelineDesc.depthStencil.depthWriteEnabled) &&
+		   pipelineDesc.depthStencilFormat == DepthStencilFormat::None) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidDepthState,
+				"A depth format is required when depth testing or writing is enabled."));
+		}
+		const auto& vertexLayout = pipelineDesc.vertexLayout;
 
 		// 全要素の生成成功後だけメンバへコミットし、再試行可能な失敗状態を保つ。
 		PipelineLayout layout;
@@ -59,8 +87,13 @@ namespace NexusEngine {
 		for(auto& target : desc.BlendState.RenderTarget) target = defaultBlend;
 		desc.SampleMask = UINT_MAX;
 		desc.RasterizerState = { D3D12_FILL_MODE_SOLID, D3D12_CULL_MODE_BACK, FALSE, D3D12_DEFAULT_DEPTH_BIAS, D3D12_DEFAULT_DEPTH_BIAS_CLAMP, D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS, TRUE, FALSE, FALSE, 0, D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF };
-		desc.DepthStencilState.DepthEnable = FALSE;
+		desc.DepthStencilState.DepthEnable = pipelineDesc.depthStencil.depthTestEnabled;
+		desc.DepthStencilState.DepthWriteMask = pipelineDesc.depthStencil.depthWriteEnabled
+			? D3D12_DEPTH_WRITE_MASK_ALL
+			: D3D12_DEPTH_WRITE_MASK_ZERO;
+		desc.DepthStencilState.DepthFunc = ToNativeCompareOperation(pipelineDesc.depthStencil.compareOperation);
 		desc.DepthStencilState.StencilEnable = FALSE;
+		desc.DSVFormat = ToNativeDepthStencilFormat(pipelineDesc.depthStencilFormat);
 		desc.InputLayout = { elements.data(), static_cast<UINT>(elements.size()) };
 		desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		desc.NumRenderTargets = 1;

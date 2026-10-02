@@ -12,6 +12,8 @@
 #include "Graphics/Descriptor/TransientDescriptorArena.h"
 #include "Graphics/Pipeline/GraphicsPipeline.h"
 #include "Graphics/Resource/ConstantBuffer.h"
+#include "Graphics/Resource/IndexBuffer.h"
+#include "Graphics/Resource/MeshResource.h"
 #include "Graphics/Resource/VertexBuffer.h"
 
 namespace NexusEngine {
@@ -19,11 +21,15 @@ namespace NexusEngine {
 		void* const					   nativeCommandList,
 		BindlessDescriptorTable* const bindlessDescriptors,
 		TransientDescriptorArena* const transientDescriptors,
-		const uint32_t				   frameIndex) noexcept
+		const uint32_t				   frameIndex,
+		const uint32_t				   renderWidth,
+		const uint32_t				   renderHeight) noexcept
 		: nativeCommandList_(nativeCommandList),
 		  bindlessDescriptors_(bindlessDescriptors),
 		  transientDescriptors_(transientDescriptors),
-		  frameIndex_(frameIndex) {}
+		  frameIndex_(frameIndex),
+		  renderWidth_(renderWidth),
+		  renderHeight_(renderHeight) {}
 
 	void GraphicsContext::SetGraphicsPipeline(const GraphicsPipeline& pipeline) noexcept {
 		// Backend型への変換はこの翻訳単位だけで行い、上位RendererへCommand Listを公開しない。
@@ -76,6 +82,15 @@ namespace NexusEngine {
 		vertexBuffer.Bind(nativeCommandList_);
 	}
 
+	void GraphicsContext::SetIndexBuffer(const IndexBuffer& indexBuffer) noexcept {
+		indexBuffer.Bind(nativeCommandList_);
+	}
+
+	void GraphicsContext::SetMesh(const MeshResource& mesh) noexcept {
+		mesh.vertexBuffer_.Bind(nativeCommandList_);
+		mesh.indexBuffer_.Bind(nativeCommandList_);
+	}
+
 	void GraphicsContext::SetPrimitiveTopology(const PrimitiveTopology topology) noexcept {
 		auto* const commandList = static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_);
 		switch(topology) {
@@ -91,5 +106,15 @@ namespace NexusEngine {
 		const uint32_t firstVertex,
 		const uint32_t firstInstance) noexcept {
 		static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_)->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+	}
+
+	void GraphicsContext::DrawIndexed(
+		const uint32_t indexCount,
+		const uint32_t instanceCount,
+		const uint32_t firstIndex,
+		const int32_t vertexOffset,
+		const uint32_t firstInstance) noexcept {
+		static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_)->DrawIndexedInstanced(
+			indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 	}
 } // namespace NexusEngine

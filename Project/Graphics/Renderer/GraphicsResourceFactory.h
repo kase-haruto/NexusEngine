@@ -15,11 +15,17 @@ namespace NexusEngine {
 	class BindlessDescriptorTable;
 	class CommandQueue;
 	class ConstantBuffer;
+	class IndexBuffer;
+	class MeshResource;
+	class ModelResource;
 	class Shader;
 	class TextureResource;
 	class VertexBuffer;
 	struct SamplerDesc;
 	struct TextureDesc;
+	enum class IndexFormat : uint8_t;
+	struct SubmeshRange;
+	struct ModelAssetData;
 
 	/*-----------------------------------------------------------------------------------------
 	 * GraphicsResourceFactory
@@ -33,18 +39,55 @@ namespace NexusEngine {
 		GraphicsResourceFactory(const GraphicsResourceFactory&) = delete;
 		GraphicsResourceFactory& operator=(const GraphicsResourceFactory&) = delete;
 
-		/** \brief ShaderとVertex Layoutから描画Pipelineを初期化する */
+		/**
+		 * \brief ShaderとBackend非依存のPipeline記述から描画Pipelineを初期化する
+		 * \param pipeline 作成したPSOとRoot Signatureの所有先
+		 * \param vertexShader 所有権をPipelineへ移すVertex Shader
+		 * \param pixelShader 所有権をPipelineへ移すPixel Shader
+		 * \param pipelineDesc Vertex LayoutとDepth Stateを含むPipeline記述
+		 */
 		[[nodiscard]] Result<void> CreateGraphicsPipeline(
 			GraphicsPipeline& pipeline,
 			Shader vertexShader,
 			Shader pixelShader,
-			const std::vector<VertexAttribute>& vertexLayout) const;
+			const GraphicsPipelineDesc& pipelineDesc) const;
 
 		/** \brief CPU byte列から第一段階のVertex Bufferを初期化する */
 		[[nodiscard]] Result<void> CreateVertexBuffer(
 			VertexBuffer& vertexBuffer,
 			std::span<const uint8_t> data,
 			uint32_t stride) const;
+
+		/**
+		 * \brief CPU Index byte列からDefault Heap Index Bufferを生成する
+		 * \param indexBuffer upload完了後のResource所有先
+		 * \param data UInt16またはUInt32 Indexのbyte列
+		 * \param format dataのIndex形式
+		 */
+		[[nodiscard]] Result<void> CreateIndexBuffer(
+			IndexBuffer& indexBuffer,
+			std::span<const uint8_t> data,
+			IndexFormat format) const;
+
+		/**
+		 * \brief Vertex/Index dataとSubmesh範囲からGPU Mesh Resourceを作成する
+		 * \note 途中失敗時は生成済みBufferをrollbackし、meshを未初期化に保つ
+		 */
+		[[nodiscard]] Result<void> CreateMeshResource(
+			MeshResource& mesh,
+			std::span<const uint8_t> vertexData,
+			uint32_t vertexStride,
+			std::span<const uint8_t> indexData,
+			IndexFormat indexFormat,
+			const std::vector<SubmeshRange>& submeshes) const;
+
+		/**
+		 * \brief CPU Model Assetから複数GPU MeshとNode hierarchyを所有するResourceを生成する
+		 * \note 1 Meshでも失敗した場合はModel全体をrollbackする
+		 */
+		[[nodiscard]] Result<void> CreateModelResource(
+			ModelResource& model,
+			const ModelAssetData& assetData) const;
 
 		/**
 		 * \brief 全FrameContextに独立sliceを持つConstant Bufferを初期化する
@@ -66,6 +109,10 @@ namespace NexusEngine {
 			TextureResource& texture,
 			const TextureDesc& desc,
 			std::span<const uint8_t> pixels) const;
+		/** \brief PNG/JPEG等のencoded画像をdecodeし、sRGB Textureとしてuploadする */
+		[[nodiscard]] Result<void> CreateTexture2DFromEncodedData(
+			TextureResource& texture,
+			std::span<const uint8_t> encodedData) const;
 
 		/** \brief 完成済みTextureから永続Bindless SRV参照を生成する */
 		[[nodiscard]] Result<ShaderResourceRef> CreatePersistentTextureShaderResource(

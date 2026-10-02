@@ -8,6 +8,7 @@
 #include <wrl/client.h>
 
 #include "Foundation/Error/Result.h"
+#include "Graphics/Resource/Depthstencil/DepthstencilTypes.h"
 #include "Graphics/Shader/Shader.h"
 #include "PipelineLayout.h"
 #include "RootSignature.h"
@@ -23,6 +24,16 @@ namespace NexusEngine {
 	};
 
 	/*-----------------------------------------------------------------------------------------
+	 * GraphicsPipelineDesc
+	 * - Graphics API型を公開せず、PSO生成に必要な可変設定を保持する
+	 *---------------------------------------------------------------------------------------*/
+	struct GraphicsPipelineDesc {
+		std::vector<VertexAttribute> vertexLayout; //< Vertex Shader inputと一致するCPU Vertex layout
+		DepthStencilFormat depthStencilFormat = DepthStencilFormat::None; //< PSOが接続するDepth Target format
+		DepthStencilStateDesc depthStencil; //< Depth TestとDepth Writeの動作
+	};
+
+	/*-----------------------------------------------------------------------------------------
 	 * GraphicsPipeline
 	 * - Shader、PipelineLayout、RootSignature、PSOを一つの描画Pipelineとして所有する
 	 *---------------------------------------------------------------------------------------*/
@@ -33,10 +44,14 @@ namespace NexusEngine {
 		 * \param device RootSignatureとPSO生成に使う非所有Device
 		 * \param vertexShader 所有権を移動するVertex Shader
 		 * \param pixelShader 所有権を移動するPixel Shader
-		 * \param vertexLayout CPU Vertex構造を表す明示Layout
+		 * \param pipelineDesc Vertex LayoutとDepth Test設定を含むBackend非依存のPipeline記述
 		 * \return Binding統合、RootSignature、PSO生成結果
 		 */
-		[[nodiscard]] Result<void> Initialize(ID3D12Device* device, Shader vertexShader, Shader pixelShader, const std::vector<VertexAttribute>& vertexLayout);
+		[[nodiscard]] Result<void> Initialize(
+			ID3D12Device* device,
+			Shader vertexShader,
+			Shader pixelShader,
+			const GraphicsPipelineDesc& pipelineDesc);
 		/** \brief PSOとRootSignatureをDevice破棄前に解放する */
 		void Shutdown() noexcept;
 		/** \brief RootSignatureとPSOをCommandListへ設定する */
