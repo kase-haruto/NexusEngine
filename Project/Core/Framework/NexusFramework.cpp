@@ -67,7 +67,13 @@ namespace NexusEngine {
 				if(!IsRunning()) {
 					break;
 				}
-				Update();
+				auto updateResult = Update();
+				if(!updateResult) {
+					NEXUS_LOG_CRITICAL("Framework", DescribeError(updateResult.error()));
+					state_ = FrameworkState::Failed;
+					Shutdown();
+					return kRuntimeFailureExitCode;
+				}
 				auto renderResult = Render();
 				if(!renderResult) {
 					NEXUS_LOG_CRITICAL("Framework", DescribeError(renderResult.error()));
@@ -107,6 +113,8 @@ namespace NexusEngine {
 		// サブシステムの初期化を始める前に状態を変更し、再入を検出可能にする。
 		state_ = FrameworkState::Initializing;
 		mode_ = desc.mode;
+		updateClient_ = desc.updateClient;
+		previousFrameTime_ = std::chrono::steady_clock::now();
 		NEXUS_LOG_INFO("Framework", "NexusEngine initialization started.");
 
 		// EditorはGameと同じWindow/Graphics基盤を使い、Editor固有処理をRenderExtensionへ委譲する。
@@ -164,6 +172,8 @@ namespace NexusEngine {
 		window_.SetMessageHandler(desc.messageHandler, desc.messageHandlerUserData);
 
 		// 必須サブシステムがすべて成功した時点だけRunningへ遷移させる。
+		// Shader/Asset初期化に要した時間を最初のsimulation deltaへ混ぜない。
+		previousFrameTime_ = std::chrono::steady_clock::now();
 		state_ = FrameworkState::Running;
 		NEXUS_LOG_INFO("Framework", "NexusEngine initialization completed.");
 		return {};
@@ -188,6 +198,7 @@ namespace NexusEngine {
 		window_.SetMessageHandler(nullptr, nullptr);
 		graphicsSystem_.Shutdown();
 		window_.Shutdown();
+		updateClient_ = nullptr;
 
 		// 全所有物の解放後にStoppedへ遷移し、外部から終了完了を観測可能にする。
 		state_ = FrameworkState::Stopped;
@@ -200,7 +211,9 @@ namespace NexusEngine {
 	}
 
 	void NexusFramework::BeginFrame() noexcept {
-		// Command AllocatorやFrame Resource導入時のフレーム開始境界。
+		const auto currentTime = std::chrono::steady_clock::now();
+		deltaTime_ = std::chrono::duration<float>(currentTime - previousFrameTime_).count();
+		previousFrameTime_ = currentTime;
 	}
 
 	Result<void> NexusFramework::ProcessEvents() {
@@ -212,11 +225,15 @@ namespace NexusEngine {
 		return {};
 	}
 
-	void NexusFramework::Update() noexcept {
-		// GameまたはEditorの更新処理を接続する拡張境界。
+	Result<void> NexusFramework::Update() {
+		return updateClient_ != nullptr ? updateClient_->Update(deltaTime_) : Result<void> {};
 	}
 
 	Result<void> NexusFramework::Render() {
+		if(updateClient_ != nullptr && window_.GetClientWidth() != 0 && window_.GetClientHeight() != 0) {
+			auto result = updateClient_->PrepareRender(window_.GetClientWidth(), window_.GetClientHeight());
+			if(!result) return result;
+		}
 		return graphicsSystem_.RenderFrame();
 	}
 

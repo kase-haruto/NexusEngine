@@ -15,6 +15,11 @@ imgui.ini
 # Build output (ENGINE)
 ###############################################################################
 generated/
+# Initial standalone ECS builds used these local intermediate directories.
+Project/Tests/NexusEcsTests/
+Project/Tests/x64/
+Project/Benchmarks/NexusEcs.FE75C25B/
+Project/Benchmarks/x64/
 
 ###############################################################################
 # Visual Studio intermediate

@@ -286,4 +286,27 @@
 	<None Include="Shaders\Common\Bindless.hlsli"><Filter>Shaders</Filter></None>
     <None Include="Agent\AGENT.md" />
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Runtime\Level"><UniqueIdentifier>{EF83CDF5-5882-482B-96F6-6E470499EB5F}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Runtime\Scene\PersistentIdGenerator.cpp"><Filter>Runtime\Scene</Filter></ClCompile>
+    <ClCompile Include="Runtime\Scene\SystemScheduler.cpp"><Filter>Runtime\Scene</Filter></ClCompile>
+    <ClCompile Include="Runtime\Scene\TransformUpdateSystem.cpp"><Filter>Runtime\Scene</Filter></ClCompile>
+    <ClCompile Include="Runtime\Level\Level.cpp"><Filter>Runtime\Level</Filter></ClCompile>
+    <ClCompile Include="Runtime\Level\LevelSerializer.cpp"><Filter>Runtime\Level</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Core\Framework\FrameworkUpdateClient.h"><Filter>Core\Framework</Filter></ClInclude>
+    <ClInclude Include="Runtime\Scene\ComponentStorage.h"><Filter>Runtime\Scene</Filter></ClInclude>
+    <ClInclude Include="Runtime\Scene\PersistentIdGenerator.h"><Filter>Runtime\Scene</Filter></ClInclude>
+    <ClInclude Include="Runtime\Scene\SystemScheduler.h"><Filter>Runtime\Scene</Filter></ClInclude>
+    <ClInclude Include="Runtime\Scene\TransformUpdateSystem.h"><Filter>Runtime\Scene</Filter></ClInclude>
+    <ClInclude Include="Runtime\Scene\Components\PersistentIdComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
+    <ClInclude Include="Runtime\Level\Level.h"><Filter>Runtime\Level</Filter></ClInclude>
+    <ClInclude Include="Runtime\Level\LevelSerializer.h"><Filter>Runtime\Level</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\ECSREADME.md"><Filter>Docs</Filter></None>
+  </ItemGroup>
 </Project>

@@ -1,7 +1,10 @@
 #pragma once
 
+#include "Core/Framework/FrameworkUpdateClient.h"
 #include "Editor/Gui/Core/GuiContext.h"
 #include "Editor/ImGui/ImGuiRenderer.h"
+#include "Runtime/Level/Level.h"
+#include "Runtime/Rendering/RenderSceneExtractor.h"
 
 namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
@@ -9,7 +12,7 @@ namespace NexusEngine {
 	 * - Editor UIの構築とImGui描画基盤の接続を担当する
 	 * - Win32/DX12固有処理はImGuiRendererへ委譲する
 	 *---------------------------------------------------------------------------------------*/
-	class EditorApplication final : public IGraphicsRenderExtension {
+	class EditorApplication final : public IGraphicsRenderExtension, public IFrameworkUpdateClient {
 	public:
 		/**
 		 * @brief 初期化
@@ -21,6 +24,10 @@ namespace NexusEngine {
 		 * @brief 開始フレーム
 		 */
 		void BeginFrame() override;
+		/** \brief Editorが所有するRuntime Levelを更新する */
+		[[nodiscard]] Result<void> Update(float deltaTime) override;
+		[[nodiscard]] Result<void> PrepareRender(uint32_t width, uint32_t height) override;
+		[[nodiscard]] const RenderScene& GetRenderScene() const noexcept { return renderScene_; }
 		/**
 		 * @brief commandListに記録する
 		 * @param context
@@ -51,5 +58,8 @@ namespace NexusEngine {
 		ImGuiRenderer imguiRenderer_;		   //< imgui描画
 		UI::Context	  guiContext_;			   //< gui
 		bool		  showDemoWindow_ = false; //< ImGui Demo Windowの表示フラグ
+		Level level_ { "EditorLevel" };       //< Editor viewportが操作するRuntime Level
+		RenderSceneExtractor extractor_; //< Runtimeから描画snapshotへの境界
+		RenderScene renderScene_; //< Rendererへの値snapshot。EditorApplicationと同寿命
 	};
 } // namespace NexusEngine

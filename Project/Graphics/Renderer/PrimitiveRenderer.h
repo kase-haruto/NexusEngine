@@ -17,6 +17,7 @@
 #include "Graphics/Descriptor/ShaderResourceRef.h"
 #include "Graphics/Material/PrimitiveDrawData.h"
 #include "GraphicsRenderer.h"
+#include "RenderScene.h"
 
 namespace NexusEngine {
 
@@ -42,6 +43,8 @@ namespace NexusEngine {
 		 * \param context 現在Frameに描画命令を記録するBackend非依存Context
 		 */
 		void Render(GraphicsContext& context) override;
+		/** \brief Application所有の値snapshotを接続する。Rendererより長く生存すること */
+		void SetRenderScene(const RenderScene* scene) noexcept { renderScene_ = scene; }
 
 	private:
 		struct MaterialGpuResource {
@@ -57,6 +60,8 @@ namespace NexusEngine {
 		std::vector<MaterialGpuResource> materialResources_; //< Material slot別Texture/Sampler所有
 		std::vector<std::vector<std::unique_ptr<ConstantBuffer>>> meshDrawBuffers_; //< SubmeshごとのFrame安全なDraw Data
 		PrimitiveDrawData drawData_; //< 回転行列とMaterial parameterのCPU側転送値
+		const RenderScene* renderScene_ = nullptr; //< Component参照を持たないApplication所有snapshot
+		std::vector<std::vector<std::vector<std::unique_ptr<ConstantBuffer>>>> extraDrawBuffers_; //< 2件目以降のframe安全なobject/mesh/submesh転送領域
 		std::chrono::steady_clock::time_point animationStartTime_; //< FPSに依存しない回転時間の起点
 		std::chrono::steady_clock::time_point lastAnimationUpdateTime_; //< Clipのdelta time計算起点
 	};

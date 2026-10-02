@@ -190,7 +190,12 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Platform\Window\ProjectWindow.cpp" />
 	<ClCompile Include="Runtime\Scene\Scene.cpp" />
+	<ClCompile Include="Runtime\Scene\PersistentIdGenerator.cpp" />
+	<ClCompile Include="Runtime\Scene\SystemScheduler.cpp" />
 	<ClCompile Include="Runtime\Scene\TransformSystem.cpp" />
+	<ClCompile Include="Runtime\Scene\TransformUpdateSystem.cpp" />
+	<ClCompile Include="Runtime\Level\Level.cpp" />
+	<ClCompile Include="Runtime\Level\LevelSerializer.cpp" />
 	<ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp" />
 	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
 	<ClCompile Include="Editor\Core\EditorApplication.cpp" />
@@ -219,6 +224,7 @@
     <ClInclude Include="Foundation\Utility\String\ConvertString.h" />
     <ClInclude Include="Core\Environment.h" />
     <ClInclude Include="Core\Framework\NexusFramework.h" />
+	<ClInclude Include="Core\Framework\FrameworkUpdateClient.h" />
 	<ClInclude Include="Graphics\Core\CommandQueue.h" />
 	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h" />
 	<ClInclude Include="Graphics\Descriptor\DescriptorHandle.h" />
@@ -276,10 +282,17 @@
 	<ClInclude Include="Runtime\Scene\Components\TransformComponent.h" />
 	<ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
 	<ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
+	<ClInclude Include="Runtime\Scene\Components\PersistentIdComponent.h" />
 	<ClInclude Include="Runtime\Scene\Entity.h" />
 	<ClInclude Include="Runtime\Scene\EntityId.h" />
+	<ClInclude Include="Runtime\Scene\PersistentIdGenerator.h" />
 	<ClInclude Include="Runtime\Scene\Scene.h" />
+	<ClInclude Include="Runtime\Scene\ComponentStorage.h" />
+	<ClInclude Include="Runtime\Scene\SystemScheduler.h" />
 	<ClInclude Include="Runtime\Scene\TransformSystem.h" />
+	<ClInclude Include="Runtime\Scene\TransformUpdateSystem.h" />
+	<ClInclude Include="Runtime\Level\Level.h" />
+	<ClInclude Include="Runtime\Level\LevelSerializer.h" />
 	<ClInclude Include="Runtime\Rendering\RenderSceneExtractor.h" />
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
 	<ClInclude Include="Editor\Core\EditorApplication.h" />
@@ -292,6 +305,7 @@
   <ItemGroup>
 	<None Include="Docs\GraphicsREADME.md" />
 	<None Include="Docs\SceneREADME.md" />
+	<None Include="Docs\ECSREADME.md" />
 	<None Include="Shaders\Primitive\Primitive.VS.hlsl" />
 	<None Include="Shaders\Primitive\Primitive.PS.hlsl" />
 	<None Include="Shaders\Primitive\PrimitiveDrawData.hlsli" />

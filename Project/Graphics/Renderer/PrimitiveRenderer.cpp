@@ -169,6 +169,7 @@ namespace NexusEngine {
 			}
 		}
 		meshDrawBuffers_.clear();
+		extraDrawBuffers_.clear();
 		materialResources_.clear();
 		// PipelineとBufferはいずれもDevice依存なので、GraphicsSystemがDeviceより先に呼び出す。
 		cubeInstance_.Shutdown();
@@ -196,67 +197,91 @@ namespace NexusEngine {
 			elapsedSeconds * kRotationSpeedY,
 			0.0f
 		});
-		const Matrix4x4 instanceWorld = MakeAffineMatrix(
+		Matrix4x4 instanceWorld = MakeAffineMatrix(
 			{ 0.75f, 0.75f, 0.75f }, rotation, { 0.0f, -0.75f, 3.0f });
 		const float aspectRatio = static_cast<float>(context.GetRenderWidth()) /
 			static_cast<float>(context.GetRenderHeight());
-		const Matrix4x4 projection = MakePerspectiveFovMatrix(
+		Matrix4x4 projection = MakePerspectiveFovMatrix(
 			kPi / 3.0f, aspectRatio, 0.1f, 100.0f);
+		const size_t objectCount = renderScene_ != nullptr ? renderScene_->primitives.size() : 1;
+		if(renderScene_ != nullptr && !renderScene_->camera.has_value()) return;
+		if(renderScene_ != nullptr) projection = renderScene_->camera->viewProjectionMatrix;
+		// 各Drawは独立したframe bufferを必要とする。同じCBを書き換えて複数Drawすると、
+		// GPUが全Drawで最後の値を読むため、objectごとに転送領域を確保し高水位まで再利用する。
+		while(extraDrawBuffers_.size() + 1 < objectCount) {
+			std::vector<std::vector<std::unique_ptr<ConstantBuffer>>> buffers(cubeModel_.GetMeshCount());
+			for(size_t meshIndex = 0; meshIndex < meshDrawBuffers_.size(); ++meshIndex) {
+				for(size_t submesh = 0; submesh < meshDrawBuffers_[meshIndex].size(); ++submesh) {
+					auto buffer = std::make_unique<ConstantBuffer>();
+					auto result = resources_->CreateConstantBuffer(*buffer, sizeof(PrimitiveDrawData));
+					if(!result) { NEXUS_LOG_ERROR("Graphics", result.error().GetMessageText()); return; }
+					buffers[meshIndex].push_back(std::move(buffer));
+				}
+			}
+			extraDrawBuffers_.push_back(std::move(buffers));
+		}
 		// Rendererは描画意図だけを記述し、Native Command List操作はGraphicsContextへ委譲する。
 		context.SetGraphicsPipeline(pipeline_);
 		context.SetPrimitiveTopology(PrimitiveTopology::TriangleList);
 		const auto& nodeTransforms = cubeInstance_.GetNodeWorldTransforms();
-		for(std::size_t nodeIndex = 0; nodeIndex < cubeModel_.GetNodes().size(); ++nodeIndex) {
-			const ModelNode& node = cubeModel_.GetNodes()[nodeIndex];
-			if(node.meshIndices.empty()) continue;
-			const uint32_t skinIndex = cubeModel_.GetMeshSkinIndex(node.meshIndices.front());
-			const bool hasSkin = skinIndex != MeshAssetData::kNoSkin;
-			// Skin PaletteはModel空間まで変換済み。Skinned meshへnode行列を重ねて二重変換しない。
-			const Matrix4x4 world = hasSkin
-				? instanceWorld
-				: Multiply(nodeTransforms[nodeIndex], instanceWorld);
-			// Cameraはoriginから+Zを向くためViewはIdentity。node/model/world/projectionの順に合成する。
-			drawData_.worldViewProjection = Multiply(world, projection);
-			const auto inverseWorld = TryInverse(world);
-			if(!inverseWorld) continue;
-			drawData_.worldInverseTranspose = Transpose(*inverseWorld);
-			drawData_.skinningEnabled = hasSkin ? 1U : 0U;
-			drawData_.jointPalette.fill(Matrix4x4::Identity());
-			if(hasSkin) {
-				const auto* palette = cubeInstance_.GetSkinPalette(skinIndex);
-				if(palette == nullptr || palette->size() > drawData_.jointPalette.size()) continue;
-				std::copy(palette->begin(), palette->end(), drawData_.jointPalette.begin());
-			}
+		for(size_t objectIndex = 0; objectIndex < objectCount; ++objectIndex) {
+			if(renderScene_ != nullptr) instanceWorld = renderScene_->primitives[objectIndex].worldMatrix;
+			auto& drawBuffers = objectIndex == 0 ? meshDrawBuffers_ : extraDrawBuffers_[objectIndex - 1];
+			for(std::size_t nodeIndex = 0; nodeIndex < cubeModel_.GetNodes().size(); ++nodeIndex) {
+				const ModelNode& node = cubeModel_.GetNodes()[nodeIndex];
+				if(node.meshIndices.empty()) continue;
+				const uint32_t skinIndex = cubeModel_.GetMeshSkinIndex(node.meshIndices.front());
+				const bool hasSkin = skinIndex != MeshAssetData::kNoSkin;
+				// Skin PaletteはModel空間まで変換済み。Skinned meshへnode行列を重ねて二重変換しない。
+				const Matrix4x4 world = hasSkin
+					? instanceWorld
+					: Multiply(nodeTransforms[nodeIndex], instanceWorld);
+				// Cameraはoriginから+Zを向くためViewはIdentity。node/model/world/projectionの順に合成する。
+				drawData_.worldViewProjection = Multiply(world, projection);
+				const auto inverseWorld = TryInverse(world);
+				if(!inverseWorld) continue;
+				drawData_.worldInverseTranspose = Transpose(*inverseWorld);
+				drawData_.skinningEnabled = hasSkin ? 1U : 0U;
+				drawData_.jointPalette.fill(Matrix4x4::Identity());
+				if(hasSkin) {
+					const auto* palette = cubeInstance_.GetSkinPalette(skinIndex);
+					if(palette == nullptr || palette->size() > drawData_.jointPalette.size()) continue;
+					std::copy(palette->begin(), palette->end(), drawData_.jointPalette.begin());
+				}
 
-			for(const uint32_t meshIndex : node.meshIndices) {
-				const MeshResource* mesh = cubeModel_.GetMesh(meshIndex);
-				if(mesh == nullptr) continue;
-				context.SetMesh(*mesh);
-				for(std::size_t submeshIndex = 0; submeshIndex < mesh->GetSubmeshes().size(); ++submeshIndex) {
-					const SubmeshRange& submesh = mesh->GetSubmeshes()[submeshIndex];
-					if(submesh.materialSlot >= materialResources_.size() ||
-					   submesh.materialSlot >= cubeModel_.GetMaterials().size()) continue;
-					const MaterialGpuResource& gpuMaterial = materialResources_[submesh.materialSlot];
-					const ModelMaterial& material = cubeModel_.GetMaterials()[submesh.materialSlot];
-					drawData_.textureIndex = gpuMaterial.textureRef.index;
-					drawData_.samplerIndex = gpuMaterial.samplerRef.index;
-					drawData_.tint = material.baseColorFactor;
+				for(const uint32_t meshIndex : node.meshIndices) {
+					const MeshResource* mesh = cubeModel_.GetMesh(meshIndex);
+					if(mesh == nullptr) continue;
+					context.SetMesh(*mesh);
+					for(std::size_t submeshIndex = 0; submeshIndex < mesh->GetSubmeshes().size(); ++submeshIndex) {
+						const SubmeshRange& submesh = mesh->GetSubmeshes()[submeshIndex];
+						if(submesh.materialSlot >= materialResources_.size() ||
+						   submesh.materialSlot >= cubeModel_.GetMaterials().size()) continue;
+						const MaterialGpuResource& gpuMaterial = materialResources_[submesh.materialSlot];
+						const ModelMaterial& material = cubeModel_.GetMaterials()[submesh.materialSlot];
+						drawData_.textureIndex = gpuMaterial.textureRef.index;
+						drawData_.samplerIndex = gpuMaterial.samplerRef.index;
+						drawData_.tint = material.baseColorFactor;
+						if(renderScene_ != nullptr) {
+							for(size_t channel = 0; channel < 4; ++channel) drawData_.tint[channel] *= renderScene_->primitives[objectIndex].tint[channel];
+						}
 
-					const auto drawDataBytes = std::as_bytes(std::span(&drawData_, 1));
-					ConstantBuffer& drawBuffer = *meshDrawBuffers_[meshIndex][submeshIndex];
-					auto writeResult = drawBuffer.Write(frameIndex,
-						{ reinterpret_cast<const uint8_t*>(drawDataBytes.data()), drawDataBytes.size() });
-					if(!writeResult) {
-						NEXUS_LOG_ERROR("Graphics", writeResult.error().GetMessageText());
-						continue;
+						const auto drawDataBytes = std::as_bytes(std::span(&drawData_, 1));
+						ConstantBuffer& drawBuffer = *drawBuffers[meshIndex][submeshIndex];
+						auto writeResult = drawBuffer.Write(frameIndex,
+							{ reinterpret_cast<const uint8_t*>(drawDataBytes.data()), drawDataBytes.size() });
+						if(!writeResult) {
+							NEXUS_LOG_ERROR("Graphics", writeResult.error().GetMessageText());
+							continue;
+						}
+						auto descriptorResult = context.SetGraphicsConstantBufferTable(pipeline_, drawBuffer);
+						if(!descriptorResult) {
+							NEXUS_LOG_ERROR("Graphics", descriptorResult.error().GetMessageText());
+							continue;
+						}
+						context.DrawIndexed(
+							submesh.indexCount, 1, submesh.firstIndex, submesh.vertexOffset, 0);
 					}
-					auto descriptorResult = context.SetGraphicsConstantBufferTable(pipeline_, drawBuffer);
-					if(!descriptorResult) {
-						NEXUS_LOG_ERROR("Graphics", descriptorResult.error().GetMessageText());
-						continue;
-					}
-					context.DrawIndexed(
-						submesh.indexCount, 1, submesh.firstIndex, submesh.vertexOffset, 0);
 				}
 			}
 		}

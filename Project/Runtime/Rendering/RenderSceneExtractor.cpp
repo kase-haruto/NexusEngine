@@ -25,11 +25,20 @@ namespace NexusEngine {
 	}
 
 	Result<RenderScene> RenderSceneExtractor::Extract(Scene& scene, const float aspectRatio) const {
+		RenderScene result;
+		auto status = ExtractInto(scene, aspectRatio, result);
+		if(!status) return std::unexpected(std::move(status.error()));
+		return result;
+	}
+
+	Result<void> RenderSceneExtractor::ExtractInto(Scene& scene, const float aspectRatio, RenderScene& result) const {
 		if(!std::isfinite(aspectRatio) || aspectRatio <= 0.0f) {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidViewport, "Render viewport aspect ratio must be positive and finite."));
 		}
 
-		RenderScene result;
+		// clearはcapacityを保持するので、安定したEntity数なら毎frameの再確保は発生しない。
+		result.primitives.clear();
+		result.camera.reset();
 		scene.ForEach<TransformComponent, PrimitiveRenderComponent>(
 			[&](Entity entity, TransformComponent& transform, PrimitiveRenderComponent& primitive) {
 				if(primitive.enabled) {
@@ -70,7 +79,7 @@ namespace NexusEngine {
 		if(cameraError.has_value()) {
 			return std::unexpected(std::move(*cameraError));
 		}
-		return result;
+		return {};
 	}
 
 } // namespace NexusEngine

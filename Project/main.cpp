@@ -11,10 +11,12 @@
 int main() {
 	NexusEngine::EditorApplication editor;
 	NexusEngine::PrimitiveRenderer primitiveRenderer;
+	primitiveRenderer.SetRenderScene(&editor.GetRenderScene());
 	NexusEngine::FrameworkDesc desc;
 	desc.mode = NexusEngine::FrameworkMode::Editor;
 	desc.renderer = &primitiveRenderer;
 	desc.renderExtension = &editor;
+	desc.updateClient = &editor;
 	desc.messageHandler = [](void* userData, HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
 		return static_cast<NexusEngine::EditorApplication*>(userData)->HandleWindowMessage(
 			window, message, static_cast<uintptr_t>(wParam), static_cast<intptr_t>(lParam));

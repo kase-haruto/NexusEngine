@@ -17,7 +17,7 @@ namespace NexusEngine {
 		constexpr int32_t kInvalidEntity = 1;
 		constexpr int32_t kHierarchyCycle = 2;
 
-		enum class VisitState : uint8_t {
+		enum VisitState : uint8_t {
 			Unvisited,
 			Visiting,
 			Resolved
@@ -79,11 +79,13 @@ namespace NexusEngine {
 			return {};
 		}
 
-		std::vector<VisitState> visitStates(static_cast<std::size_t>(maximumEntityIndex) + 1, VisitState::Unvisited);
+		// 容量は高水位を保持し、安定したWorldでは毎frameのheap確保を避ける。
+		visitStates_.resize(static_cast<std::size_t>(maximumEntityIndex) + 1);
+		std::fill(visitStates_.begin(), visitStates_.end(), VisitState::Unvisited);
 		bool cycleDetected = false;
 
 		auto resolveWorld = [&](auto&& self, Entity entity, TransformComponent& transform) -> void {
-			auto& visitState = visitStates[entity.GetId().index];
+			auto& visitState = visitStates_[entity.GetId().index];
 			if(visitState == VisitState::Resolved || cycleDetected) {
 				return;
 		}
