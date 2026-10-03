@@ -5,41 +5,86 @@
 
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/TransformComponent.h"
 #include "ThirdParty/imgui/imgui.h"
 
 namespace NexusEngine {
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。
 		modelPose_.Shutdown();
+		cameraEntity_	= {};
 		rotatingEntity_ = {};
 		level_.Unload();
+
+		// モデル読み込み
 		auto asset = ModelLoader{}.LoadGltf(assetDirectory / L"Models/Sponza/Sponza.gltf");
-		if(!asset) return std::unexpected(std::move(asset.error()));
+		if(!asset) {
+			// 読み込みに失敗したらエラーを返す
+			return std::unexpected(std::move(asset.error()));
+		}
+
+		// モデルアセットに所有権を移動
 		modelAsset_		= std::move(*asset);
 		auto poseResult = modelPose_.Initialize(modelAsset_);
 		if(!poseResult) return poseResult;
+
 		if(!modelAsset_.animations.empty()) {
 			poseResult = modelPose_.Play(0, true);
-			if(!poseResult) return poseResult;
+			if(!poseResult) {
+				return poseResult;
+			}
 		}
-		rotationRadians_ = {};
-		auto levelResult = level_.LoadEmpty();
-		if(!levelResult) return levelResult;
-		// 既存描画デモをLevelデータへ移し、Runtime→Extraction→Renderer経路を実際に通す。
-		Entity			camera = level_.CreateEntity("Camera");
-		CameraComponent cameraSettings;
-		cameraSettings.verticalFieldOfViewRadians = 1.0471975512f;
-		static_cast<void>(camera.AddComponent<CameraComponent>(cameraSettings));
-		Entity primitive = level_.CreateEntity("Primitive");
-		static_cast<void>(primitive.AddComponent<PrimitiveRenderComponent>());
+		rotationRadians_	   = {};
+		cameraRotationRadians_ = {};
+		auto levelResult	   = level_.LoadEmpty();
 
-		rotatingEntity_ = primitive;
+		if(!levelResult) {
+			return levelResult;
+		}
+
+		// 既存描画デモをLevelデータへ移し、Runtime→Extraction→Renderer経路を実際に通す。
+		cameraEntity_ = level_.CreateEntity("Camera");
+		if(auto* cameraSettings = cameraEntity_.AddComponent<CameraComponent>()) {
+			cameraSettings->verticalFieldOfViewRadians = 1.0471975512f;
+		}
+		if(cameraEntity_.GetComponent<TransformComponent>()) {
+			TransformComponent* cameraTransform = cameraEntity_.GetComponent<TransformComponent>();
+			cameraTransform->translation		= cameraInitTranslation_;
+			cameraTransform->rotation			= Quaternion::FromEulerRadians(cameraInitRotation_);
+		}
+
+		// モデルを描画するエンティティ
+		rotatingEntity_ = level_.CreateEntity("Primitive");
+		static_cast<void>(rotatingEntity_.AddComponent<PrimitiveRenderComponent>());
 		return level_.Update(0.0f);
+	}
+
+	void EditorApplication::ShowGui() {
+		// フレームが開始していない場合は終了
+		if(!guiContext_.IsFrameActive()) {
+			return;
+		}
+
+		// demoGuiWindowの描画
+		if(ImGui::Begin("DemoLevelDebugWindow")) {
+			// カメラのtransform操作
+			if(ImGui::TreeNode("Camera")) {
+				if(auto* transform = cameraEntity_.GetComponent<TransformComponent>()) {
+					ImGui::DragFloat3("Translate", &transform->translation.x, 0.1f);
+					if(ImGui::DragFloat3("Rotation (rad)", &cameraRotationRadians_.x, 0.01f)) {
+						transform->rotation = Quaternion::FromEulerRadians(cameraRotationRadians_);
+					}
+				}
+				ImGui::TreePop();
+			}
+		}
+		ImGui::End();
 	}
 
 	Result<void> EditorApplication::Initialize(const GraphicsRenderExtensionContext& context) {
 		auto rendererResult = imguiRenderer_.Initialize(context);
 		if(!rendererResult) {
+			cameraEntity_	= {};
 			rotatingEntity_ = {};
 			level_.Unload();
 			return rendererResult;
@@ -48,6 +93,7 @@ namespace NexusEngine {
 		auto guiResult = guiContext_.Initialize();
 		if(!guiResult) {
 			imguiRenderer_.Shutdown();
+			cameraEntity_	= {};
 			rotatingEntity_ = {};
 			level_.Unload();
 			return guiResult;
@@ -73,6 +119,7 @@ namespace NexusEngine {
 		imguiRenderer_.BeginFrame();
 		guiContext_.BeginFrame();
 		DrawDockSpace();
+		ShowGui();
 		if(showDemoWindow_) ImGui::ShowDemoWindow(&showDemoWindow_);
 	}
 
@@ -84,6 +131,7 @@ namespace NexusEngine {
 	void EditorApplication::Shutdown() noexcept {
 		guiContext_.Shutdown();
 		imguiRenderer_.Shutdown();
+		cameraEntity_	= {};
 		rotatingEntity_ = {};
 		modelPose_.Shutdown();
 		renderScene_ = {};
@@ -103,7 +151,7 @@ namespace NexusEngine {
 			0,
 			ImGui::GetMainViewport(),
 			ImGuiDockNodeFlags_PassthruCentralNode);
-		//DrawMainMenuBar();
+		// DrawMainMenuBar();
 	}
 
 	void EditorApplication::DrawMainMenuBar() {
