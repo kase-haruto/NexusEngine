@@ -1,11 +1,11 @@
 #include "EditorApplication.h"
 
-#include <cmath>
 #include "Graphics/Model/ModelLoader.h"
+#include <cmath>
 
-#include "ThirdParty/imgui/imgui.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "ThirdParty/imgui/imgui.h"
 
 namespace NexusEngine {
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
@@ -13,9 +13,9 @@ namespace NexusEngine {
 		modelPose_.Shutdown();
 		rotatingEntity_ = {};
 		level_.Unload();
-		auto asset = ModelLoader{}.LoadGltf(assetDirectory / L"Models/SimpleSkin/SimpleSkin.gltf");
+		auto asset = ModelLoader{}.LoadGltf(assetDirectory / L"Models/Sponza/Sponza.gltf");
 		if(!asset) return std::unexpected(std::move(asset.error()));
-		modelAsset_ = std::move(*asset);
+		modelAsset_		= std::move(*asset);
 		auto poseResult = modelPose_.Initialize(modelAsset_);
 		if(!poseResult) return poseResult;
 		if(!modelAsset_.animations.empty()) {
@@ -26,16 +26,12 @@ namespace NexusEngine {
 		auto levelResult = level_.LoadEmpty();
 		if(!levelResult) return levelResult;
 		// 既存描画デモをLevelデータへ移し、Runtime→Extraction→Renderer経路を実際に通す。
-		Entity camera = level_.CreateEntity("Camera");
+		Entity			camera = level_.CreateEntity("Camera");
 		CameraComponent cameraSettings;
 		cameraSettings.verticalFieldOfViewRadians = 1.0471975512f;
 		static_cast<void>(camera.AddComponent<CameraComponent>(cameraSettings));
 		Entity primitive = level_.CreateEntity("Primitive");
 		static_cast<void>(primitive.AddComponent<PrimitiveRenderComponent>());
-		auto* transform = primitive.GetComponent<TransformComponent>();
-		transform->translation = { 0.0f, -0.75f, 3.0f };
-		transform->scale = { 0.75f, 0.75f, 0.75f };
-
 
 		rotatingEntity_ = primitive;
 		return level_.Update(0.0f);
@@ -65,16 +61,6 @@ namespace NexusEngine {
 		if(level_.GetScene() == nullptr) return level_.Update(deltaTime);
 		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return level_.Update(deltaTime);
 		modelPose_.Update(deltaTime);
-		if(rotatingEntity_.IsAlive()) {
-			if(auto* transform = rotatingEntity_.GetComponent<TransformComponent>()) {
-				// 長時間稼働で角度が増え続け、floatの精度が落ちることを防ぐ。
-				constexpr float turn = 6.2831853072f;
-				rotationRadians_.x = std::fmod(rotationRadians_.x + rotationSpeed_.x * deltaTime, turn);
-				rotationRadians_.y = std::fmod(rotationRadians_.y + rotationSpeed_.y * deltaTime, turn);
-				rotationRadians_.z = std::fmod(rotationRadians_.z + rotationSpeed_.z * deltaTime, turn);
-				transform->rotation = Quaternion::FromEulerRadians(rotationRadians_);
-			}
-		}
 		return level_.Update(deltaTime);
 	}
 
@@ -105,10 +91,10 @@ namespace NexusEngine {
 	}
 
 	bool EditorApplication::HandleWindowMessage(
-		void* const window,
-		const uint32_t message,
+		void* const		window,
+		const uint32_t	message,
 		const uintptr_t wParam,
-		const intptr_t lParam) noexcept {
+		const intptr_t	lParam) noexcept {
 		return imguiRenderer_.HandleWindowMessage(window, message, wParam, lParam);
 	}
 
@@ -117,7 +103,7 @@ namespace NexusEngine {
 			0,
 			ImGui::GetMainViewport(),
 			ImGuiDockNodeFlags_PassthruCentralNode);
-		DrawMainMenuBar();
+		//DrawMainMenuBar();
 	}
 
 	void EditorApplication::DrawMainMenuBar() {
