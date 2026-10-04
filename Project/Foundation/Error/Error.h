@@ -41,18 +41,18 @@ namespace NexusEngine {
 		 * \param location エラー発生位置
 		 */
 		Error(
-			ErrorCategory category,
-			int32_t code,
-			std::string message,
-			NativeErrorCode nativeCode = 0,
-			std::source_location location = std::source_location::current());
+			ErrorCategory		 category,
+			int32_t				 code,
+			std::string			 message,
+			NativeErrorCode		 nativeCode = 0,
+			std::source_location location	= std::source_location::current());
 
-		[[nodiscard]] ErrorCategory GetCategory() const noexcept;
-		[[nodiscard]] int32_t GetCode() const noexcept;
-		[[nodiscard]] NativeErrorCode GetNativeCode() const noexcept;
-		[[nodiscard]] const std::string& GetMessageText() const noexcept;
+		[[nodiscard]] ErrorCategory				  GetCategory() const noexcept;
+		[[nodiscard]] int32_t					  GetCode() const noexcept;
+		[[nodiscard]] NativeErrorCode			  GetNativeCode() const noexcept;
+		[[nodiscard]] const std::string&		  GetMessageText() const noexcept;
 		[[nodiscard]] const std::source_location& GetLocation() const noexcept;
-		[[nodiscard]] const Error* GetCause() const noexcept;
+		[[nodiscard]] const Error*				  GetCause() const noexcept;
 
 		/**
 		 * \brief 元になったエラーを設定する
@@ -62,12 +62,12 @@ namespace NexusEngine {
 		Error& SetCause(std::shared_ptr<const Error> cause) noexcept;
 
 	private:
-		ErrorCategory				 category_	  = ErrorCategory::General; //< エラーの発生領域
-		int32_t						 code_		  = 0;						//< 分類内の識別コード
-		NativeErrorCode				 nativeCode_  = 0;						//< OSやAPI固有の補助コード
-		std::string					 message_;								//< 呼び出し元へ伝える説明
-		std::source_location			 location_;								//< 生成マクロから取得した発生位置
-		std::shared_ptr<const Error> cause_;								//< 必要な場合だけ所有する原因エラー
+		ErrorCategory				 category_	 = ErrorCategory::General; //< エラーの発生領域
+		int32_t						 code_		 = 0;					   //< 分類内の識別コード
+		NativeErrorCode				 nativeCode_ = 0;					   //< OSやAPI固有の補助コード
+		std::string					 message_;							   //< 呼び出し元へ伝える説明
+		std::source_location		 location_;							   //< 生成マクロから取得した発生位置
+		std::shared_ptr<const Error> cause_;							   //< 必要な場合だけ所有する原因エラー
 	};
 
 	/**
@@ -79,9 +79,9 @@ namespace NexusEngine {
 	 * \return DirectX分類の共通エラー
 	 */
 	[[nodiscard]] Error MakeDirectXError(
-		int32_t code,
+		int32_t				   code,
 		Error::NativeErrorCode nativeCode,
-		std::string message,
-		std::source_location location = std::source_location::current());
+		std::string			   message,
+		std::source_location   location = std::source_location::current());
 
 } // namespace NexusEngine

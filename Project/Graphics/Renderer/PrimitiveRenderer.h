@@ -17,6 +17,8 @@
 #include "Graphics/Material/PrimitiveDrawData.h"
 #include "GraphicsRenderer.h"
 #include "RenderScene.h"
+#include "Graphics/Shadow/ShadowSystem.h"
+#include "Graphics/RayTracing/OpticalSystem.h"
 
 namespace NexusEngine {
 
@@ -44,6 +46,13 @@ namespace NexusEngine {
 		void Render(GraphicsContext& context) override;
 		/** \brief Application所有の値snapshotを接続する。Rendererより長く生存すること */
 		void SetRenderScene(const RenderScene* scene) noexcept { renderScene_ = scene; }
+		/** \brief Editorは設定/統計だけを利用する。ImGuiをRuntimeへ持ち込まない */
+		[[nodiscard]] ShadowSystem& GetShadows() noexcept { return shadows_; }
+		[[nodiscard]] OpticalSystem& GetOptics() noexcept { return optics_; }
+		/** \brief Materialごとの光学設定を公開する。GPU参照はRendererが所有する */
+		[[nodiscard]] std::span<const OpticalSurfaceMaterial> GetOpticalMaterials() const noexcept { return opticalMaterials_; }
+		/** \brief 次FrameのRT評価へ光学係数を反映する。Geometry/BLAS再生成は不要 */
+		[[nodiscard]] Result<void> SetOpticalMaterial(uint32_t slot, const OpticalMaterial& optics);
 
 
 		/** \brief Scene所有のCPUモデルと更新済み姿勢を接続する。初期化前に設定し、Shutdownまで保持すること */
@@ -61,6 +70,11 @@ namespace NexusEngine {
 
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
+		ShadowSystem shadows_; //< Shadow方式とGPU影Resourceの独立所有者
+		OpticalSystem optics_; //< Reflection/Transmission Radianceの独立所有者
+		std::vector<OpticalDrawItem> opticalDraws_;
+		std::vector<OpticalSurfaceMaterial> opticalMaterials_;
+		std::vector<ShadowDrawItem> shadowDraws_; //< capacityを維持する描画Geometry snapshot
 		ModelResource model_; //< Scene指定モデルのGPU Resource
 		const ModelAssetData* modelAsset_ = nullptr; //< Sceneが選択・ロードしたCPU Asset（非所有）
 		const ModelInstance* modelPose_ = nullptr; //< Sceneが更新するCPU姿勢（非所有）

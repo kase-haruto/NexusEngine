@@ -11,6 +11,7 @@
 #include "Foundation/Math/Matrix4x4.h"
 #include "ModelAnimation.h"
 #include "Graphics/Resource/SamplerDesc.h"
+#include "Graphics/Material/OpticalMaterial.h"
 
 namespace NexusEngine {
 	class GraphicsResourceFactory;
@@ -31,6 +32,7 @@ namespace NexusEngine {
 		std::string name;
 		std::array<float, 4> baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
 		SamplerDesc sampler;
+		OpticalMaterial optics;
 	};
 
 	/*-----------------------------------------------------------------------------------------

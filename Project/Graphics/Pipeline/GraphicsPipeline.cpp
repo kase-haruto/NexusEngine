@@ -1,10 +1,21 @@
 #include "GraphicsPipeline.h"
+#include "RootSignature.h"
 
 #include "Graphics/Resource/Depthstencil/DepthstencilFormatDx12.h"
 
 #include <utility>
 
 namespace NexusEngine {
+	class GraphicsPipeline::Impl final {
+	public:
+		Shader vertexShader;
+		Shader pixelShader;
+		PipelineLayout layout;
+		RootSignature rootSignature;
+		Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+	};
+	GraphicsPipeline::GraphicsPipeline() noexcept = default;
+	GraphicsPipeline::~GraphicsPipeline() noexcept = default;
 	namespace {
 		constexpr int32_t kPipelineCreationFailed = 1;
 		constexpr int32_t kInputMismatch = 2;
@@ -30,11 +41,12 @@ namespace NexusEngine {
 	// Shader Metadataと明示Vertex LayoutからGraphics Pipelineを生成する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> GraphicsPipeline::Initialize(
-		ID3D12Device* const device,
+		void* const nativeDevice,
 		Shader vertexShader,
 		Shader pixelShader,
 		const GraphicsPipelineDesc& pipelineDesc) {
-		if(device == nullptr || pipelineState_) {
+		auto* const device = static_cast<ID3D12Device*>(nativeDevice);
+		if(device == nullptr || impl_) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidState, "Graphics pipeline arguments or state are invalid."));
 		}
 		// Depth TargetのFormatがないPSOでTest/Writeを有効にすると、Output MergerとPSOの契約が成立しない。
@@ -103,32 +115,38 @@ namespace NexusEngine {
 		const HRESULT result = device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState));
 		if(FAILED(result)) return std::unexpected(MakeDirectXError(kPipelineCreationFailed, result, "Failed to create graphics pipeline state."));
 		// PSO生成成功後だけ所有権を確定し、部分初期化状態を公開しない。
-		vertexShader_ = std::move(vertexShader);
-		pixelShader_ = std::move(pixelShader);
-		layout_ = std::move(layout);
-		rootSignature_ = std::move(rootSignature);
-		pipelineState_ = std::move(pipelineState);
+		auto implementation = std::make_unique<Impl>();
+		implementation->vertexShader = std::move(vertexShader);
+		implementation->pixelShader = std::move(pixelShader);
+		implementation->layout = std::move(layout);
+		implementation->rootSignature = std::move(rootSignature);
+		implementation->pipelineState = std::move(pipelineState);
+		impl_ = std::move(implementation);
 		return {};
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Draw前にRootSignatureとPSOをCommandListへ設定する
 	/////////////////////////////////////////////////////////////////////////////////////////
-	void GraphicsPipeline::Bind(ID3D12GraphicsCommandList* const commandList) const noexcept {
-		commandList->SetGraphicsRootSignature(rootSignature_.GetNative());
-		commandList->SetPipelineState(pipelineState_.Get());
+	void GraphicsPipeline::Bind(void* const nativeCommandList) const noexcept {
+		if(!impl_) return;
+		auto* const commandList = static_cast<ID3D12GraphicsCommandList*>(nativeCommandList);
+		commandList->SetGraphicsRootSignature(impl_->rootSignature.GetNative());
+		commandList->SetPipelineState(impl_->pipelineState.Get());
 	}
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Device依存Pipeline Resourceを破棄する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	void GraphicsPipeline::Shutdown() noexcept {
-		pipelineState_.Reset();
-		rootSignature_ = {};
-		layout_ = {};
-		vertexShader_ = {};
-		pixelShader_ = {};
+		impl_.reset();
 	}
-	const PipelineLayout& GraphicsPipeline::GetLayout() const noexcept { return layout_; }
-	const RootSignature& GraphicsPipeline::GetRootSignature() const noexcept { return rootSignature_; }
+	const PipelineLayout& GraphicsPipeline::GetLayout() const noexcept {
+		static const PipelineLayout empty;
+		return impl_ ? impl_->layout : empty;
+	}
+	const RootSignature& GraphicsPipeline::GetRootSignature() const noexcept {
+		static const RootSignature empty;
+		return impl_ ? impl_->rootSignature : empty;
+	}
 
 } // namespace NexusEngine

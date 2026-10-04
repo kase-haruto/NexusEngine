@@ -8,6 +8,7 @@
 // engine
 #include "Foundation/Error/Result.h"
 #include "GraphicsDeviceDesc.h"
+#include "GraphicsCapabilities.h"
 
 namespace NexusEngine {
 
@@ -42,8 +43,10 @@ namespace NexusEngine {
 		[[nodiscard]] ID3D12Device* GetDevice() const noexcept;
 		[[nodiscard]] IDXGIFactory4* GetFactory() const noexcept;
 		[[nodiscard]] IDXGIAdapter4* GetAdapter() const noexcept;
+		[[nodiscard]] const GraphicsCapabilities& GetCapabilities() const noexcept { return capabilities_; }
 
 	private:
+		GraphicsCapabilities capabilities_; //< Device初期化時に確定するAPI非依存の機能情報
 		Microsoft::WRL::ComPtr<IDXGIFactory4> factory_; //< Adapter列挙と将来のSwapChain生成に使用するFactory
 		Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter_; //< Device生成元として選択したGPU Adapter
 		Microsoft::WRL::ComPtr<ID3D12Device>  device_;	 //< 後続Graphics機能が非所有参照するD3D12 Device

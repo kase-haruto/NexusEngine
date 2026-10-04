@@ -23,7 +23,13 @@ namespace NexusEngine {
 		float padding = 0.0f; //< HLSL 16byte register境界用padding
 		std::array<float, 4> tint = { 1.0f, 1.0f, 1.0f, 1.0f }; //< Vertex colorとTextureへ乗算するRGBA
 		std::array<Matrix4x4, kMaxSkinJoints> jointPalette = {}; //< 現在姿勢のSkin Matrix
+		uint32_t shadowMaskIndex = 0; //< 共通Visibility Mask、0は全可視
+		std::array<uint32_t, 3> shadowPadding {}; //< HLSL 16byte境界
+		std::array<float, 4> lightDirectionIntensity { 0.0f, 1.0f, 0.0f, 1.0f }; //< Surface->Light方向/強度
+		std::array<float, 4> lightColor { 1, 1, 1, 0 }; //< 線形RGBとpadding
+		uint32_t opticalRadianceIndex = 0; //< Reflection/Transmission合成Texture
+		std::array<uint32_t, 3> opticalPadding {};
 	};
 
-	static_assert(sizeof(PrimitiveDrawData) == 4256);
+	static_assert(sizeof(PrimitiveDrawData) == 4320);
 } // namespace NexusEngine

@@ -161,6 +161,15 @@
     <ClCompile Include="Graphics\Device\GraphicsAdapterSelector.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDebugConfigurator.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDevice.cpp" />
+    <ClCompile Include="Graphics\Shadow\ShadowSystem.cpp" />
+    <ClCompile Include="Graphics\RayTracing\OpticalSystem.cpp" />
+    <ClCompile Include="Graphics\Model\PrimitiveMeshBuilder.cpp" />
+    <ClCompile Include="Samples\OpticalDemoScene.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Shadow\ShadowBackend.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Shadow\ShadowMapTechnique.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Shadow\RayTracedShadowTechnique.cpp" />
 	<ClCompile Include="Graphics\Presentation\SwapChain.cpp" />
 	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp" />
 	<ClCompile Include="Graphics\Pipeline\PipelineLayout.cpp" />
@@ -235,6 +244,16 @@
     <ClInclude Include="Graphics\Device\GraphicsAdapterSelector.h" />
     <ClInclude Include="Graphics\Device\GraphicsDebugConfigurator.h" />
     <ClInclude Include="Graphics\Device\GraphicsDevice.h" />
+    <ClInclude Include="Graphics\Device\GraphicsCapabilities.h" />
+    <ClInclude Include="Graphics\Shadow\ShadowTypes.h" />
+    <ClInclude Include="Graphics\Shadow\ShadowSystem.h" />
+    <ClInclude Include="Graphics\Material\OpticalMaterial.h" />
+    <ClInclude Include="Graphics\RayTracing\OpticalSystem.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.h" />
+    <ClInclude Include="Graphics\Model\PrimitiveMeshBuilder.h" />
+    <ClInclude Include="Samples\OpticalDemoScene.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Shadow\ShadowBackend.h" />
     <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h" />
 	<ClInclude Include="Graphics\Presentation\SwapChain.h" />
 	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h" />
@@ -296,6 +315,8 @@
 	<ClInclude Include="Runtime\Rendering\RenderSceneExtractor.h" />
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
 	<ClInclude Include="Editor\Core\EditorApplication.h" />
+	<ClInclude Include="Editor\Core\EditorSession.h" />
+	<ClInclude Include="Editor\Core\ScenePanels.h" />
 	<ClInclude Include="Editor\Gui\Core\GuiContext.h" />
 	<ClInclude Include="Editor\Gui\Core\GuiItem.h" />
 	<ClInclude Include="Editor\Gui\Core\GuiTheme.h" />
@@ -304,6 +325,14 @@
   </ItemGroup>
   <ItemGroup>
 	<None Include="Docs\GraphicsREADME.md" />
+    <None Include="Docs\RayTracing.md" />
+    <None Include="Shaders\RayTracing\Optical.hlsl" />
+    <None Include="Docs\RayTracingReport.md" />
+    <None Include="Docs\RayTracedOptics.md" />
+    <None Include="Shaders\Shadow\ShadowConstants.hlsli" />
+    <None Include="Shaders\Shadow\Depth.VS.hlsl" />
+    <None Include="Shaders\Shadow\Resolve.CS.hlsl" />
+    <None Include="Shaders\RayTracing\Shadow.hlsl" />
 	<None Include="Docs\SceneREADME.md" />
 	<None Include="Docs\ECSREADME.md" />
 	<None Include="Shaders\Primitive\Primitive.VS.hlsl" />

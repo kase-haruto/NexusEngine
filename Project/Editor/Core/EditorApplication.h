@@ -5,10 +5,13 @@
 #include "Editor/ImGui/ImGuiRenderer.h"
 #include "Graphics/Model/ModelAssetData.h"
 #include "Graphics/Model/ModelInstance.h"
-#include "Runtime/Level/Level.h"
+#include "EditorSession.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
 
 namespace NexusEngine {
+	class ShadowSystem;
+	class OpticalSystem;
+	class PrimitiveRenderer;
 	/*-----------------------------------------------------------------------------------------
 	 * EditorApplication
 	 * - Editor UIの構築とImGui描画基盤の接続を担当する
@@ -23,6 +26,16 @@ namespace NexusEngine {
 		[[nodiscard]] const ModelInstance&	GetModelPose() const noexcept { return modelPose_; }
 
 		void ShowGui();
+		/** \brief Application所有Rendererの設定窓口を非所有接続する */
+		void SetShadowSystem(ShadowSystem* shadows) noexcept {
+			shadows_ = shadows;
+		}
+		void SetOpticalSystem(OpticalSystem* optics) noexcept {
+			optics_ = optics;
+		}
+		void SetMaterialRenderer(PrimitiveRenderer* renderer) noexcept {
+			materialRenderer_ = renderer;
+		}
 
 		/**
 		 * @brief 初期化
@@ -62,6 +75,11 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		ShadowSystem* shadows_ = nullptr; //< Runtime設定/診断のみ参照する。ImGuiはEditor内に限定
+		OpticalSystem* optics_ = nullptr; //< Optical Passの設定のみを編集する非所有参照
+		PrimitiveRenderer* materialRenderer_ = nullptr; //< 光学Materialの設定窓口、非所有
+		uint32_t mirrorMaterialSlot_ = 0;
+		uint32_t glassMaterialSlot_ = 0;
 		void DrawDockSpace();
 		void DrawMainMenuBar();
 
@@ -69,7 +87,7 @@ namespace NexusEngine {
 		UI::Context	  guiContext_;			   //< gui
 		bool		  showDemoWindow_ = false; //< ImGui Demo Windowの表示フラグ
 
-		Level				 level_{"EditorLevel"}; //< Editor viewportが操作するRuntime Level
+		EditorSession session_; //< 編集Worldと選択状態を所有する
 		RenderSceneExtractor extractor_;			//< Runtimeから描画snapshotへの境界
 		RenderScene			 renderScene_;			//< Rendererへの値snapshot。EditorApplicationと同寿命
 
@@ -81,8 +99,8 @@ namespace NexusEngine {
 		Entity		   rotatingEntity_;							  //< デモSceneの回転対象。Level破棄より前に無効化する
 		Vector3		   rotationRadians_{};						  //< デモ回転の累積角度。描画回数ではなくUpdateで進める
 		Vector3		   rotationSpeed_{0.45f, 0.75f, 0.0f};		  //< Sceneで編集する角速度（rad/s）
-		Vector3		   cameraInitTranslation_{-7.5f, 1.0f, 0.1f}; //< カメラ初期座標
-		Vector3		   cameraInitRotation_{0.0f, 1.54f, 0.0f};	  //< カメラ初期回転
+		Vector3		   cameraInitTranslation_{-7.5f, 1.7f, 0.0f}; //< Sponza内の両Sphereを正面から見る
+		Vector3		   cameraInitRotation_{0.12f, 1.57079633f, 0.0f}; //< Sponzaの通路に沿って見る初期回転
 
 	};
 } // namespace NexusEngine

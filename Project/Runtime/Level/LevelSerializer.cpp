@@ -26,7 +26,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 1;
+		constexpr uint32_t kFormatVersion = 2;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -131,7 +131,7 @@ namespace NexusEngine {
 				}
 				if(const auto* primitive = entity.GetComponent<PrimitiveRenderComponent>()) {
 					output << "PRIMITIVE 1 " << primitive->tint[0] << ' ' << primitive->tint[1] << ' '
-					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << '\n';
+					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << '\n';
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
@@ -155,7 +155,7 @@ namespace NexusEngine {
 		std::string token;
 		uint32_t version = 0;
 		std::string loadedName;
-		if(!(input >> token >> version) || token != "NEXUS_LEVEL" || version != kFormatVersion ||
+		if(!(input >> token >> version) || token != "NEXUS_LEVEL" || (version != 1 && version != kFormatVersion) ||
 		   !(input >> token >> std::quoted(loadedName)) || token != "LEVEL") {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Level header or version is invalid."));
 		}
@@ -223,6 +223,7 @@ namespace NexusEngine {
 			if(hasPrimitive) {
 				PrimitiveRenderComponent primitive;
 				if(!(input >> primitive.tint[0] >> primitive.tint[1] >> primitive.tint[2] >> primitive.tint[3] >> primitive.enabled) ||
+				   (version >= 2 && !(input >> primitive.nodeIndex)) ||
 				   !IsValid(primitive) ||
 				   entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));

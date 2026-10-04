@@ -42,7 +42,7 @@ namespace NexusEngine {
 		scene.ForEach<TransformComponent, PrimitiveRenderComponent>(
 			[&](Entity entity, TransformComponent& transform, PrimitiveRenderComponent& primitive) {
 				if(primitive.enabled) {
-					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint });
+					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint, primitive.nodeIndex });
 				}
 			});
 

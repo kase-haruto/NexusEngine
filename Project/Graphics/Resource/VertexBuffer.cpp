@@ -28,4 +28,6 @@ namespace NexusEngine {
 	void	 VertexBuffer::Shutdown() noexcept { impl_.reset(); }
 	bool	 VertexBuffer::IsInitialized() const noexcept { return impl_ != nullptr; }
 	uint32_t VertexBuffer::GetVertexCount() const noexcept { return impl_ ? impl_->vertexCount : 0; }
+	void* VertexBuffer::GetNativeResource() const noexcept { return impl_ ? impl_->resource.Get() : nullptr; }
+	uint32_t VertexBuffer::GetStride() const noexcept { return impl_ ? impl_->view.StrideInBytes : 0; }
 } // namespace NexusEngine

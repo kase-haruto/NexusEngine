@@ -8,6 +8,7 @@
 // engine
 #include "Foundation/Error/Result.h"
 #include "GraphicsSystemDesc.h"
+#include "Graphics/Device/GraphicsCapabilities.h"
 
 namespace NexusEngine {
 	class IGraphicsRenderer;
@@ -60,6 +61,8 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> AttachRenderer(IGraphicsRenderer* renderer);
 		/** \brief 上位描画拡張を初期化してPresent前の記録経路へ接続する */
 		[[nodiscard]] Result<void> AttachRenderExtension(IGraphicsRenderExtension* extension);
+		/** \brief 起動時GPU機能の値を返す。未初期化時は全機能が非対応 */
+		[[nodiscard]] GraphicsCapabilities GetCapabilities() const noexcept;
 
 	private:
 		class Impl;

@@ -38,13 +38,20 @@ namespace NexusEngine {
 		void Shutdown() noexcept;
 		[[nodiscard]] bool IsInitialized() const noexcept;
 		[[nodiscard]] const std::vector<SubmeshRange>& GetSubmeshes() const noexcept;
+		/** \brief 再生成時に変わるGeometry識別値。Memory address再利用とGeometry変更を区別する */
+		[[nodiscard]] uint64_t GetGeometryGeneration() const noexcept { return geometryGeneration_; }
 
 	private:
 		friend class GraphicsContext;
 		friend class GraphicsResourceFactory;
+		friend class RayTracingScene;
+		friend class OpticalBackend;
+		/** \brief 完全なGeometry upload成功後だけ新世代を公開する */
+		void CommitGeometryGeneration() noexcept;
 
 		VertexBuffer vertexBuffer_;
 		IndexBuffer indexBuffer_;
 		std::vector<SubmeshRange> submeshes_;
+		uint64_t geometryGeneration_ = 0; //< 0は未生成。成功した再生成ごとに更新
 	};
 } // namespace NexusEngine

@@ -49,9 +49,15 @@ namespace NexusEngine {
 
 		const DxcBuffer sourceBuffer { source->GetBufferPointer(), source->GetBufferSize(), DXC_CP_UTF8 };
 		std::vector<LPCWSTR> arguments = {
-			desc.sourcePath.c_str(), L"-E", desc.entryPoint.c_str(), L"-T", desc.targetProfile.c_str(),
+			desc.sourcePath.c_str(), L"-T", desc.targetProfile.c_str(),
 			L"-HV", L"2021", L"-Werror"
 		};
+		// DXR libraries export several entry functions; they have no single -E entry point.
+		// Use the same include/diagnostic/optimization path as raster and compute shaders.
+		if(!desc.entryPoint.empty()) {
+			arguments.push_back(L"-E");
+			arguments.push_back(desc.entryPoint.c_str());
+		}
 #if defined(_DEBUG) || defined(NEXUS_DEVELOP)
 		arguments.push_back(L"-Zi");
 		arguments.push_back(L"-Qembed_debug");

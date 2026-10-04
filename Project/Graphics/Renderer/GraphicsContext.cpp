@@ -11,6 +11,7 @@
 #include "Graphics/Descriptor/BindlessDescriptorTable.h"
 #include "Graphics/Descriptor/TransientDescriptorArena.h"
 #include "Graphics/Pipeline/GraphicsPipeline.h"
+#include "Graphics/Pipeline/RootSignature.h"
 #include "Graphics/Resource/ConstantBuffer.h"
 #include "Graphics/Resource/IndexBuffer.h"
 #include "Graphics/Resource/MeshResource.h"
@@ -30,10 +31,32 @@ namespace NexusEngine {
 		  frameIndex_(frameIndex),
 		  renderWidth_(renderWidth),
 		  renderHeight_(renderHeight) {}
+	GraphicsContext::~GraphicsContext() noexcept { CompleteRecording(false); }
+	void GraphicsContext::CompleteRecording(const bool submitted) noexcept {
+		for(auto& listener : recordingListeners_) {
+			if(listener.complete) listener.complete(listener.owner, submitted, frameIndex_);
+			listener = {};
+		}
+	}
+	Result<void> GraphicsContext::RegisterRecording(void* owner, void (*complete)(void*, bool, uint32_t)) {
+		for(auto& listener : recordingListeners_) {
+			if(!listener.complete || listener.owner == owner) { listener = {owner, complete}; return {}; }
+		}
+		return std::unexpected(Error(ErrorCategory::Graphics, 70, "Too many recording completion listeners."));
+	}
 
 	void GraphicsContext::SetGraphicsPipeline(const GraphicsPipeline& pipeline) noexcept {
 		// Backend型への変換はこの翻訳単位だけで行い、上位RendererへCommand Listを公開しない。
 		pipeline.Bind(static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_));
+	}
+	void GraphicsContext::RestoreMainRenderTargets() noexcept {
+		auto* commands = static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_);
+		const D3D12_CPU_DESCRIPTOR_HANDLE rtv { nativeRtv_ }, dsv { nativeDsv_ };
+		commands->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+		const D3D12_VIEWPORT viewport { 0, 0, static_cast<float>(renderWidth_), static_cast<float>(renderHeight_), 0, 1 };
+		const D3D12_RECT scissor { 0, 0, static_cast<LONG>(renderWidth_), static_cast<LONG>(renderHeight_) };
+		commands->RSSetViewports(1, &viewport);
+		commands->RSSetScissorRects(1, &scissor);
 	}
 
 	bool GraphicsContext::SetGraphicsDescriptorTables(

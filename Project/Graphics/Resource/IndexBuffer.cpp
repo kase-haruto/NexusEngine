@@ -51,6 +51,7 @@ namespace NexusEngine {
 
 	void IndexBuffer::Shutdown() noexcept { impl_.reset(); }
 	bool IndexBuffer::IsInitialized() const noexcept { return impl_ != nullptr; }
+	void* IndexBuffer::GetNativeResource() const noexcept { return impl_ ? impl_->resource.Get() : nullptr; }
 	uint32_t IndexBuffer::GetIndexCount() const noexcept { return impl_ ? impl_->indexCount : 0; }
 	IndexFormat IndexBuffer::GetFormat() const noexcept {
 		return impl_ ? impl_->format : IndexFormat::UInt16;

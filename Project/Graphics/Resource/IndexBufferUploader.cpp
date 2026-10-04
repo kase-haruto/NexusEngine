@@ -43,7 +43,9 @@ namespace NexusEngine {
 
 		D3D12_RESOURCE_DESC bufferDesc = {};
 		bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		bufferDesc.Width = data.size();
+		// DXR hit shaders read UInt16 indices via 32bit raw loads, including the final
+		// halfword of an odd-length triangle list. Pad storage while keeping the IA view count.
+		bufferDesc.Width = (static_cast<uint64_t>(data.size()) + 3) & ~uint64_t(3);
 		bufferDesc.Height = 1;
 		bufferDesc.DepthOrArraySize = 1;
 		bufferDesc.MipLevels = 1;
@@ -55,7 +57,7 @@ namespace NexusEngine {
 		Microsoft::WRL::ComPtr<ID3D12Resource> destination;
 		HRESULT result = device->CreateCommittedResource(
 			&defaultHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc,
-			D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&destination));
+			D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&destination));
 		if(FAILED(result)) {
 			return std::unexpected(MakeDirectXError(kDestinationCreationFailed, result,
 				"Failed to create default heap index buffer."));
@@ -79,6 +81,7 @@ namespace NexusEngine {
 			return std::unexpected(MakeDirectXError(kUploadMapFailed, result,
 				"Failed to map index upload staging buffer."));
 		}
+		std::memset(mapped, 0, static_cast<size_t>(bufferDesc.Width));
 		std::memcpy(mapped, data.data(), data.size());
 		uploadResource->Unmap(0, nullptr);
 
@@ -86,13 +89,15 @@ namespace NexusEngine {
 		auto contextResult = uploadContext.Initialize(device);
 		if(!contextResult) return contextResult;
 		auto* commandList = uploadContext.GetCommandList();
-		commandList->CopyBufferRegion(destination.Get(), 0, uploadResource.Get(), 0, data.size());
+		commandList->CopyBufferRegion(destination.Get(), 0, uploadResource.Get(), 0, bufferDesc.Width);
+		// COMMONからCopy操作でCOPY_DESTへ暗黙昇格済みなので、以下のBarrierのBeforeはCOPY_DEST。
 		D3D12_RESOURCE_BARRIER barrier = {};
 		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 		barrier.Transition.pResource = destination.Get();
 		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+		// AS Buildも同じIndexを参照するため、読み取り専用状態を併用する。
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 		commandList->ResourceBarrier(1, &barrier);
 
 		// stagingとCopy commandはGPUが参照を終えるまでscope内に保持する。

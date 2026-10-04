@@ -8,6 +8,7 @@
 
 // engine
 #include "Foundation/Math/Matrix4x4.h"
+#include "Graphics/Shadow/ShadowTypes.h"
 
 namespace NexusEngine {
 
@@ -41,9 +42,11 @@ namespace NexusEngine {
 	 * - Scene ComponentやGPU Resourceへの参照は保持しない
 	 *---------------------------------------------------------------------------------------*/
 	struct PrimitiveRenderItem {
+		static constexpr uint32_t kAllNodes = UINT32_MAX;
 		RenderObjectId sourceObject;                            //< Pickingや診断に使う生成元Object
 		Matrix4x4 worldMatrix;                                  //< 抽出時点のWorld変換
 		std::array<float, 4> tint { 1.0f, 1.0f, 1.0f, 1.0f }; //< RGBA色倍率
+		uint32_t nodeIndex = kAllNodes; //< Model全体または指定Nodeのみを描画する
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -52,6 +55,7 @@ namespace NexusEngine {
 	 * - Scene、Entity、Component Storageの型とLifetimeには依存しない
 	 *---------------------------------------------------------------------------------------*/
 	struct RenderScene {
+		DirectionalLightData directionalLight; //< API非依存Lightingと影の共通入力
 		std::optional<RenderCamera> camera;          //< Camera未配置のSceneでは空
 		std::vector<PrimitiveRenderItem> primitives; //< 組み込みPrimitive描画項目
 	};

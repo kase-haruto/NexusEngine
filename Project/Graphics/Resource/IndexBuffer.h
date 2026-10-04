@@ -37,6 +37,10 @@ namespace NexusEngine {
 	private:
 		friend class GraphicsContext;
 		friend class IndexBufferUploader;
+		friend class RayTracingScene;
+		friend class OpticalBackend;
+		/** \brief AS BackendだけがGeometry Resourceを非所有参照する */
+		[[nodiscard]] void* GetNativeResource() const noexcept;
 		/** \brief Upload完了済みNative Resourceの所有権とView情報をcommitする */
 		void Commit(void* nativeResource, uint32_t sizeInBytes, IndexFormat format, uint32_t indexCount);
 		/** \brief 現在のCommand ListのInput AssemblerへIndex Viewを設定する */

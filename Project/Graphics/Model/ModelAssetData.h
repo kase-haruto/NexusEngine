@@ -12,6 +12,7 @@
 #include "Graphics/Resource/IndexBuffer.h"
 #include "Graphics/Resource/MeshResource.h"
 #include "Graphics/Resource/SamplerDesc.h"
+#include "Graphics/Material/OpticalMaterial.h"
 
 namespace NexusEngine {
 	/** Static model pipelineへ渡す共通頂点形式。Loaderごとの差をGPU境界へ持ち込まない。 */
@@ -42,6 +43,7 @@ namespace NexusEngine {
 		std::array<float, 4> baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
 		std::vector<uint8_t> baseColorImageData;
 		SamplerDesc sampler;
+		OpticalMaterial optics; //< Raster/RTで共有する鏡面と透過の値
 	};
 
 	/** Model hierarchy上のNode。Meshを持たないTransform Nodeも許可する。 */

@@ -26,11 +26,11 @@ namespace NexusEngine {
 	class Level final {
 	public:
 		explicit Level(std::string name = "Level");
-		~Level() = default;
-		Level(const Level&) = delete;
+		~Level()					   = default;
+		Level(const Level&)			   = delete;
 		Level& operator=(const Level&) = delete;
-		Level(Level&&) = delete;
-		Level& operator=(Level&&) = delete;
+		Level(Level&&)				   = delete;
+		Level& operator=(Level&&)	   = delete;
 
 		/** \brief 空のECS Worldを生成してLevelをLoaded状態にする */
 		[[nodiscard]] Result<void> LoadEmpty();
@@ -50,20 +50,20 @@ namespace NexusEngine {
 		/** \brief 登録済みSystemを1 frame更新する */
 		[[nodiscard]] Result<void> Update(float deltaTime);
 
-		[[nodiscard]] LevelState GetState() const noexcept { return state_; }
+		[[nodiscard]] LevelState		 GetState() const noexcept { return state_; }
 		[[nodiscard]] const std::string& GetName() const noexcept { return name_; }
-		[[nodiscard]] Scene* GetScene() noexcept { return scene_.get(); }
-		[[nodiscard]] const Scene* GetScene() const noexcept { return scene_.get(); }
-		[[nodiscard]] SystemScheduler& GetSystemScheduler() noexcept { return scheduler_; }
+		[[nodiscard]] Scene*			 GetScene() noexcept { return scene_.get(); }
+		[[nodiscard]] const Scene*		 GetScene() const noexcept { return scene_.get(); }
+		[[nodiscard]] SystemScheduler&	 GetSystemScheduler() noexcept { return scheduler_; }
 
 	private:
 		friend class LevelSerializer;
 
-		std::string name_;                       //< Editorと診断に使うLevel名
-		std::unique_ptr<Scene> scene_;            //< EntityとComponentを所有するECS World
-		SystemScheduler scheduler_;               //< Sceneへ処理を適用するSystem群
-		PersistentIdGenerator persistentIds_;     //< 新規Entityの永続ID発行元
-		LevelState state_ = LevelState::Unloaded; //< Worldへのアクセス可否を表す状態
+		std::string			   name_;						  //< Editorと診断に使うLevel名
+		std::unique_ptr<Scene> scene_;						  //< EntityとComponentを所有するECS World
+		SystemScheduler		   scheduler_;					  //< Sceneへ処理を適用するSystem群
+		PersistentIdGenerator  persistentIds_;				  //< 新規Entityの永続ID発行元
+		LevelState			   state_ = LevelState::Unloaded; //< Worldへのアクセス可否を表す状態
 	};
 
 } // namespace NexusEngine

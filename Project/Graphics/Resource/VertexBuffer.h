@@ -26,6 +26,11 @@ namespace NexusEngine {
 	private:
 		friend class GraphicsContext;
 		friend class VertexBufferUploader;
+		friend class RayTracingScene;
+		friend class OpticalBackend;
+		/** \brief AS BackendだけがGeometry Resourceを非所有参照する */
+		[[nodiscard]] void* GetNativeResource() const noexcept;
+		[[nodiscard]] uint32_t GetStride() const noexcept;
 		void Commit(void* nativeResource, uint32_t sizeInBytes, uint32_t stride, uint32_t vertexCount);
 		void Bind(void* nativeCommandList) const noexcept;
 		class Impl;

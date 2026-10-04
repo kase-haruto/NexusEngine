@@ -149,6 +149,36 @@ namespace NexusEngine::Tests {
 		const size_t capacity = snapshot.primitives.capacity();
 		assert(extractor.ExtractInto(*source.GetScene(), 1.5f, snapshot).has_value());
 		assert(snapshot.primitives.capacity() == capacity);
+
+		// 独立したNodeを抽出し、一方の編集が他方のWorldへ伝播しない。
+		child.GetComponent<PrimitiveRenderComponent>()->nodeIndex = 3;
+		Entity independent = source.CreateEntity("independent node");
+		auto* independentPrimitive = independent.AddComponent<PrimitiveRenderComponent>();
+		assert(independentPrimitive != nullptr);
+		independentPrimitive->nodeIndex = 7;
+		child.GetComponent<TransformComponent>()->translation.x = 12.0f;
+		assert(source.Update(0.0f).has_value());
+		assert(extractor.ExtractInto(*source.GetScene(), 1.5f, snapshot).has_value());
+		assert(snapshot.primitives.size() == 2);
+		bool foundIndependent = false;
+		bool foundEdited = false;
+		for(const auto& item : snapshot.primitives) {
+			if(item.nodeIndex == 7) {
+				foundIndependent = true;
+				assert(item.worldMatrix.At(3, 0) == 0.0f);
+			}
+			if(item.nodeIndex == 3) {
+				foundEdited = true;
+				assert(item.worldMatrix.At(3, 0) == 12.0f);
+			}
+		}
+		assert(foundIndependent && foundEdited);
+		assert(parent.RemoveComponent<TestComponent>());
+		assert(source.Save(path).has_value());
+		Level nodeRestored;
+		assert(nodeRestored.Load(path).has_value());
+		const auto independentId = independent.GetComponent<PersistentIdComponent>()->value;
+		assert(nodeRestored.FindEntity(independentId).GetComponent<PrimitiveRenderComponent>()->nodeIndex == 7);
 		source.Unload();
 		assert(source.GetState() == LevelState::Unloaded && source.GetScene() == nullptr);
 		std::filesystem::remove(path);

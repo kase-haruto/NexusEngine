@@ -231,6 +231,8 @@
 	<ClInclude Include="Graphics\Renderer\RenderScene.h"><Filter>Graphics\Renderer</Filter></ClInclude>
 	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h"><Filter>Editor\ImGui</Filter></ClInclude>
 	<ClInclude Include="Editor\Core\EditorApplication.h"><Filter>Editor\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Core\EditorSession.h"><Filter>Editor\Core</Filter></ClInclude>
+	<ClInclude Include="Editor\Core\ScenePanels.h"><Filter>Editor\Core</Filter></ClInclude>
 	<ClInclude Include="Editor\Gui\Core\GuiContext.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
 	<ClInclude Include="Editor\Gui\Core\GuiItem.h"><Filter>Editor\Gui\Core</Filter></ClInclude>
 	<ClInclude Include="Editor\Gui\Core\GuiTheme.h"><Filter>Editor\Gui\Core</Filter></ClInclude>

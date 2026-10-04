@@ -10,6 +10,7 @@
 #include "Foundation/Error/Result.h"
 #include "Graphics/Descriptor/ShaderResourceRef.h"
 #include "Graphics/Pipeline/GraphicsPipeline.h"
+#include "Graphics/Device/GraphicsCapabilities.h"
 
 namespace NexusEngine {
 	class BindlessDescriptorTable;
@@ -21,6 +22,9 @@ namespace NexusEngine {
 	class Shader;
 	class TextureResource;
 	class VertexBuffer;
+	class ShadowSystem;
+	class OpticalSystem;
+	class DescriptorManager;
 	struct SamplerDesc;
 	struct TextureDesc;
 	enum class IndexFormat : uint8_t;
@@ -35,6 +39,8 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class GraphicsResourceFactory final {
 	public:
+		/** \brief 既存Device/Descriptor/Frame同期に接続したShadow基盤を初期化する */
+		[[nodiscard]] Result<void> CreateShadowSystem(ShadowSystem& shadows, const std::filesystem::path& shaders);
 		GraphicsResourceFactory() noexcept = default;
 		GraphicsResourceFactory(const GraphicsResourceFactory&) = delete;
 		GraphicsResourceFactory& operator=(const GraphicsResourceFactory&) = delete;
@@ -129,15 +135,24 @@ namespace NexusEngine {
 
 	private:
 		friend class GraphicsSystem;
+#if defined(NEXUS_GRAPHICS_TESTS)
+		friend class GraphicsBackendTestAccess;
+#endif
+		friend class ShadowSystem;
+		friend class OpticalSystem;
 		void ConnectBackend(
 			void* nativeDevice,
 			CommandQueue* commandQueue,
 			BindlessDescriptorTable* bindlessDescriptors,
-			uint32_t framesInFlight) noexcept;
+			uint32_t framesInFlight,
+			DescriptorManager* descriptors = nullptr,
+			GraphicsCapabilities capabilities = {}) noexcept;
 
 		void* nativeDevice_ = nullptr; //< GraphicsSystem所有Deviceへの非所有参照
 		CommandQueue* commandQueue_ = nullptr; //< Upload実行とFence同期に使用する非所有Queue
 		BindlessDescriptorTable* bindlessDescriptors_ = nullptr; //< 世代とFence retireを管理する非所有Table
 		uint32_t framesInFlight_ = 0; //< Constant Buffer slice数のBackend規約
+		DescriptorManager* descriptors_ = nullptr; //< Backendの共有Heap所有者、非所有
+		GraphicsCapabilities capabilities_; //< Deviceの起動時機能snapshot
 	};
 } // namespace NexusEngine

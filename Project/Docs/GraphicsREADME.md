@@ -1,5 +1,9 @@
 # NexusEngine Graphics Architecture
 
+Directional Shadowの追加構造・設定・寿命管理は[Ray Tracing System](RayTracing.md)、要件別の変更・検証結果は[実装報告](RayTracingReport.md)を参照してください。
+
+反射・屈折・ガラス透過と2つのSphereの比較シーンは[Ray Traced Optics](RayTracedOptics.md)を参照してください。
+
 ## 1. この文書の目的
 
 この文書は、NexusEngineにおけるDirectX 12 Graphics基盤の構造、描画フロー、リソースの所有権、依存方向、および現在の設計を採用した理由をまとめたものです。

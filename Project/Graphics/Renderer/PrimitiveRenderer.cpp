@@ -15,6 +15,11 @@
 #include "Foundation/Logging/Logger.h"
 
 namespace NexusEngine {
+	Result<void> PrimitiveRenderer::SetOpticalMaterial(uint32_t slot, const OpticalMaterial& optics) {
+		if(slot >= opticalMaterials_.size() || !optics.IsValid())
+			return std::unexpected(Error(ErrorCategory::Graphics, 70, "Invalid optical material slot or coefficients."));
+		opticalMaterials_[slot].optics = optics; return {};
+	}
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Primitive描画に必要なShader、Pipeline、Vertex/Index Bufferを初期化する
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -72,9 +77,10 @@ namespace NexusEngine {
 		}
 
 		// Materialごとに独立したTexture/Samplerを生成し、SubmeshのmaterialSlotで選択する。
-		constexpr std::array<uint8_t, 16> kCheckerPixels = {
-			255, 255, 255, 255,  40, 110, 220, 255,
-			 40, 110, 220, 255, 255, 255, 255, 255
+		// Missing albedo maps multiply by white; a checker fallback would tint mirrors.
+		constexpr std::array<uint8_t, 16> kWhitePixels = {
+			255, 255, 255, 255, 255, 255, 255, 255,
+			255, 255, 255, 255, 255, 255, 255, 255
 		};
 		materialResources_.reserve(asset->materials.size());
 		for(const ModelMaterialAssetData& material : asset->materials) {
@@ -82,7 +88,7 @@ namespace NexusEngine {
 			gpuMaterial.texture = std::make_unique<TextureResource>();
 			result = material.baseColorImageData.empty()
 				? resources_->CreateTexture2D(*gpuMaterial.texture,
-					TextureDesc { 2, 2, TextureFormat::Rgba8UnormSrgb }, kCheckerPixels)
+					TextureDesc { 2, 2, TextureFormat::Rgba8UnormSrgb }, kWhitePixels)
 				: resources_->CreateTexture2DFromEncodedData(
 					*gpuMaterial.texture, material.baseColorImageData);
 			if(!result) {
@@ -120,10 +126,22 @@ namespace NexusEngine {
 				buffers.push_back(std::move(drawBuffer));
 			}
 		}
+		result = resources_->CreateShadowSystem(shadows_, context.shaderDirectory);
+		if(!result) { Shutdown(); return result; }
+		result = optics_.Initialize(*resources_, context.shaderDirectory);
+		if(!result) { Shutdown(); return result; }
+		for(size_t i = 0; i < model_.GetMaterials().size(); ++i) {
+			const auto& material = model_.GetMaterials()[i];
+			opticalMaterials_.push_back({material.baseColorFactor, material.optics,
+				materialResources_[i].textureRef, materialResources_[i].samplerRef});
+		}
 		return {};
 	}
 
 	void PrimitiveRenderer::Shutdown() noexcept {
+		optics_.Shutdown(); opticalDraws_.clear(); opticalMaterials_.clear();
+		shadows_.Shutdown();
+		shadowDraws_.clear();
 		// GraphicsSystemは通常Shutdown前にGPU idleを保証する。参照はそれでも共通retire経路へ渡し、
 		// 実行中のRenderer差し替えへ拡張した場合にも即時slot再利用を起こさない。
 		if(resources_ != nullptr) {
@@ -165,19 +183,66 @@ namespace NexusEngine {
 		if(renderScene_ == nullptr || !renderScene_->camera.has_value() || modelPose_ == nullptr) return;
 		const size_t objectCount = renderScene_->primitives.size();
 		const Matrix4x4 projection = renderScene_->camera->viewProjectionMatrix;
+		// Extract Geometry from the already available draw snapshot, never walk Scene/ECS
+		// again. Static meshes are shared by all Instances, while transforms remain per-instance.
+		shadowDraws_.clear();
+		const auto& shadowNodeTransforms = modelPose_->GetNodeWorldTransforms();
+		opticalDraws_.clear();
+		for(const auto& object : renderScene_->primitives) {
+			for(size_t nodeIndex = 0; nodeIndex < model_.GetNodes().size(); ++nodeIndex) {
+				if(object.nodeIndex != PrimitiveRenderItem::kAllNodes && object.nodeIndex != nodeIndex) continue;
+				const auto& node = model_.GetNodes()[nodeIndex];
+				for(const uint32_t meshIndex : node.meshIndices) {
+					const auto* mesh = model_.GetMesh(meshIndex);
+					if(!mesh) continue;
+					const uint32_t skin = model_.GetMeshSkinIndex(meshIndex);
+					const bool skinned = skin != MeshAssetData::kNoSkin;
+					ShadowDrawItem draw;
+					draw.mesh = mesh; draw.instanceId = object.sourceObject.value;
+					draw.world = skinned ? object.worldMatrix : Multiply(shadowNodeTransforms[nodeIndex], object.worldMatrix);
+					if(!TryInverse(draw.world)) continue; // Match Forward's non-invertible transform rejection.
+					if(skinned) {
+						const auto* palette = modelPose_->GetSkinPalette(skin);
+						if(!palette || palette->size() > kMaxSkinJoints) continue;
+						draw.jointPalette = *palette;
+					}
+					shadowDraws_.push_back(draw);
+					opticalDraws_.push_back({draw, object.tint});
+				}
+			}
+		}
+		auto radiance = optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_);
+		if(!radiance) { NEXUS_LOG_ERROR("Optics", radiance.error().GetMessageText()); drawData_.opticalRadianceIndex = 0; }
+		else drawData_.opticalRadianceIndex = radiance->index;
+		auto mask = shadows_.Render(context, projection, renderScene_->directionalLight, shadowDraws_);
+		if(!mask) { NEXUS_LOG_ERROR("Shadow", mask.error().GetMessageText()); drawData_.shadowMaskIndex = 0; }
+		else drawData_.shadowMaskIndex = mask->index;
+		const auto& light = renderScene_->directionalLight;
+		drawData_.lightDirectionIntensity = { light.direction[0], light.direction[1], light.direction[2], light.intensity };
+		drawData_.lightColor = { light.color[0], light.color[1], light.color[2], 0 };
 		// 各Drawは独立したframe bufferを必要とする。同じCBを書き換えて複数Drawすると、
 		// GPUが全Drawで最後の値を読むため、objectごとに転送領域を確保し高水位まで再利用する。
 		while(extraDrawBuffers_.size() + 1 < objectCount) {
 			std::vector<std::vector<std::unique_ptr<ConstantBuffer>>> buffers(model_.GetMeshCount());
+			extraDrawBuffers_.push_back(std::move(buffers));
+		}
+		// NodeごとのEntityを増やしても全Mesh分のCBをEntityごとに確保しない。
+		for(size_t objectIndex = 1; objectIndex < objectCount; ++objectIndex) {
+			auto& buffers = extraDrawBuffers_[objectIndex - 1];
+			const auto selectedNode = renderScene_->primitives[objectIndex].nodeIndex;
 			for(size_t meshIndex = 0; meshIndex < meshDrawBuffers_.size(); ++meshIndex) {
-				for(size_t submesh = 0; submesh < meshDrawBuffers_[meshIndex].size(); ++submesh) {
+				if(selectedNode != PrimitiveRenderItem::kAllNodes) {
+					if(selectedNode >= model_.GetNodes().size()) continue;
+					const auto& meshes = model_.GetNodes()[selectedNode].meshIndices;
+					if(std::find(meshes.begin(), meshes.end(), static_cast<uint32_t>(meshIndex)) == meshes.end()) continue;
+				}
+				while(buffers[meshIndex].size() < meshDrawBuffers_[meshIndex].size()) {
 					auto buffer = std::make_unique<ConstantBuffer>();
 					auto result = resources_->CreateConstantBuffer(*buffer, sizeof(PrimitiveDrawData));
 					if(!result) { NEXUS_LOG_ERROR("Graphics", result.error().GetMessageText()); return; }
 					buffers[meshIndex].push_back(std::move(buffer));
 				}
 			}
-			extraDrawBuffers_.push_back(std::move(buffers));
 		}
 		// Rendererは描画意図だけを記述し、Native Command List操作はGraphicsContextへ委譲する。
 		context.SetGraphicsPipeline(pipeline_);
@@ -187,6 +252,8 @@ namespace NexusEngine {
 			const Matrix4x4 instanceWorld = renderScene_->primitives[objectIndex].worldMatrix;
 			auto& drawBuffers = objectIndex == 0 ? meshDrawBuffers_ : extraDrawBuffers_[objectIndex - 1];
 			for(std::size_t nodeIndex = 0; nodeIndex < model_.GetNodes().size(); ++nodeIndex) {
+				const auto selectedNode = renderScene_->primitives[objectIndex].nodeIndex;
+				if(selectedNode != PrimitiveRenderItem::kAllNodes && selectedNode != nodeIndex) continue;
 				const ModelNode& node = model_.GetNodes()[nodeIndex];
 				if(node.meshIndices.empty()) continue;
 				const uint32_t skinIndex = model_.GetMeshSkinIndex(node.meshIndices.front());

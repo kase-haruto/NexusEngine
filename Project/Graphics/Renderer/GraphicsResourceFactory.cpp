@@ -2,6 +2,7 @@
 
 // c++
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "Graphics/Resource/VertexBufferUploader.h"
 #include "Graphics/Resource/WicImageDecoder.h"
 #include "Graphics/Shader/Shader.h"
+#include "Graphics/Shadow/ShadowSystem.h"
 
 namespace NexusEngine {
 	namespace {
@@ -51,12 +53,19 @@ namespace NexusEngine {
 		void* const					   nativeDevice,
 		CommandQueue* const			   commandQueue,
 		BindlessDescriptorTable* const bindlessDescriptors,
-		const uint32_t				   framesInFlight) noexcept {
+		const uint32_t				   framesInFlight,
+		DescriptorManager* const descriptors,
+		const GraphicsCapabilities capabilities) noexcept {
 		// 接続と切断はGraphicsSystemだけが行い、FactoryがDevice寿命を越えて利用されることを防ぐ。
 		nativeDevice_		 = nativeDevice;
 		commandQueue_		 = commandQueue;
 		bindlessDescriptors_ = bindlessDescriptors;
 		framesInFlight_		 = framesInFlight;
+		descriptors_ = descriptors;
+		capabilities_ = capabilities;
+	}
+	Result<void> GraphicsResourceFactory::CreateShadowSystem(ShadowSystem& shadows, const std::filesystem::path& shaders) {
+		return shadows.Initialize(*this, shaders);
 	}
 
 	Result<void> GraphicsResourceFactory::CreateGraphicsPipeline(
@@ -97,7 +106,10 @@ namespace NexusEngine {
 		const std::span<const uint8_t> indexData,
 		const IndexFormat indexFormat,
 		const std::vector<SubmeshRange>& submeshes) const {
-		if(mesh.IsInitialized() || submeshes.empty()) {
+		const uint32_t indexStride = indexFormat == IndexFormat::UInt32 ? sizeof(uint32_t) : sizeof(uint16_t);
+		if(mesh.IsInitialized() || submeshes.empty() || vertexStride == 0 || vertexData.empty() ||
+			vertexData.size() % vertexStride != 0 || indexData.size() % indexStride != 0 ||
+			indexData.size() / indexStride > (std::numeric_limits<uint32_t>::max)()) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
 				"Mesh resource state or submesh list is invalid."));
 		}
@@ -110,6 +122,20 @@ namespace NexusEngine {
 				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
 					"Submesh index range is outside the supplied index buffer."));
 			}
+			// Validate while CPU bytes are available, before either Raster or AS can fetch an
+			// out-of-range vertex on the GPU. memcpy avoids alignment assumptions on Asset byte arrays.
+			for(uint64_t index = submesh.firstIndex; index < rangeEnd; ++index) {
+				uint32_t value = 0;
+				if(indexFormat == IndexFormat::UInt32) std::memcpy(&value, indexData.data() + index * indexStride, sizeof(uint32_t));
+				else {
+					uint16_t narrow = 0; std::memcpy(&narrow, indexData.data() + index * indexStride, sizeof(narrow)); value = narrow;
+				}
+				const int64_t vertex = static_cast<int64_t>(value) + submesh.vertexOffset;
+				if(vertex < 0 || static_cast<uint64_t>(vertex) >= vertexData.size() / vertexStride) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Submesh index plus vertex offset is outside the vertex buffer."));
+				}
+			}
 		}
 
 		// Meshは両Bufferが揃ったときだけ有効。Index upload失敗時はVertex Resourceを即座破棄する。
@@ -121,6 +147,7 @@ namespace NexusEngine {
 			return result;
 		}
 		mesh.submeshes_ = submeshes;
+		mesh.CommitGeometryGeneration();
 		return {};
 	}
 
@@ -241,7 +268,7 @@ namespace NexusEngine {
 		} else {
 			model.materials_.reserve(assetData.materials.size());
 			for(const ModelMaterialAssetData& material : assetData.materials) {
-				model.materials_.push_back({ material.name, material.baseColorFactor, material.sampler });
+				model.materials_.push_back({ material.name, material.baseColorFactor, material.sampler, material.optics });
 			}
 		}
 		return {};

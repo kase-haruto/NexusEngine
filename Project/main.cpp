@@ -12,6 +12,9 @@
 int main() {
 	NexusEngine::EditorApplication editor;
 	NexusEngine::PrimitiveRenderer primitiveRenderer;
+	editor.SetShadowSystem(&primitiveRenderer.GetShadows());
+	editor.SetOpticalSystem(&primitiveRenderer.GetOptics());
+	editor.SetMaterialRenderer(&primitiveRenderer);
 
 
 	NexusEngine::FrameworkDesc desc;

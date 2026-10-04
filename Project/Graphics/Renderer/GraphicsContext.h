@@ -29,6 +29,7 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class GraphicsContext final {
 	public:
+		~GraphicsContext() noexcept;
 		GraphicsContext(const GraphicsContext&) = delete;
 		GraphicsContext& operator=(const GraphicsContext&) = delete;
 
@@ -81,6 +82,8 @@ namespace NexusEngine {
 		[[nodiscard]] uint32_t GetRenderWidth() const noexcept { return renderWidth_; }
 		/** \brief 現在の描画先のpixel高さ */
 		[[nodiscard]] uint32_t GetRenderHeight() const noexcept { return renderHeight_; }
+		/** \brief Shadow等の独立Pass後にMain Color/Depth/Viewportを再設定する */
+		void RestoreMainRenderTargets() noexcept;
 		/**
 		 * \brief Native backendと直接接続するRender Extension用のCommand List参照
 		 * \note 通常のRendererはこの逃げ道を使用せず、GraphicsContextの意味ベースAPIを使用すること
@@ -89,6 +92,15 @@ namespace NexusEngine {
 
 	private:
 		friend class GraphicsSystem;
+#if defined(NEXUS_GRAPHICS_TESTS)
+		friend class GraphicsBackendTestAccess;
+#endif
+		friend class ShadowSystem;
+		friend class OpticalSystem;
+		/** \brief 独立Passを最大4件まで記録終了へ接続する。同じOwnerは重複登録しない */
+		[[nodiscard]] Result<void> RegisterRecording(void*, void (*)(void*, bool, uint32_t));
+		/** \brief GPUへ投入されなかった記録を、所有Backendへ通知する */
+		void CompleteRecording(bool submitted) noexcept;
 		explicit GraphicsContext(
 			void* nativeCommandList,
 			BindlessDescriptorTable* bindlessDescriptors,
@@ -103,5 +115,9 @@ namespace NexusEngine {
 		uint32_t frameIndex_ = 0; //< 現在再利用可能になったFrameContext index
 		uint32_t renderWidth_ = 0; //< Viewportと同じ描画幅
 		uint32_t renderHeight_ = 0; //< Viewportと同じ描画高さ
+		uint64_t nativeRtv_ = 0; //< Backendだけが解釈するMain target handle
+		uint64_t nativeDsv_ = 0; //< Backendだけが解釈するMain depth handle
+		struct RecordingListener { void* owner = nullptr; void (*complete)(void*, bool, uint32_t) = nullptr; };
+		RecordingListener recordingListeners_[4] {}; //< Native型を公開しない独立Pass終了通知
 	};
 } // namespace NexusEngine

@@ -61,6 +61,10 @@ namespace NexusEngine {
 	GraphicsSystem::GraphicsSystem() noexcept = default;
 	GraphicsSystem::~GraphicsSystem() noexcept { Shutdown(); }
 
+	GraphicsCapabilities GraphicsSystem::GetCapabilities() const noexcept {
+		return impl_ ? impl_->device.GetCapabilities() : GraphicsCapabilities {};
+	}
+
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Graphicsサブシステムを依存順に初期化する
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -151,7 +155,8 @@ namespace NexusEngine {
 		// Factory自体はResourceを所有せず、生成物は接続されたRendererが明示的に破棄する。
 		implementation->resourceFactory.ConnectBackend(
 			implementation->device.GetDevice(), &implementation->commandQueue,
-			&implementation->bindlessDescriptors, SwapChain::kBufferCount);
+			&implementation->bindlessDescriptors, SwapChain::kBufferCount,
+			&implementation->descriptors, implementation->device.GetCapabilities());
 
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
@@ -277,6 +282,8 @@ namespace NexusEngine {
 			frame.commandList.Get(), &impl_->bindlessDescriptors,
 			&impl_->transientDescriptors, frameIndex,
 			impl_->swapChain.GetWidth(), impl_->swapChain.GetHeight());
+		graphicsContext.nativeRtv_ = rtv.ptr;
+		graphicsContext.nativeDsv_ = dsv.ptr;
 		if(impl_->renderer != nullptr) {
 			impl_->renderer->Render(graphicsContext);
 		}
@@ -295,6 +302,7 @@ namespace NexusEngine {
 		}
 		// Close成功後のListだけをQueueへ投入し、記録資源はFrameContextが所有し続ける。
 		impl_->commandQueue.Execute(frame.commandList.Get());
+		graphicsContext.CompleteRecording(true);
 		// Queue投入済みCommandの完了位置は、後続のPresent成否にかかわらず先に保存する。
 		auto signalResult = impl_->commandQueue.Signal();
 		if(!signalResult) {
