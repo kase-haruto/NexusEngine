@@ -155,7 +155,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DetailsPanel.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\DetailsPanel.cpp" />
     <ClCompile Include="Editor\Core\EditorSession.cpp" />
     <ClCompile Include="Foundation\Error\Error.cpp" />
     <ClCompile Include="Foundation\Logging\ConsoleLogSink.cpp" />
@@ -175,6 +175,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Shadow\ShadowSystem.cpp" />
     <ClCompile Include="Graphics\RayTracing\OpticalSystem.cpp" />
     <ClCompile Include="Graphics\Model\PrimitiveMeshBuilder.cpp" />
+    <ClCompile Include="Runtime\Level\LevelDocument.cpp" />
     <ClCompile Include="Samples\OpticalDemoScene.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.cpp" />
@@ -243,7 +244,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DetailsPanel.h" />
+    <ClInclude Include="Editor\Gui\Panels\DetailsPanel.h" />
     <ClInclude Include="Foundation\Error\Error.h" />
     <ClInclude Include="Foundation\Error\Result.h" />
     <ClInclude Include="Foundation\Logging\ConsoleLogSink.h" />
@@ -277,6 +278,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Graphics\RayTracing\OpticalSystem.h" />
     <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.h" />
     <ClInclude Include="Graphics\Model\PrimitiveMeshBuilder.h" />
+    <ClInclude Include="Runtime\Level\LevelDocument.h" />
     <ClInclude Include="Samples\OpticalDemoScene.h" />
     <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.h" />
     <ClInclude Include="Graphics\Backend\DirectX12\Shadow\ShadowBackend.h" />

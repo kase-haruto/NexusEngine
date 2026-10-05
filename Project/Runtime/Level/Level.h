@@ -56,6 +56,8 @@ namespace NexusEngine {
 		[[nodiscard]] const Scene*		 GetScene() const noexcept { return scene_.get(); }
 		[[nodiscard]] SystemScheduler&	 GetSystemScheduler() noexcept { return scheduler_; }
 
+		void SetName(const std::string& name) noexcept { name_ = name; }
+
 	private:
 		friend class LevelSerializer;
 

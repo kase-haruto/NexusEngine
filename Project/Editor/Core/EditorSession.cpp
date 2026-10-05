@@ -1,20 +1,31 @@
 #include "EditorSession.h"
 
+#include "Runtime/Scene/Components/TransformComponent.h"
 
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
+	auto document = std::make_unique<LevelDocument>();
+	auto result = document->Create("EditorLevel");
+	if(!result) return result;
 	Close();
-	return level_.LoadEmpty();
+	levelDocument_ = std::move(document);
+	return {};
 }
 
 void NexusEngine::EditorSession::Close() noexcept {
 	selected_ = {};
 	dirty_	  = false;
-	level_.Unload();
+	levelDocument_.reset();
 }
 
 void NexusEngine::EditorSession::Select(PersistentId id) {
-	selected_ = level_.FindEntity(id).IsAlive() ? id : PersistentId{};
+	auto* level = GetLevel();
+	selected_ = level && level->FindEntity(id).IsAlive() ? id : PersistentId{};
+}
+
+NexusEngine::Entity NexusEngine::EditorSession::GetSelectedEntity() {
+	auto* level = GetLevel();
+	return level ? level->FindEntity(selected_) : Entity{};
 }
 
 bool NexusEngine::EditorSession::SetTransform(PersistentId id, Vector3 translation, Quaternion rotation, Vector3 scale) {
@@ -23,7 +34,9 @@ bool NexusEngine::EditorSession::SetTransform(PersistentId id, Vector3 translati
 	};
 	const float lengthSquared = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z + rotation.w * rotation.w;
 	if(!finite(translation) || !finite(scale) || !std::isfinite(lengthSquared) || lengthSquared < 1.0e-12f) return false;
-	auto  entity	= level_.FindEntity(id);
+	auto* level = GetLevel();
+	if(level == nullptr) return false;
+	auto  entity	= level->FindEntity(id);
 	auto* transform = entity.GetComponent<TransformComponent>();
 	if(transform == nullptr) return false;
 	const float inverseLength = 1.0f / std::sqrt(lengthSquared);

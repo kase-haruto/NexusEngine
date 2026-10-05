@@ -55,7 +55,7 @@ namespace NexusEngine {
 		}
 
 		// 既存描画デモをLevelデータへ移し、Runtime→Extraction→Renderer経路を実際に通す。
-		cameraEntity_ = session_.GetLevel().CreateEntity("Camera");
+		cameraEntity_ = session_.GetLevel()->CreateEntity("Camera");
 		if(auto* cameraSettings = cameraEntity_.AddComponent<CameraComponent>()) {
 			cameraSettings->verticalFieldOfViewRadians = 1.0471975512f;
 		}
@@ -69,13 +69,13 @@ namespace NexusEngine {
 		for(size_t nodeIndex = 0; nodeIndex < modelAsset_.nodes.size(); ++nodeIndex) {
 			const auto& node = modelAsset_.nodes[nodeIndex];
 			if(node.meshIndices.empty()) continue;
-			auto entity = session_.GetLevel().CreateEntity(node.name.empty() ? "Model Node " + std::to_string(nodeIndex) : node.name);
+			auto entity = session_.GetLevel()->CreateEntity(node.name.empty() ? "Model Node " + std::to_string(nodeIndex) : node.name);
 			if(auto* primitive = entity.AddComponent<PrimitiveRenderComponent>()) {
 				primitive->nodeIndex = static_cast<uint32_t>(nodeIndex);
 			}
 		}
 		if(auto* id = cameraEntity_.GetComponent<PersistentIdComponent>()) session_.Select(id->value);
-		return session_.GetLevel().Update(0.0f);
+		return session_.GetLevel()->Update(0.0f);
 	}
 
 	void EditorApplication::ShowGui() {
@@ -83,7 +83,7 @@ namespace NexusEngine {
 		if(!guiContext_.IsFrameActive()) {
 			return;
 		}
-
+		DrawLevelDemoGui(session_);
 		DrawHierarchy(session_);
 		DrawTransformInspector(session_);
 		if(optics_ && ImGui::Begin("Ray Traced Optics")) {
@@ -198,16 +198,17 @@ namespace NexusEngine {
 
 	Result<void> EditorApplication::Update(const float deltaTime) {
 
+		if(session_.GetLevel() == nullptr) return {};
 		// Transform解決より前にSceneの動きを適用する。同じframeを複数回描画しても時刻は進まない。
-		if(session_.GetLevel().GetScene() == nullptr) return session_.GetLevel().Update(deltaTime);
-		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return session_.GetLevel().Update(deltaTime);
+		if(session_.GetLevel()->GetScene() == nullptr) return session_.GetLevel()->Update(deltaTime);
+		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return session_.GetLevel()->Update(deltaTime);
 		modelPose_.Update(deltaTime);
-		return session_.GetLevel().Update(deltaTime);
+		return session_.GetLevel()->Update(deltaTime);
 	}
 
 	Result<void> EditorApplication::PrepareRender(const uint32_t width, const uint32_t height) {
-		if(session_.GetLevel().GetScene() == nullptr || height == 0) return {};
-		return extractor_.ExtractInto(*session_.GetLevel().GetScene(), static_cast<float>(width) / static_cast<float>(height), renderScene_);
+		if(session_.GetLevel() == nullptr || session_.GetLevel()->GetScene() == nullptr || height == 0) return {};
+		return extractor_.ExtractInto(*session_.GetLevel()->GetScene(), static_cast<float>(width) / static_cast<float>(height), renderScene_);
 	}
 
 	void EditorApplication::BeginFrame() {

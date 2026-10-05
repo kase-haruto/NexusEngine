@@ -8,7 +8,8 @@ namespace NexusEngine {
 	/** \brief 編集WorldのEntity一覧を表示する。親子ツリー表示は未実装 */
 	inline void DrawHierarchy(EditorSession& session) {
 		if(ImGui::Begin("Hierarchy")) {
-			if(auto* scene = session.GetLevel().GetScene()) {
+			if(auto* level = session.GetLevel(); level != nullptr) {
+			if(auto* scene = level->GetScene()) {
 				// ForEach内で別のForEachを行わず、選択要求だけを収集する。
 				PersistentId selection = session.GetSelection();
 				scene->ForEach<NameComponent, PersistentIdComponent>(
@@ -19,6 +20,7 @@ namespace NexusEngine {
 						ImGui::PopID();
 					});
 				session.Select(selection);
+			}
 			}
 		}
 		ImGui::End();
@@ -45,5 +47,9 @@ namespace NexusEngine {
 			}
 		}
 		ImGui::End();
+	}
+
+	inline void DrawLevelDemoGui(EditorSession& session) {
+		session.GetLevelDocument()->ShowGui();
 	}
 }

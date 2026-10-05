@@ -1,8 +1,7 @@
 #pragma once
 
-#include "Runtime/Level/Level.h"
+#include "Runtime/Level/LevelDocument.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
-#include "Runtime/Scene/Components/TransformComponent.h"
 #include <cmath>
 
 namespace NexusEngine {
@@ -21,17 +20,18 @@ namespace NexusEngine {
 		/** \brief 現在のWorldで解決できる永続IDだけを選択する */
 		void Select(PersistentId id);
 
-		[[nodiscard]] PersistentId GetSelection() const noexcept { return selected_; }
-		[[nodiscard]] Entity	   GetSelectedEntity() { return level_.FindEntity(selected_); }
-		[[nodiscard]] Level&	   GetLevel() noexcept { return level_; }
-		[[nodiscard]] bool		   IsDirty() const noexcept { return dirty_; }
+		[[nodiscard]] PersistentId	 GetSelection() const noexcept { return selected_; }
+		[[nodiscard]] Entity		 GetSelectedEntity();
+		[[nodiscard]] LevelDocument* GetLevelDocument() const noexcept { return levelDocument_.get(); }
+		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
+		[[nodiscard]] bool			 IsDirty() const noexcept { return dirty_; }
 
 		/** \brief IDとLocal値による編集を適用する。派生MatrixはLevel更新で再計算する */
 		[[nodiscard]] bool SetTransform(PersistentId id, Vector3 translation, Quaternion rotation, Vector3 scale);
 
 	private:
-		Level		 level_{"EditorLevel"}; //< 編集用World。再生用Worldとは共有しない
-		PersistentId selected_;				//< EntityやComponentのアドレスを保持しない
-		bool		 dirty_ = false;		//< 編集操作が適用されたか
+		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
+		PersistentId				   selected_;	   //< EntityやComponentのアドレスを保持しない
+		bool						   dirty_ = false; //< 編集操作が適用されたか
 	};
 } // namespace NexusEngine
