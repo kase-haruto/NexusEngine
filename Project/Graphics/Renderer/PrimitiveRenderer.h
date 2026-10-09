@@ -19,6 +19,8 @@
 #include "RenderScene.h"
 #include "Graphics/Shadow/ShadowSystem.h"
 #include "Graphics/RayTracing/OpticalSystem.h"
+#include "Graphics/Meshlet/MeshShaderPipeline.h"
+#include "Graphics/Meshlet/MeshletResource.h"
 
 namespace NexusEngine {
 
@@ -29,6 +31,10 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class PrimitiveRenderer final : public IGraphicsRenderer {
 	public:
+		/** \brief Editor に設定値のみを公開する。Runtime は ImGui に依存しない */
+		[[nodiscard]] MeshletDebugSettings& GetMeshletSettings() noexcept { return meshletSettings_; }
+		/** \brief GPU 対応と Pipeline 初期化成功をまとめた利用可能状態 */
+		[[nodiscard]] bool AreMeshShadersAvailable() const noexcept { return meshPipeline_.IsInitialized(); }
 		/**
 		 * \brief Primitive用Shader、Pipeline、Geometry Bufferを初期化する
 		 * \param context GPU Resource FactoryとShader/Assetルートを持つ初期化Context
@@ -66,10 +72,15 @@ namespace NexusEngine {
 			std::unique_ptr<TextureResource> texture;
 			ShaderResourceRef textureRef;
 			ShaderResourceRef samplerRef;
+			std::unique_ptr<TextureResource> normalTexture, metallicRoughnessTexture;
+			ShaderResourceRef normalRef, normalSamplerRef, metallicRoughnessRef, metallicRoughnessSamplerRef;
 		};
 
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
+		MeshShaderPipeline meshPipeline_; //< 独立 AS/MS/PS 経路
+		std::vector<std::unique_ptr<MeshletResource>> meshletResources_; //< 元 Mesh と同じ index の静的 Resource
+		MeshletDebugSettings meshletSettings_; //< Editor が変更する表示 / Culling 設定
 		ShadowSystem shadows_; //< Shadow方式とGPU影Resourceの独立所有者
 		OpticalSystem optics_; //< Reflection/Transmission Radianceの独立所有者
 		std::vector<OpticalDrawItem> opticalDraws_;

@@ -1,4 +1,8 @@
 #include "GraphicsContext.h"
+#include "Graphics/Meshlet/MeshShaderPipeline.h"
+#include "Graphics/Meshlet/MeshletResource.h"
+#include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Material/PrimitiveDrawData.h"
 
 // c++
 #include <limits>
@@ -18,6 +22,24 @@
 #include "Graphics/Resource/VertexBuffer.h"
 
 namespace NexusEngine {
+	bool GraphicsContext::DispatchMeshlets(const MeshShaderPipeline& pipeline, const MeshletResource& meshlets,
+		const MeshResource& mesh, const ConstantBuffer& constants, const MeshCullingView& view,
+		uint32_t submesh, const MeshletDebugSettings& settings) noexcept {
+		if(!settings.enabled || !mesh.IsInitialized() || meshlets.GetGeometryGeneration() != mesh.GetGeometryGeneration() ||
+		   submesh >= meshlets.GetRanges().size() || constants.GetDataSize() != sizeof(PrimitiveDrawData) || frameIndex_ >= constants.GetFrameCount()) return false;
+		const auto range = meshlets.GetRanges()[submesh];
+		auto* const vertices = static_cast<ID3D12Resource*>(mesh.vertexBuffer_.GetNativeResource());
+		if(!vertices || mesh.vertexBuffer_.GetStride() != sizeof(ModelVertex)) return false;
+		const uint64_t addresses[5] {vertices->GetGPUVirtualAddress(), meshlets.GetGpuAddress(0), meshlets.GetGpuAddress(1),
+			meshlets.GetGpuAddress(2), meshlets.GetGpuAddress(3)};
+		if(!meshInterfaceChecked_) {
+			meshInterfaceChecked_ = true;
+			ID3D12GraphicsCommandList6* meshCommands = nullptr;
+			if(SUCCEEDED(static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_)->QueryInterface(IID_PPV_ARGS(&meshCommands))))
+				nativeMeshCommandList_ = meshCommands;
+		}
+		return pipeline.Dispatch(nativeMeshCommandList_, constants.GetGpuAddress(frameIndex_), addresses, view, range.first, range.count, settings);
+	}
 	GraphicsContext::GraphicsContext(
 		void* const					   nativeCommandList,
 		BindlessDescriptorTable* const bindlessDescriptors,
@@ -31,7 +53,10 @@ namespace NexusEngine {
 		  frameIndex_(frameIndex),
 		  renderWidth_(renderWidth),
 		  renderHeight_(renderHeight) {}
-	GraphicsContext::~GraphicsContext() noexcept { CompleteRecording(false); }
+	GraphicsContext::~GraphicsContext() noexcept {
+		CompleteRecording(false);
+		if(nativeMeshCommandList_) static_cast<ID3D12GraphicsCommandList6*>(nativeMeshCommandList_)->Release();
+	}
 	void GraphicsContext::CompleteRecording(const bool submitted) noexcept {
 		for(auto& listener : recordingListeners_) {
 			if(listener.complete) listener.complete(listener.owner, submitted, frameIndex_);

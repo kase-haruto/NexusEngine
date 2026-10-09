@@ -76,6 +76,7 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		GraphicsSystem* graphicsSystem_ = nullptr; //< Non-owning post-process controls.
 		ShadowSystem*	   shadows_			   = nullptr; //< Runtime設定/診断のみ参照する。ImGuiはEditor内に限定
 		OpticalSystem*	   optics_			   = nullptr; //< Optical Passの設定のみを編集する非所有参照
 		PrimitiveRenderer* materialRenderer_   = nullptr; //< 光学Materialの設定窓口、非所有
@@ -98,12 +99,5 @@ namespace NexusEngine {
 		// demo用モデル描画
 		ModelAssetData modelAsset_;									  //< Sceneで選択したCPU Asset。modelPose_より長く生存する
 		ModelInstance  modelPose_;									  //< GPUを参照しないScene固有のAnimation再生状態
-		Entity		   cameraEntity_;								  //< 一時的な編集用Camera。Level破棄より前に無効化する
-		Vector3		   cameraRotationRadians_{};					  //< ImGuiで編集するCameraのEuler角
-		Entity		   rotatingEntity_;								  //< デモSceneの回転対象。Level破棄より前に無効化する
-		Vector3		   rotationRadians_{};							  //< デモ回転の累積角度。描画回数ではなくUpdateで進める
-		Vector3		   rotationSpeed_{0.45f, 0.75f, 0.0f};			  //< Sceneで編集する角速度（rad/s）
-		Vector3		   cameraInitTranslation_{-7.5f, 1.7f, 0.0f};	  //< Sponza内の両Sphereを正面から見る
-		Vector3		   cameraInitRotation_{0.12f, 1.57079633f, 0.0f}; //< Sponzaの通路に沿って見る初期回転
 	};
 } // namespace NexusEngine

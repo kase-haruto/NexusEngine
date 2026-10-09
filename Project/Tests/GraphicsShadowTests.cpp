@@ -5,6 +5,7 @@
 #include <wrl/client.h>
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include "Samples/OpticalDemoScene.h"
@@ -80,7 +81,7 @@ namespace {
 				info->ClearStoredMessages();
 			}
 			Check(queue.Initialize(device.GetDevice()));
-			Check(descriptors.Initialize(device.GetDevice(), largeScene ? 4096U : 512U, 32, 32, largeScene ? 64U : 16U));
+			Check(descriptors.Initialize(device.GetDevice(), largeScene ? 4096U : 512U, 32, 32, largeScene ? 128U : 16U));
 			Check(bindless.Initialize(device.GetDevice(), &descriptors));
 			GraphicsBackendTestAccess::Connect(factory, device, queue, bindless, descriptors, forceUnsupported);
 			Check(shadows.Initialize(device.GetDevice(), &queue, &descriptors, &bindless, &factory,
@@ -99,6 +100,8 @@ namespace {
 			for(size_t i = 0; i < vertices.size(); ++i) {
 				std::copy(std::begin(positions[i]), std::end(positions[i]), vertices[i].position);
 				vertices[i].normal[1] = 0; vertices[i].normal[2] = -1;
+				vertices[i].texcoord[0] = (positions[i][0] + 1) * 0.5f;
+				vertices[i].texcoord[1] = (1 - positions[i][1]) * 0.5f;
 			}
 			std::array<uint16_t, 12> indices { 0,1,2,0,2,3,4,5,6,4,6,7 };
 			if(negativeBaseVertex) for(auto& index : indices) ++index;
@@ -222,7 +225,7 @@ namespace {
 		std::cout << (warp ? "WARP" : "Hardware") << (forceUnsupported ? " (forced unsupported capability)" : "")
 			<< " Shadow tests passed; RayTracing=" << capabilities.SupportsRayTracing() << '\n';
 	}
-	void ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false) {
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = sponza ? 384U : (opticalDemo ? 256U : 64U), height = sponza ? 216U : (opticalDemo ? 192U : 64U);
         uint32_t glassSlot = kOpticalGlassMaterial;
@@ -236,6 +239,30 @@ namespace {
         }
         else if(opticalDemo) { auto asset = CreateOpticalDemoScene(); Check(asset); test.asset = std::move(*asset); }
         else test.asset.materials[0].baseColorFactor = {0.35f,0.35f,0.35f,1}; // Avoid UNORM saturation when comparing shadow lighting.
+		if(pbrVariant != 0) {
+			auto& material = test.asset.materials[0];
+			material.roughnessFactor = pbrVariant == 1 || pbrVariant == 2 ? 0.1f : 1;
+			material.metallicFactor = pbrVariant == 2 || pbrVariant == 5 ? 1.0f : 0.0f;
+			auto pixelImage = [](uint8_t r, uint8_t g, uint8_t b) {
+				std::vector<uint8_t> bytes(58, 0);
+				bytes[0] = 'B'; bytes[1] = 'M'; bytes[2] = 58; bytes[10] = 54; bytes[14] = 40;
+				bytes[18] = 1; bytes[22] = 1; bytes[26] = 1; bytes[28] = 24;
+				bytes[54] = b; bytes[55] = g; bytes[56] = r;
+				return bytes;
+			};
+			if(pbrVariant == 3 || pbrVariant == 6 || pbrVariant == 7) material.normalImageData = pixelImage(230, 128, 204);
+			if(pbrVariant == 4) material.normalImageData = pixelImage(128, 128, 255);
+			if(pbrVariant == 5) material.metallicRoughnessImageData = pixelImage(255, 255, 0);
+			if(pbrVariant == 6 || pbrVariant == 7) {
+				auto& mesh = test.asset.meshes[0];
+				for(size_t offset = 0; offset < mesh.vertexData.size(); offset += sizeof(ModelVertex)) {
+					ModelVertex vertex;
+					std::memcpy(&vertex, mesh.vertexData.data() + offset, sizeof(vertex));
+					vertex.tangent[0] = 1; vertex.tangent[3] = 1;
+					std::memcpy(mesh.vertexData.data() + offset, &vertex, sizeof(vertex));
+				}
+			}
+		}
 		TransientDescriptorArena transient;
 		Check(transient.Initialize(test.device.GetDevice(), &test.descriptors.Resources(), 2, sponza ? 512U : 16U));
 		ModelInstance pose; Check(pose.Initialize(test.asset));
@@ -248,16 +275,26 @@ namespace {
             scene.camera->viewProjectionMatrix = Multiply(scene.camera->viewMatrix, scene.camera->projectionMatrix);
         }
 		scene.directionalLight.direction = { 0.7f, 0, -1 };
+		scene.directionalLight.intensity = opticalDemo ? 10.0f : 3.0f;
+		if(sponza) {
+			scene.directionalLight.direction = {0.4f, 1.0f, 0.3f};
+			// Open courtyard sky contributes diffuse irradiance to shaded interiors.
+			scene.ambientIrradiance = {0.5f, 0.6f, 0.8f};
+		}
 		scene.primitives.push_back({ {1}, Matrix4x4::Identity(), {1,1,1,1} });
 		PrimitiveRenderer renderer;
 		renderer.SetModelInput(&test.asset, &pose); renderer.SetRenderScene(&scene);
 		Check(renderer.Initialize({ test.factory, L"Project/Shaders", L"Project/Resources/Assets" }));
+		if(pbrVariant == 7) {
+			Require(renderer.AreMeshShadersAvailable(), "Mesh Shader PBR pipeline failed to initialize.");
+			renderer.GetMeshletSettings().enabled = true;
+		}
 		ShadowTexture depth; Check(test.shadows.CreateTexture(depth, width, height, true));
 		auto rtv = test.descriptors.RenderTargets().Allocate(); Check(rtv);
 		D3D12_HEAP_PROPERTIES heap {}; heap.Type = D3D12_HEAP_TYPE_DEFAULT;
 		D3D12_RESOURCE_DESC colorDesc {};
 		colorDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; colorDesc.Width = width; colorDesc.Height = height;
-		colorDesc.DepthOrArraySize = 1; colorDesc.MipLevels = 1; colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		colorDesc.DepthOrArraySize = 1; colorDesc.MipLevels = 1; colorDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		colorDesc.SampleDesc.Count = 1; colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		D3D12_CLEAR_VALUE clear {}; clear.Format = colorDesc.Format;
 		ComPtr<ID3D12Resource> color;
@@ -304,8 +341,16 @@ namespace {
 			Check(test.queue.WaitForIdle());
 			void* mapped = nullptr; Native(readback->Map(0, nullptr, &mapped));
 			std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * 4);
-			for(size_t y = 0; y < height; ++y) std::memcpy(pixels.data() + y * width * 4,
-				static_cast<uint8_t*>(mapped) + footprint.Offset + y * footprint.Footprint.RowPitch, width * 4);
+			// Keep the existing lighting comparisons in linear 8-bit space, while the
+			// actual renderer target now retains HDR radiance in half floats.
+			for(size_t y = 0; y < height; ++y) for(size_t x = 0; x < width; ++x) for(size_t channel = 0; channel < 4; ++channel) {
+				uint16_t half = 0;
+				std::memcpy(&half, static_cast<uint8_t*>(mapped) + footprint.Offset + y * footprint.Footprint.RowPitch + x * 8 + channel * 2, 2);
+				const int exponent = (half >> 10) & 31;
+				const float value = exponent == 0 ? std::ldexp(static_cast<float>(half & 1023), -24)
+					: exponent == 31 ? 1.0f : std::ldexp(1.0f + static_cast<float>(half & 1023) / 1024.0f, exponent - 15);
+				pixels[(y * width + x) * 4 + channel] = static_cast<uint8_t>(std::lround(std::clamp((half & 0x8000) ? -value : value, 0.0f, 1.0f) * 255));
+			}
 			readback->Unmap(0, nullptr); return pixels;
 		};
 		// Record an entire first shadow frame, then discard it. Context destruction must
@@ -353,10 +398,24 @@ namespace {
             std::cout << "Optical readback: mirror=" << reflectionChanged << " glass=" << transmissionChanged << " depth=" << glassDepthChanged << " colored=" << coloredMirror << '\n';
             std::cout << "Glass physical response: IOR=" << refractionChanged << " Beer absorption=" << absorptionChanged << '\n';
             if(forceUnsupported) Require(on == off, "Unsupported optical capability changed raster fallback.");
-            else Require(reflectionChanged > 100 && transmissionChanged > 100 && glassDepthChanged > 100 && (sponza || coloredMirror > 20),
+            // PBR removes the old unit ambient term and shadows secondary surfaces;
+            // depth/IOR/absorption changes consequently occupy fewer bright pixels.
+            else Require(reflectionChanged > 100 && transmissionChanged > 100 && glassDepthChanged > 20 && (sponza || coloredMirror > 20),
                 "Reflection/transmission spheres did not produce colored secondary-ray output.");
-            if(!forceUnsupported) Require(refractionChanged > 100 && absorptionChanged > 100,
+            if(!forceUnsupported) Require(refractionChanged > 20 && absorptionChanged > 20,
                 "Glass IOR/absorption changes did not affect transmitted color.");
+            if(fogTest) {
+                scene.fog.enabled = true; scene.fog.startDistance = 0; scene.fog.endDistance = 0.1f;
+                scene.fog.color = {0.2f, 0.4f, 0.6f};
+                const auto foggedOptics = render(ShadowMode::Auto, false);
+                for(size_t i = 0; i < on.size(); i += 4) if(on[i + 3] == 255) {
+                    for(size_t channel = 0; channel < 3; ++channel)
+                        Require(std::abs(int(foggedOptics[i + channel]) - int(std::lround(scene.fog.color[channel] * 255))) <= 1,
+                            "Optical radiance bypassed distance fog.");
+                }
+                scene.fog.enabled = false;
+                std::cout << "Distance fog applied to optical reflection/transmission output.\n";
+            }
             // Standalone BMP artifact from final Forward output, with bottom-up BGRA rows.
             std::vector<uint8_t> bmp(54 + on.size(), 0);
             auto word = [&](size_t offset, uint32_t value) { for(size_t b=0;b<4;++b) bmp[offset+b]=static_cast<uint8_t>(value>>(b*8)); };
@@ -369,11 +428,47 @@ namespace {
             renderer.Shutdown(); test.shadows.ReleaseTexture(depth); Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
             test.bindless.CollectGarbage(test.queue.GetCompletedFenceValue());
             auto allResources = test.descriptors.Resources().Allocate(sponza ? 4095U : 511U); Check(allResources); Check(test.descriptors.Resources().Free(*allResources));
-            auto allSamplers = test.descriptors.Samplers().Allocate(sponza ? 63U : 15U); Check(allSamplers); Check(test.descriptors.Samplers().Free(*allSamplers));
-            std::cout << "Optical Sphere Forward integration passed; forcedUnsupported=" << forceUnsupported << " Sponza=" << sponza << '\n'; return;
+            auto allSamplers = test.descriptors.Samplers().Allocate(sponza ? 127U : 15U); Check(allSamplers); Check(test.descriptors.Samplers().Free(*allSamplers));
+            std::cout << "Optical Sphere Forward integration passed; forcedUnsupported=" << forceUnsupported << " Sponza=" << sponza << '\n'; return on;
         }
         const auto off = render(ShadowMode::Auto, false);
+		if(fogTest) {
+			scene.fog.enabled = true; scene.fog.color = {0.2f, 0.4f, 0.6f};
+			scene.fog.startDistance = 0; scene.fog.endDistance = 0.1f;
+			const auto fullFog = render(ShadowMode::Auto, false);
+			size_t covered = 0;
+			for(size_t i = 0; i < off.size(); i += 4) {
+				Require(fullFog[i + 3] == off[i + 3], "Distance fog modified alpha/coverage.");
+				if(off[i + 3] == 255) {
+					++covered;
+					for(size_t channel = 0; channel < 3; ++channel)
+						Require(std::abs(int(fullFog[i + channel]) - int(std::lround(scene.fog.color[channel] * 255))) <= 1,
+							"Far geometry did not reach linear HDR fog colour.");
+				} else Require(fullFog[i] == off[i], "Fog modified the background.");
+			}
+			Require(covered > 100, "Fog test did not render geometry.");
+			scene.fog.startDistance = 8; scene.fog.endDistance = 40;
+			Require(render(ShadowMode::Auto, false) == off, "Fog modified geometry before start distance.");
+			scene.fog.startDistance = 0; scene.fog.endDistance = 2;
+			const auto mixedFog = render(ShadowMode::Auto, false);
+			// Identity clip transform: this receiver pixel has world position
+			// (2*(50.5/64)-1, 1-2*(32.5/64), .7). Test radial world distance.
+			const float x = 2 * (50.5f / 64) - 1, y = 1 - 2 * (32.5f / 64);
+			const float amount = std::sqrt(x * x + y * y + 0.7f * 0.7f) / 2;
+			const size_t pixel = (32 * 64 + 50) * 4;
+			for(size_t channel = 0; channel < 3; ++channel) {
+				const float expected = static_cast<float>(off[pixel + channel]) * (1 - amount) + scene.fog.color[channel] * 255 * amount;
+				Require(std::abs(int(mixedFog[pixel + channel]) - int(std::lround(expected))) <= 2,
+					"Fog interpolation did not use Euclidean camera distance.");
+			}
+			scene.fog.endDistance = scene.fog.startDistance;
+			Require(render(ShadowMode::Auto, false) == off, "Invalid fog range was not safely disabled.");
+			scene.fog.endDistance = 2; scene.fog.enabled = false;
+			Require(render(ShadowMode::Auto, false) == off, "Disabling fog did not restore lighting.");
+			std::cout << "Distance fog start/end/interpolation/alpha/disable passed; mesh=" << (pbrVariant == 7) << '\n';
+		}
 		for(const auto mode : { ShadowMode::ShadowMap, ShadowMode::Auto, ShadowMode::RayTracing }) {
+			if(pbrVariant) break;
 			const auto on = render(mode, true);
 			bool shadowed = false, lit = false;
 			for(size_t i = 0; i < on.size(); i += 4) {
@@ -398,6 +493,7 @@ namespace {
 		Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown();
 		test.Validate();
 		std::cout << "Forward Scene integration passed; forcedUnsupported=" << forceUnsupported << '\n';
+		return off;
 	}
 	void OpticalResourceLifecycle() {
 		Fixture test(false);
@@ -470,15 +566,54 @@ namespace {
 	}
 }
 
-int main() {
+#include "ColorManagementTests.inl"
+
+int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 	try {
+		if(argc == 2 && std::strcmp(argv[1], "--fog") == 0) {
+			FogSettings invalidFog; invalidFog.endDistance = invalidFog.startDistance;
+			Require(!invalidFog.IsValid(), "Invalid fog range accepted.");
+			invalidFog = {}; invalidFog.color[0] = std::numeric_limits<float>::infinity();
+			Require(!invalidFog.IsValid(), "Non-finite fog colour accepted.");
+			ForwardIntegration(false, false, false, 0, true);
+			ForwardIntegration(false, false, false, 7, true);
+			ForwardIntegration(false, true, false, 0, true);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--color") == 0) { ColorManagementIntegration(); return 0; }
+		ColorManagementIntegration();
+		if(argc == 2 && std::strcmp(argv[1], "--sponza") == 0) { ForwardIntegration(false, true, true); return 0; }
 		ShadowSystem settingsApi;
 		ShadowSettings invalid; invalid.sampleCount = 0;
 		Require(!settingsApi.SetSettings(invalid), "Invalid sample count accepted.");
 		invalid = {}; invalid.rayTMax = invalid.rayTMin;
 		Require(!settingsApi.SetSettings(invalid), "Invalid ray interval accepted.");
-		Run(false); Run(true); Run(true, true); ForwardIntegration(false); ForwardIntegration(true);
+		Run(false); Run(true); Run(true, true); const auto diffuse = ForwardIntegration(false); ForwardIntegration(true);
+		const auto smooth = ForwardIntegration(false, false, false, 1);
+		const auto metal = ForwardIntegration(false, false, false, 2);
+		const auto normal = ForwardIntegration(false, false, false, 3);
+		const auto flat = ForwardIntegration(false, false, false, 4);
+		const auto mapped = ForwardIntegration(false, false, false, 5);
+		const auto tangent = ForwardIntegration(false, false, false, 6);
+		const auto meshShader = ForwardIntegration(false, false, false, 7);
+		auto changedPixels = [](const auto& a, const auto& b, int tolerance) {
+			size_t count = 0;
+			for(size_t i = 0; i < a.size(); i += 4)
+				if(std::abs(int(a[i]) - int(b[i])) > tolerance) ++count;
+			return count;
+		};
+		std::cout << "PBR changed pixels: roughness=" << changedPixels(diffuse, smooth, 2)
+			<< " metallic=" << changedPixels(smooth, metal, 2) << " normal=" << changedPixels(diffuse, normal, 3)
+			<< " flat=" << changedPixels(diffuse, flat, 1) << " channels=" << changedPixels(diffuse, mapped, 0) << '\n';
+		Require(changedPixels(diffuse, smooth, 2) > 100, "Roughness did not change GGX reflection.");
+		Require(changedPixels(smooth, metal, 2) > 100, "Metallicity did not change diffuse/specular balance.");
+		Require(changedPixels(diffuse, normal, 3) > 100, "Normal map did not change lighting.");
+		Require(changedPixels(diffuse, flat, 1) == 0, "Flat normal map changed surface orientation.");
+		Require(mapped == diffuse, "Metallic-roughness texture channels or linear decoding are incorrect.");
+		Require(changedPixels(normal, tangent, 1) == 0, "Tangent and UV-derived normal bases disagree.");
+		Require(changedPixels(tangent, meshShader, 1) == 0, "Mesh Shader and VS PBR output disagree.");
+		std::cout << "PBR roughness, metallicity, normal maps and texture channels passed.\n";
 		AccelerationFailureFallback(); InFlightGeometryLifetime(); ForwardIntegration(false, true); ForwardIntegration(true, true);
 		OpticalResourceLifecycle(); ForwardIntegration(false, true, true); return 0;
 	}

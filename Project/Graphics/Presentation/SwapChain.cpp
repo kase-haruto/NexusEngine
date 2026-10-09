@@ -67,6 +67,13 @@ namespace NexusEngine {
 			Shutdown();
 			return std::unexpected(MakeDirectXError(kSwapChainCreationFailed, result, "Failed to acquire IDXGISwapChain3."));
 		}
+		// Post-processing writes sRGB-encoded SDR values to a UNORM RTV.
+		// Tell the compositor to interpret these as full-range Rec.709 SDR.
+		result = swapChain_->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+		if(FAILED(result)) {
+			Shutdown();
+			return std::unexpected(MakeDirectXError(kSwapChainCreationFailed, result, "Failed to configure SDR Rec.709 swap-chain colour space."));
+		}
 
 		// Renderer共有RTV HeapからBackBuffer数分の連続領域を確保し、Resize後も同じ位置を再利用する。
 		rtvAllocator_ = rtvAllocator;

@@ -523,6 +523,7 @@
     <ClInclude Include="Runtime\Scene\Components\CameraComponent.h">
       <Filter>Runtime\Scene\Components</Filter>
     </ClInclude>
+    <ClInclude Include="Runtime\Scene\Components\DirectionalLightComponent.h"><Filter>Runtime\Scene\Components</Filter></ClInclude>
     <ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h">
       <Filter>Runtime\Scene\Components</Filter>
     </ClInclude>
@@ -627,5 +628,43 @@
     <None Include="Docs\ECSREADME.md">
       <Filter>Docs</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Graphics\Meshlet" />
+    <Filter Include="Graphics\Backend\DirectX12\Meshlet" />
+    <Filter Include="Shaders\Mesh" />
+    <ClCompile Include="Graphics\Meshlet\MeshletBuilder.cpp"><Filter>Graphics\Meshlet</Filter></ClCompile>
+    <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp"><Filter>Graphics\Backend\DirectX12\Meshlet</Filter></ClCompile>
+    <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp"><Filter>Graphics\Backend\DirectX12\Meshlet</Filter></ClCompile>
+    <ClInclude Include="Graphics\Meshlet\MeshletConfig.h"><Filter>Graphics\Meshlet</Filter></ClInclude>
+    <ClInclude Include="Graphics\Meshlet\MeshletData.h"><Filter>Graphics\Meshlet</Filter></ClInclude>
+    <ClInclude Include="Graphics\Meshlet\MeshletBuilder.h"><Filter>Graphics\Meshlet</Filter></ClInclude>
+    <ClInclude Include="Graphics\Meshlet\MeshletResource.h"><Filter>Graphics\Meshlet</Filter></ClInclude>
+    <ClInclude Include="Graphics\Meshlet\MeshShaderPipeline.h"><Filter>Graphics\Meshlet</Filter></ClInclude>
+    <ClInclude Include="Graphics\Meshlet\MeshletDebugSettings.h"><Filter>Graphics\Meshlet</Filter></ClInclude>
+    <None Include="Docs\MeshShader.md"><Filter>Docs</Filter></None>
+    <None Include="Shaders\Mesh\MeshletConfig.h"><Filter>Shaders\Mesh</Filter></None>
+    <None Include="Shaders\Mesh\MeshletCommon.hlsli"><Filter>Shaders\Mesh</Filter></None>
+    <None Include="Shaders\Mesh\MeshletAS.hlsl"><Filter>Shaders\Mesh</Filter></None>
+    <None Include="Shaders\Mesh\MeshletMS.hlsl"><Filter>Shaders\Mesh</Filter></None>
+    <None Include="Shaders\Mesh\MeshletPS.hlsl"><Filter>Shaders\Mesh</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Graphics\PostProcess" />
+    <Filter Include="Graphics\Backend\DirectX12\PostProcess" />
+    <Filter Include="Shaders\PostProcess" />
+    <ClCompile Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp"><Filter>Graphics\Backend\DirectX12\PostProcess</Filter></ClCompile>
+    <ClInclude Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.h"><Filter>Graphics\Backend\DirectX12\PostProcess</Filter></ClInclude>
+    <ClInclude Include="Graphics\PostProcess\PostProcessSettings.h"><Filter>Graphics\PostProcess</Filter></ClInclude>
+    <None Include="Shaders\PostProcess\PostProcess.hlsl"><Filter>Shaders\PostProcess</Filter></None>
+    <None Include="Shaders\Common\PBR.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Common\ColorSpace.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Common\Fog.hlsli"><Filter>Shaders</Filter></None>
+    <ClInclude Include="Graphics\Fog\FogSettings.h"><Filter>Graphics</Filter></ClInclude>
+    <ClInclude Include="Graphics\Color\ColorSpace.h"><Filter>Graphics</Filter></ClInclude>
+    <None Include="Docs\Lighting.md"><Filter>Docs</Filter></None>
+    <None Include="Docs\Fog.md"><Filter>Docs</Filter></None>
+    <None Include="Shaders\PostProcess\ACES-LICENSE.txt"><Filter>Shaders\PostProcess</Filter></None>
+    <None Include="Docs\PostProcessing.md"><Filter>Docs</Filter></None>
   </ItemGroup>
 </Project>

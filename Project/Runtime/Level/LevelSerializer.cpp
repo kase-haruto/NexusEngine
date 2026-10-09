@@ -15,6 +15,7 @@
 #include "Level.h"
 #include "Runtime/Scene/TransformSystem.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/NameComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
@@ -26,7 +27,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 2;
+		constexpr uint32_t kFormatVersion = 3;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -67,7 +68,7 @@ namespace NexusEngine {
 
 		// 非対応Componentを黙って落とすとEditorの保存でデータを失うため、I/O前に拒否する。
 		const std::set<std::type_index> supported { typeid(NameComponent), typeid(TransformComponent),
-			typeid(PersistentIdComponent), typeid(HierarchyComponent), typeid(CameraComponent), typeid(PrimitiveRenderComponent) };
+			typeid(PersistentIdComponent), typeid(HierarchyComponent), typeid(CameraComponent), typeid(PrimitiveRenderComponent), typeid(DirectionalLightComponent) };
 		bool supportedStorages = true;
 		scene->ForEachStorageInfo([&](std::type_index type, size_t size) {
 			supportedStorages = supportedStorages && (size == 0 || supported.contains(type));
@@ -83,6 +84,7 @@ namespace NexusEngine {
 				++count;
 				valid = valid && persistent.value.IsValid() && ids.insert(MakeKey(persistent.value)).second && IsFinite(transform);
 				if(const auto* camera = entity.GetComponent<CameraComponent>()) valid = valid && IsValid(*camera);
+				if(const auto* light = entity.GetComponent<DirectionalLightComponent>()) valid = valid && light->IsValid();
 				if(const auto* primitive = entity.GetComponent<PrimitiveRenderComponent>()) valid = valid && IsValid(*primitive);
 				if(const auto* hierarchy = entity.GetComponent<HierarchyComponent>(); hierarchy && hierarchy->parent.IsValid()) {
 					valid = valid && scene->GetComponent<PersistentIdComponent>(hierarchy->parent) != nullptr;
@@ -135,6 +137,11 @@ namespace NexusEngine {
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
+				if(const auto* component = entity.GetComponent<DirectionalLightComponent>()) {
+					const auto& l = component->light;
+					output << "DIRECTIONAL_LIGHT 1 " << component->enabled << ' ' << l.direction[0] << ' ' << l.direction[1] << ' ' << l.direction[2]
+						<< ' ' << l.color[0] << ' ' << l.color[1] << ' ' << l.color[2] << ' ' << l.intensity << ' ' << l.angularRadius << '\n';
+				} else output << "DIRECTIONAL_LIGHT 0\n";
 				output << "END_ENTITY\n";
 			});
 		output << "END_LEVEL\n";
@@ -155,7 +162,7 @@ namespace NexusEngine {
 		std::string token;
 		uint32_t version = 0;
 		std::string loadedName;
-		if(!(input >> token >> version) || token != "NEXUS_LEVEL" || (version != 1 && version != kFormatVersion) ||
+		if(!(input >> token >> version) || token != "NEXUS_LEVEL" || version < 1 || version > kFormatVersion ||
 		   !(input >> token >> std::quoted(loadedName)) || token != "LEVEL") {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Level header or version is invalid."));
 		}
@@ -227,6 +234,18 @@ namespace NexusEngine {
 				   !IsValid(primitive) ||
 				   entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));
+				}
+			}
+			if(version >= 3) {
+				bool hasLight = false;
+				if(!(input >> token >> hasLight) || token != "DIRECTIONAL_LIGHT")
+					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Directional light record is invalid."));
+				if(hasLight) {
+					DirectionalLightComponent component;
+					auto& l = component.light;
+					if(!(input >> component.enabled >> l.direction[0] >> l.direction[1] >> l.direction[2] >> l.color[0] >> l.color[1] >> l.color[2]
+						>> l.intensity >> l.angularRadius) || !component.IsValid() || !entity.AddComponent<DirectionalLightComponent>(component))
+						return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Directional light component is invalid."));
 				}
 			}
 			if(!(input >> token) || token != "END_ENTITY") {

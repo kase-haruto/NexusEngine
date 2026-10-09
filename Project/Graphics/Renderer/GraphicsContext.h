@@ -8,6 +8,10 @@
 #include "Graphics/Descriptor/ShaderResourceRef.h"
 
 namespace NexusEngine {
+	class MeshShaderPipeline;
+	class MeshletResource;
+	struct MeshCullingView;
+	struct MeshletDebugSettings;
 	class GraphicsPipeline;
 	class VertexBuffer;
 	class IndexBuffer;
@@ -29,6 +33,14 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class GraphicsContext final {
 	public:
+		/**
+		 * \brief Submesh の Meshlet を AS Culling / MS 描画へ送る
+		 * \param constants 現 Frame に書き込んだ独立 PrimitiveDrawData Buffer
+		 * \return 未初期化・世代不一致・CommandList非対応ではfalse。呼び出し側は従来描画へ戻す
+		 */
+		[[nodiscard]] bool DispatchMeshlets(const MeshShaderPipeline& pipeline, const MeshletResource& meshlets,
+			const MeshResource& mesh, const ConstantBuffer& constants, const MeshCullingView& view,
+			uint32_t submesh, const MeshletDebugSettings& settings) noexcept;
 		~GraphicsContext() noexcept;
 		GraphicsContext(const GraphicsContext&) = delete;
 		GraphicsContext& operator=(const GraphicsContext&) = delete;
@@ -110,6 +122,8 @@ namespace NexusEngine {
 			uint32_t renderHeight) noexcept;
 
 		void* nativeCommandList_ = nullptr; //< GraphicsSystem所有Command ListのFrame中だけ有効な非所有参照
+		void* nativeMeshCommandList_ = nullptr; //< Backend 内だけで使用、Frame 中の QueryInterface 参照
+		bool meshInterfaceChecked_ = false; //< QueryInterface を Meshlet / Submesh ごとに繰り返さない
 		BindlessDescriptorTable* bindlessDescriptors_ = nullptr; //< Descriptor世代検証とGPU Handle解決先
 		TransientDescriptorArena* transientDescriptors_ = nullptr; //< Fence後に再利用する一時Descriptor生成先
 		uint32_t frameIndex_ = 0; //< 現在再利用可能になったFrameContext index

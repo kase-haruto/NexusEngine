@@ -1,4 +1,6 @@
 #include "PrimitiveRenderer.h"
+#include "Graphics/Color/ColorSpace.h"
+#include "Graphics/Meshlet/MeshletBuilder.h"
 
 // c++
 #include <array>
@@ -46,13 +48,15 @@ namespace NexusEngine {
 
 		// Reflectionでsemanticを検証しつつ、CPU構造からしか安全に決められないoffsetを明示する。
 		GraphicsPipelineDesc pipelineDesc;
+		pipelineDesc.hdrRenderTarget = true;
 		pipelineDesc.vertexLayout = {
 			{"POSITION", 0, VertexFormat::Float3, offsetof(ModelVertex, position)},
 			{"NORMAL", 0, VertexFormat::Float3, offsetof(ModelVertex, normal)},
 			{"TEXCOORD", 0, VertexFormat::Float2, offsetof(ModelVertex, texcoord)},
 			{"COLOR", 0, VertexFormat::Float4, offsetof(ModelVertex, color)},
 			{"BLENDINDICES", 0, VertexFormat::Float4, offsetof(ModelVertex, jointIndices)},
-			{"BLENDWEIGHT", 0, VertexFormat::Float4, offsetof(ModelVertex, jointWeights)}};
+			{"BLENDWEIGHT", 0, VertexFormat::Float4, offsetof(ModelVertex, jointWeights)},
+			{"TANGENT", 0, VertexFormat::Float4, offsetof(ModelVertex, tangent)}};
 		pipelineDesc.depthStencilFormat				= DepthStencilFormat::D32Float;
 		pipelineDesc.depthStencil.depthTestEnabled	= true;
 		pipelineDesc.depthStencil.depthWriteEnabled = true;
@@ -88,7 +92,7 @@ namespace NexusEngine {
 									  ? resources_->CreateTexture2D(*gpuMaterial.texture,
 																	TextureDesc{2, 2, TextureFormat::Rgba8UnormSrgb}, kWhitePixels)
 									  : resources_->CreateTexture2DFromEncodedData(
-											*gpuMaterial.texture, material.baseColorImageData);
+											*gpuMaterial.texture, material.baseColorImageData, TextureColorSpace::Srgb);
 			if(!result) {
 				Shutdown();
 				return std::unexpected(std::move(result.error()));
@@ -106,6 +110,26 @@ namespace NexusEngine {
 			}
 			gpuMaterial.samplerRef = *samplerReference;
 			materialResources_.push_back(std::move(gpuMaterial));
+			// Retain ownership before upload so initialization failures retire every descriptor.
+			auto uploadMap = [&](const std::vector<uint8_t>& bytes, const SamplerDesc& sampler,
+				std::unique_ptr<TextureResource>& texture, ShaderResourceRef& ref, ShaderResourceRef& samplerRef) -> Result<void> {
+				if(bytes.empty()) return {};
+				texture = std::make_unique<TextureResource>();
+				auto status = resources_->CreateTexture2DFromEncodedData(*texture, bytes, TextureColorSpace::Linear);
+				if(!status) return status;
+				auto srv = resources_->CreatePersistentTextureShaderResource(*texture);
+				if(!srv) return std::unexpected(std::move(srv.error()));
+				ref = *srv;
+				auto sample = resources_->CreatePersistentSampler(sampler);
+				if(!sample) return std::unexpected(std::move(sample.error()));
+				samplerRef = *sample;
+				return {};
+			};
+			auto& gpu = materialResources_.back();
+			result = uploadMap(material.normalImageData, material.normalSampler, gpu.normalTexture, gpu.normalRef, gpu.normalSamplerRef);
+			if(result) result = uploadMap(material.metallicRoughnessImageData, material.metallicRoughnessSampler,
+				gpu.metallicRoughnessTexture, gpu.metallicRoughnessRef, gpu.metallicRoughnessSamplerRef);
+			if(!result) { Shutdown(); return std::unexpected(std::move(result.error())); }
 		}
 
 		meshDrawBuffers_.resize(model_.GetMeshCount());
@@ -137,12 +161,43 @@ namespace NexusEngine {
 		for(size_t i = 0; i < model_.GetMaterials().size(); ++i) {
 			const auto& material = model_.GetMaterials()[i];
 			opticalMaterials_.push_back({material.baseColorFactor, material.optics,
-										 materialResources_[i].textureRef, materialResources_[i].samplerRef});
+				materialResources_[i].textureRef, materialResources_[i].samplerRef,
+				{material.metallicFactor, material.roughnessFactor, material.normalScale, 0},
+				materialResources_[i].normalRef, materialResources_[i].normalSamplerRef,
+				materialResources_[i].metallicRoughnessRef, materialResources_[i].metallicRoughnessSamplerRef});
+		}
+		////////////////////////////////////////////////////////////////////////////////
+		// 静的 Meshlet は Asset 初期化時だけ生成。Skinning は従来 Pipeline を維持する。
+		// Mesh Pipeline / 個別 Meshlet 初期化失敗も従来描画を継続できるようにする。
+		// 他の必須初期化が成功した後に実行し、Upload 完了確認に失敗した Resource が
+		// 初期化 rollback で即時破棄されず、GPU idle 後の Shutdown まで保持されるようにする。
+		////////////////////////////////////////////////////////////////////////////////
+		meshletResources_.resize(model_.GetMeshCount());
+		if(resources_->GetCapabilities().SupportsMeshShaders()) {
+			auto meshStatus = resources_->CreateMeshShaderPipeline(meshPipeline_, context.shaderDirectory);
+			if(!meshStatus) NEXUS_LOG_WARNING("Meshlet", meshStatus.error().GetMessageText());
+			else for(uint32_t i = 0; i < model_.GetMeshCount(); ++i) {
+				if(asset->meshes[i].skinIndex != MeshAssetData::kNoSkin) continue;
+				auto data = MeshletBuilder{}.Build(asset->meshes[i]);
+				if(!data) { NEXUS_LOG_WARNING("Meshlet", data.error().GetMessageText()); continue; }
+				auto resource = std::make_unique<MeshletResource>();
+				meshStatus = resources_->CreateMeshletResource(*resource, *data, *model_.GetMesh(i));
+				if(!meshStatus) {
+					NEXUS_LOG_WARNING("Meshlet", meshStatus.error().GetMessageText());
+					// Upload 待機失敗時にも GPU が使用する Resource を Shutdown まで保持する。
+					meshletResources_[i] = std::move(resource);
+					continue;
+				}
+				meshletResources_[i] = std::move(resource);
+			}
 		}
 		return {};
 	}
 
 	void PrimitiveRenderer::Shutdown() noexcept {
+		// GraphicsSystem の GPU idle 後に呼ばれる。元 Vertex Buffer より先に解放する。
+		meshletResources_.clear();
+		meshPipeline_.Shutdown();
 		optics_.Shutdown();
 		opticalDraws_.clear();
 		opticalMaterials_.clear();
@@ -161,6 +216,8 @@ namespace NexusEngine {
 				for(MaterialGpuResource& material : materialResources_) {
 					retire(material.textureRef);
 					retire(material.samplerRef);
+					retire(material.normalRef); retire(material.normalSamplerRef);
+					retire(material.metallicRoughnessRef); retire(material.metallicRoughnessSamplerRef);
 				}
 			} catch(...) {
 				NEXUS_LOG_ERROR("Graphics", "Unexpected exception while retiring PrimitiveRenderer descriptors.");
@@ -188,6 +245,16 @@ namespace NexusEngine {
 		if(renderScene_ == nullptr || !renderScene_->camera.has_value() || modelPose_ == nullptr) return;
 		const size_t	objectCount = renderScene_->primitives.size();
 		const Matrix4x4 projection	= renderScene_->camera->viewProjectionMatrix;
+		const auto cameraWorld = TryInverse(renderScene_->camera->viewMatrix);
+		if(!cameraWorld) return;
+		drawData_.cameraPosition = {cameraWorld->At(3, 0), cameraWorld->At(3, 1), cameraWorld->At(3, 2), 1};
+		for(size_t i = 0; i < 3; ++i) drawData_.ambientIrradiance[i] = renderScene_->ambientIrradiance[i];
+		const auto& fog = renderScene_->fog;
+		const bool validFog = fog.IsValid();
+		drawData_.fogColorEnabled = validFog ? std::array<float, 4>{fog.color[0], fog.color[1], fog.color[2], fog.enabled ? 1.0f : 0.0f}
+			: std::array<float, 4>{};
+		drawData_.fogDistances = validFog ? std::array<float, 4>{fog.startDistance, fog.endDistance, 0, 0}
+			: std::array<float, 4>{0, 1, 0, 0};
 		// Extract Geometry from the already available draw snapshot, never walk Scene/ECS
 		// again. Static meshes are shared by all Instances, while transforms remain per-instance.
 		shadowDraws_.clear();
@@ -217,7 +284,7 @@ namespace NexusEngine {
 				}
 			}
 		}
-		auto radiance = optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_);
+		auto radiance = optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_, renderScene_->ambientIrradiance);
 		if(!radiance) {
 			NEXUS_LOG_ERROR("Optics", radiance.error().GetMessageText());
 			drawData_.opticalRadianceIndex = 0;
@@ -261,6 +328,7 @@ namespace NexusEngine {
 		}
 		// Rendererは描画意図だけを記述し、Native Command List操作はGraphicsContextへ委譲する。
 		context.SetGraphicsPipeline(pipeline_);
+		bool meshPipelineBound = false; //< Mesh -> Traditional の切替時だけ PSO を復元する
 		context.SetPrimitiveTopology(PrimitiveTopology::TriangleList);
 		const auto& nodeTransforms = modelPose_->GetNodeWorldTransforms();
 		for(size_t objectIndex = 0; objectIndex < objectCount; ++objectIndex) {
@@ -279,6 +347,7 @@ namespace NexusEngine {
 											: Multiply(nodeTransforms[nodeIndex], instanceWorld);
 				// Sceneから抽出されたCameraのViewProjectionを使用し、RendererにCamera設定を持たせない。
 				drawData_.worldViewProjection = Multiply(world, projection);
+				drawData_.world = world;
 				const auto inverseWorld		  = TryInverse(world);
 				if(!inverseWorld) continue;
 				drawData_.worldInverseTranspose = Transpose(*inverseWorld);
@@ -302,6 +371,11 @@ namespace NexusEngine {
 						const ModelMaterial&	   material	   = model_.GetMaterials()[submesh.materialSlot];
 						drawData_.textureIndex				   = gpuMaterial.textureRef.index;
 						drawData_.samplerIndex				   = gpuMaterial.samplerRef.index;
+						drawData_.normalTextureIndex = gpuMaterial.normalRef.index;
+						drawData_.normalSamplerIndex = gpuMaterial.normalSamplerRef.index;
+						drawData_.metallicRoughnessTextureIndex = gpuMaterial.metallicRoughnessRef.index;
+						drawData_.metallicRoughnessSamplerIndex = gpuMaterial.metallicRoughnessSamplerRef.index;
+						drawData_.pbrParameters = {material.metallicFactor, material.roughnessFactor, material.normalScale, 0};
 						drawData_.tint						   = material.baseColorFactor;
 						if(renderScene_ != nullptr) {
 							for(size_t channel = 0; channel < 4; ++channel) drawData_.tint[channel] *= renderScene_->primitives[objectIndex].tint[channel];
@@ -315,6 +389,18 @@ namespace NexusEngine {
 							NEXUS_LOG_ERROR("Graphics", writeResult.error().GetMessageText());
 							continue;
 						}
+						////////////////////////////////////////////////////////////////////////////////
+						// 上位 Renderer は DispatchMesh API を知らず、描画意図だけを Context へ渡す。
+						// 同じ独立 Frame CB を Material/Camera 入力に使用し、追加の毎Frame Resource を作らない。
+						////////////////////////////////////////////////////////////////////////////////
+						if(!hasSkin && meshIndex < meshletResources_.size() && meshletResources_[meshIndex] &&
+						   context.DispatchMeshlets(meshPipeline_, *meshletResources_[meshIndex], *mesh, drawBuffer,
+						       MeshCullingView{drawData_.worldViewProjection}, static_cast<uint32_t>(submeshIndex), meshletSettings_)) {
+							meshPipelineBound = true;
+							continue;
+						}
+						// Mesh draw の後は従来 Root Signature / PSO を復元してから Table を設定する。
+						if(meshPipelineBound) { context.SetGraphicsPipeline(pipeline_); meshPipelineBound = false; }
 						auto descriptorResult = context.SetGraphicsConstantBufferTable(pipeline_, drawBuffer);
 						if(!descriptorResult) {
 							NEXUS_LOG_ERROR("Graphics", descriptorResult.error().GetMessageText());

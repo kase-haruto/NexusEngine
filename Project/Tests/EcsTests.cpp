@@ -12,6 +12,7 @@
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
 
@@ -182,6 +183,50 @@ namespace NexusEngine::Tests {
 		source.Unload();
 		assert(source.GetState() == LevelState::Unloaded && source.GetScene() == nullptr);
 		std::filesystem::remove(path);
+
+		Level lighting;
+		assert(lighting.LoadEmpty().has_value());
+		auto sun = lighting.CreateEntity("sun");
+		auto* light = sun.AddComponent<DirectionalLightComponent>();
+		assert(light);
+		light->light.direction = {2, 0, 0}; light->light.color = {1, 0.5f, 0.25f}; light->light.intensity = 4;
+		sun.GetComponent<TransformComponent>()->rotation = Quaternion::FromEulerRadians({0, 0, 1.5707963268f});
+		assert(lighting.Update(0).has_value());
+		RenderScene litScene;
+		assert(extractor.ExtractInto(*lighting.GetScene(), 1, litScene).has_value());
+		assert(std::abs(litScene.directionalLight.direction[1] - 1) < 1e-5f && litScene.directionalLight.intensity == 4);
+		assert(lighting.Save(path).has_value());
+		Level restoredLighting;
+		assert(restoredLighting.Load(path).has_value());
+		auto restoredSun = restoredLighting.FindEntity(sun.GetComponent<PersistentIdComponent>()->value);
+		assert(restoredSun.GetComponent<DirectionalLightComponent>()->light.color[1] == 0.5f);
+		light->enabled = false;
+		assert(extractor.ExtractInto(*lighting.GetScene(), 1, litScene).has_value());
+		assert(litScene.directionalLight.intensity == 0);
+		light->enabled = true; light->light.direction = {0, 0, 0};
+		assert(!extractor.ExtractInto(*lighting.GetScene(), 1, litScene).has_value());
+		assert(!lighting.Save(path).has_value());
+		light->light.direction = {1, 0, 0};
+		auto secondSun = lighting.CreateEntity("second sun");
+		assert(secondSun.AddComponent<DirectionalLightComponent>());
+		assert(!extractor.ExtractInto(*lighting.GetScene(), 1, litScene).has_value());
+		std::filesystem::remove(path);
+
+		// Startup content is authored in the existing DemoLevel file.
+		Level demo;
+		assert(demo.Load("Project/Resources/Assets/Levels/DemoLevel.json").has_value());
+		assert(demo.GetName() == "DemoLevel");
+		assert(demo.Update(0).has_value());
+		RenderScene demoSnapshot;
+		assert(extractor.ExtractInto(*demo.GetScene(), 16.0f / 9.0f, demoSnapshot).has_value());
+		assert(demoSnapshot.camera.has_value() && demoSnapshot.primitives.size() == 3);
+		assert(demoSnapshot.directionalLight.intensity > 0);
+		bool demoNodes[3] {};
+		for(const auto& primitive : demoSnapshot.primitives) {
+			assert(primitive.nodeIndex < 3);
+			demoNodes[primitive.nodeIndex] = true;
+		}
+		assert(demoNodes[0] && demoNodes[1] && demoNodes[2]);
 	}
 
 } // namespace NexusEngine::Tests

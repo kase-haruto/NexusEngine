@@ -7,6 +7,7 @@
 
 // engine
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/Scene.h"
@@ -39,6 +40,30 @@ namespace NexusEngine {
 		// clearはcapacityを保持するので、安定したEntity数なら毎frameの再確保は発生しない。
 		result.primitives.clear();
 		result.camera.reset();
+		result.directionalLight = {};
+		result.directionalLight.intensity = 0;
+		bool lightFound = false;
+		std::optional<Error> lightError;
+		scene.ForEach<TransformComponent, DirectionalLightComponent>(
+			[&](Entity, TransformComponent& transform, DirectionalLightComponent& component) {
+				if(lightError || !component.enabled) return;
+				if(lightFound || !component.IsValid()) {
+					lightError = Error(ErrorCategory::Scene, 14, "Expected at most one enabled, valid directional light."); return;
+				}
+				lightFound = true;
+				result.directionalLight = component.light;
+				float lengthSquared = 0;
+				for(size_t c = 0; c < 3; ++c) {
+					float value = 0;
+					for(size_t r = 0; r < 3; ++r) value += component.light.direction[r] * transform.worldMatrix.At(r, c);
+					result.directionalLight.direction[c] = value; lengthSquared += value * value;
+				}
+				if(!std::isfinite(lengthSquared) || lengthSquared < 1e-12f) {
+					lightError = Error(ErrorCategory::Scene, 15, "Directional light world direction is invalid."); return;
+				}
+				for(float& value : result.directionalLight.direction) value /= std::sqrt(lengthSquared);
+			});
+		if(lightError) return std::unexpected(std::move(*lightError));
 		scene.ForEach<TransformComponent, PrimitiveRenderComponent>(
 			[&](Entity entity, TransformComponent& transform, PrimitiveRenderComponent& primitive) {
 				if(primitive.enabled) {

@@ -149,6 +149,8 @@ namespace NexusEngine {
 				if(FAILED(result)) {
 					return std::unexpected(MakeDirectXError(kDescriptionFailed, result, "Failed to read vertex input semantic."));
 				}
+				// SV_VertexID / SV_InstanceID are supplied by the GPU, not vertex buffers.
+				if(inputDesc.SystemValueType != D3D_NAME_UNDEFINED) continue;
 				uint32_t componentCount = 0;
 				for(uint32_t mask = inputDesc.Mask; mask != 0; mask >>= 1U) {
 					componentCount += mask & 1U;

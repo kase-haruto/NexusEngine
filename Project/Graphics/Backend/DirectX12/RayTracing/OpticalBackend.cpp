@@ -88,7 +88,7 @@ namespace NexusEngine {
 		D3D12_HIT_GROUP_DESC hit {}; hit.HitGroupExport = L"OpticalHitGroup";
 		hit.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES; hit.ClosestHitShaderImport = L"OpticalHit";
 		// Rays are iterated in Raygen. Hit never recursively traces, so recursion depth stays 1.
-		D3D12_RAYTRACING_SHADER_CONFIG config {64, 8};
+		D3D12_RAYTRACING_SHADER_CONFIG config {72, 8};
 		D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig {1};
 		ID3D12RootSignature* global = root_.Get();
 		ID3D12RootSignature* local = localRoot.Get();
@@ -170,7 +170,7 @@ namespace NexusEngine {
 	}
 	Result<ShaderResourceRef> OpticalBackend::Render(GraphicsContext& context, void* nativeCommands, const Matrix4x4& vp,
 		const DirectionalLightData& light, std::span<const OpticalDrawItem> draws,
-		std::span<const OpticalSurfaceMaterial> materials, const OpticalSettings& settings) {
+		std::span<const OpticalSurfaceMaterial> materials, const OpticalSettings& settings, const std::array<float, 3>& ambientIrradiance) {
 		const bool optical = std::any_of(materials.begin(), materials.end(), [](const auto& m) {return m.optics.IsOptical();});
 		if(!settings.enabled || !optical || draws.empty()) return ShaderResourceRef {};
 		if(!supported_) {
@@ -213,6 +213,8 @@ namespace NexusEngine {
 					static_cast<uint32_t>(submesh.vertexOffset), m.texture.index, m.sampler.index};
 				for(size_t i = 0; i < 4; ++i) geometry.color[i] = m.color[i] * draw.tint[i];
 				geometry.optical = {m.optics.reflectivity, m.optics.transmission, m.optics.indexOfRefraction, 0};
+				geometry.pbr = m.pbr;
+				geometry.maps = {m.normalTexture.index, m.normalSampler.index, m.metallicRoughnessTexture.index, m.metallicRoughnessSampler.index};
 				std::copy(m.optics.absorption.begin(), m.optics.absorption.end(), geometry.absorption.begin()); geometries_.push_back(geometry);
 			}
 		}
@@ -257,6 +259,7 @@ namespace NexusEngine {
 		constants.lightColor = {light.color[0], light.color[1], light.color[2], 0};
 		constants.indices = {outputUav_.index, static_cast<uint32_t>(instanceBytes), settings.maxBounces, 0};
 		constants.rays = {settings.rayBias, settings.rayDistance, 0, 0};
+		std::copy(ambientIrradiance.begin(), ambientIrradiance.end(), constants.ambient.begin());
 		auto written = constants_.Write(context.GetFrameIndex(), {reinterpret_cast<const uint8_t*>(&constants), sizeof(constants)});
 		if(!written) return std::unexpected(std::move(written.error()));
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> commands;

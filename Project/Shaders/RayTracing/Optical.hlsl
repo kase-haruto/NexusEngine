@@ -1,5 +1,6 @@
 // Hit exports only gather surface attributes. Bounded Raygen paths handle both
 // reflection and refraction without recursively growing the DXR pipeline stack.
+#include "../Common/PBR.hlsli"
 RaytracingAccelerationStructure opticalScene : register(t0);
 ByteAddressBuffer surfaceData : register(t1);
 // Local ShaderTable constants work on Tier1.0 too; GeometryIndex() requires Tier1.1.
@@ -14,6 +15,7 @@ cbuffer OpticalConstants : register(b0)
     uint maxBounces;
     uint opticalPadding;
     float4 rayParameters;
+    float4 ambientIrradiance;
 };
 
 struct Surface
@@ -22,7 +24,8 @@ struct Surface
     float3 color; float reflectivity;
     float3 absorption; float transmission;
     float ior; uint hit; uint front; uint padding;
-}; // 64byte payload, matched by Backend ShaderConfig.
+    float metallic; float roughness;
+}; // 72byte payload, matched by Backend ShaderConfig.
 
 uint ReadIndex(ByteAddressBuffer buffer, uint index, uint wide)
 {
@@ -35,7 +38,7 @@ uint ReadIndex(ByteAddressBuffer buffer, uint index, uint wide)
 void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes attr)
 {
     const uint instance = InstanceID() * 80;
-    const uint geometry = geometryByteOffset + geometryRecordIndex * 80;
+    const uint geometry = geometryByteOffset + geometryRecordIndex * 112;
     const uint4 buffers = surfaceData.Load4(geometry);
     const uint4 draw = surfaceData.Load4(geometry + 16);
     ByteAddressBuffer vertices = ResourceDescriptorHeap[NonUniformResourceIndex(buffers.x)];
@@ -66,6 +69,43 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
     const float4 optics = asfloat(surfaceData.Load4(geometry + 48));
     payload.reflectivity = optics.x; payload.transmission = optics.y; payload.ior = optics.z;
     payload.absorption = asfloat(surfaceData.Load4(geometry + 64)).rgb;
+    float4 pbr = asfloat(surfaceData.Load4(geometry + 80));
+    uint4 maps = surfaceData.Load4(geometry + 96);
+    payload.metallic = pbr.x; payload.roughness = pbr.y;
+    if(maps.z != 0) {
+        Texture2D<float4> map = ResourceDescriptorHeap[NonUniformResourceIndex(maps.z)];
+        SamplerState sampleState = SamplerDescriptorHeap[NonUniformResourceIndex(maps.w)];
+        float4 mr = map.SampleLevel(sampleState, uv, 0);
+        payload.metallic *= mr.b; payload.roughness *= mr.g;
+    }
+    payload.metallic = saturate(payload.metallic); payload.roughness = clamp(payload.roughness, 0.05, 1);
+    if(maps.x != 0) {
+        float4 tangent = asfloat(vertices.Load4(addresses.x + 80)) * weights.x +
+            asfloat(vertices.Load4(addresses.y + 80)) * weights.y + asfloat(vertices.Load4(addresses.z + 80)) * weights.z;
+        float3 n = payload.normal, t, b;
+        if(abs(tangent.w) > 0.5 && dot(tangent.xyz, tangent.xyz) > 1e-12) {
+            t = mul(ObjectToWorld3x4(), float4(tangent.xyz, 0));
+            t = SafeNormalize(t - n * dot(n, t), float3(1, 0, 0));
+            b = cross(n, t) * tangent.w * (determinant((float3x3)ObjectToWorld3x4()) < 0 ? -1 : 1);
+        } else {
+            float3 p0 = asfloat(vertices.Load3(addresses.x));
+            float3 e1 = asfloat(vertices.Load3(addresses.y)) - p0, e2 = asfloat(vertices.Load3(addresses.z)) - p0;
+            float2 uv0 = asfloat(vertices.Load2(addresses.x + 24));
+            float2 uv1 = asfloat(vertices.Load2(addresses.y + 24)) - uv0, uv2 = asfloat(vertices.Load2(addresses.z + 24)) - uv0;
+            float det = uv1.x * uv2.y - uv1.y * uv2.x;
+            t = abs(det) > 1e-10 ? mul(ObjectToWorld3x4(), float4((e1 * uv2.y - e2 * uv1.y) / det, 0)) : 0;
+            b = abs(det) > 1e-10 ? mul(ObjectToWorld3x4(), float4((e2 * uv1.x - e1 * uv2.x) / det, 0)) : 0;
+            t = SafeNormalize(t - n * dot(n, t), float3(1, 0, 0));
+            b = cross(n, t) * (dot(cross(n, t), b) < 0 ? -1 : 1);
+            if(abs(det) < 1e-10) b = 0;
+        }
+        if(dot(b, b) > 1e-12) {
+            Texture2D<float4> map = ResourceDescriptorHeap[NonUniformResourceIndex(maps.x)];
+            SamplerState sampleState = SamplerDescriptorHeap[NonUniformResourceIndex(maps.y)];
+            float3 mapped = map.SampleLevel(sampleState, uv, 0).xyz * 2 - 1; mapped.xy *= pbr.z;
+            payload.normal = SafeNormalize(t * mapped.x + b * mapped.y + n * mapped.z, n);
+        }
+    }
     payload.distance = RayTCurrent(); payload.hit = 1;
 }
 
@@ -129,8 +169,13 @@ void OpticalRaygen()
         const float3 position = path.origin + path.direction * hit.distance;
         const float3 normal = hit.front != 0 ? hit.normal : -hit.normal;
         const float diffuse = (1 - hit.reflectivity) * (1 - hit.transmission);
-        radiance += weight * hit.color * diffuse *
-            (1 + lightColor.rgb * lightDirectionIntensity.w * saturate(dot(normal, normalize(lightDirectionIntensity.xyz))));
+        float3 l = SafeNormalize(lightDirectionIntensity.xyz, float3(0, 1, 0));
+        Surface blocker = Intersect(Offset(position, hit.normal, l), l);
+        float visibility = blocker.hit == 0 ? 1 : 0;
+        float3 lighting = EvaluatePBR(saturate(hit.color), hit.metallic, hit.roughness, normal, -path.direction, l) *
+            lightColor.rgb * max(lightDirectionIntensity.w, 0) * visibility;
+        lighting += ambientIrradiance.rgb * hit.color * (1 - hit.metallic) * 0.96 / NexusPi;
+        radiance += weight * diffuse * lighting;
         if (path.depth + 1 >= maxBounces) continue;
         const float nextMedium = hit.front != 0 ? hit.ior : 1;
         const float cosine = saturate(dot(-path.direction, normal));
@@ -163,5 +208,6 @@ void OpticalRaygen()
             paths[count++] = child;
         }
     }
-    output[pixel] = float4(max(radiance, 0), 1);
+    // The optical UAV uses RGBA16_FLOAT; infinity would contaminate post-processing.
+    output[pixel] = float4(clamp(radiance, 0, 65504), 1);
 }

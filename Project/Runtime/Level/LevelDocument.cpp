@@ -64,9 +64,10 @@ Result<void> NexusEngine::LevelDocument::Create(std::optional<std::string> name)
 //  Levelを開く
 /////////////////////////////////////////////////////////////////////////////////////////
 Result<void> NexusEngine::LevelDocument::Open(const std::filesystem::path& path) {
-	if(!LevelSerializer::Load(path, *level_)) {
-		return std::unexpected(Error(ErrorCategory::General, 1, "Failed to open LevelDocument."));
-	}
+	auto level = std::make_unique<Level>();
+	auto result = level->Load(path);
+	if(!result) return result;
+	level_ = std::move(level);
 	filePath_ = path;
 	return {};
 }

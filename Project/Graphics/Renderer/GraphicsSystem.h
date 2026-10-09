@@ -54,6 +54,9 @@ namespace NexusEngine {
 		 * \param color RGBA順のClear Color
 		 */
 		void SetClearColor(const std::array<float, 4>& color) noexcept;
+		/** Scene-linear grading, EV exposure and HDR bloom; applies on the next frame. */
+		[[nodiscard]] Result<void> SetPostProcessSettings(const PostProcessSettings& settings);
+		[[nodiscard]] PostProcessSettings GetPostProcessSettings() const noexcept;
 		/**
 		 * \brief Backend非依存Rendererを初期化してFrame記録経路へ接続する
 		 * \param renderer Applicationが所有し、GraphicsSystemより長く生存するRenderer

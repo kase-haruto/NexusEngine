@@ -5,21 +5,19 @@
 #include "Graphics/Shadow/ShadowSystem.h"
 #include "Graphics/RayTracing/OpticalSystem.h"
 #include "Graphics/Renderer/PrimitiveRenderer.h"
+#include "Graphics/Renderer/GraphicsSystem.h"
 #include "Samples/OpticalDemoScene.h"
 #include "Foundation/Logging/Logger.h"
+#include "Graphics/Color/ColorSpace.h"
 #include <cmath>
 
-#include "Runtime/Scene/Components/CameraComponent.h"
-#include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
-#include "Runtime/Scene/Components/TransformComponent.h"
+#include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "ThirdParty/imgui/imgui.h"
 
 namespace NexusEngine {
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。
 		modelPose_.Shutdown();
-		cameraEntity_	= {};
-		rotatingEntity_ = {};
 		session_.Close();
 
 		// モデル読み込み
@@ -46,35 +44,10 @@ namespace NexusEngine {
 				return poseResult;
 			}
 		}
-		rotationRadians_	   = {};
-		cameraRotationRadians_ = cameraInitRotation_;
-		auto levelResult	   = session_.Create();
-
-		if(!levelResult) {
-			return levelResult;
-		}
-
-		// 既存描画デモをLevelデータへ移し、Runtime→Extraction→Renderer経路を実際に通す。
-		cameraEntity_ = session_.GetLevel()->CreateEntity("Camera");
-		if(auto* cameraSettings = cameraEntity_.AddComponent<CameraComponent>()) {
-			cameraSettings->verticalFieldOfViewRadians = 1.0471975512f;
-		}
-		if(cameraEntity_.GetComponent<TransformComponent>()) {
-			TransformComponent* cameraTransform = cameraEntity_.GetComponent<TransformComponent>();
-			cameraTransform->translation		= cameraInitTranslation_;
-			cameraTransform->rotation			= Quaternion::FromEulerRadians(cameraInitRotation_);
-		}
-
-		// 各Entityが1 Nodeだけを描画する。TransformはModel内の配置に対する追加変換。
-		for(size_t nodeIndex = 0; nodeIndex < modelAsset_.nodes.size(); ++nodeIndex) {
-			const auto& node = modelAsset_.nodes[nodeIndex];
-			if(node.meshIndices.empty()) continue;
-			auto entity = session_.GetLevel()->CreateEntity(node.name.empty() ? "Model Node " + std::to_string(nodeIndex) : node.name);
-			if(auto* primitive = entity.AddComponent<PrimitiveRenderComponent>()) {
-				primitive->nodeIndex = static_cast<uint32_t>(nodeIndex);
-			}
-		}
-		if(auto* id = cameraEntity_.GetComponent<PersistentIdComponent>()) session_.Select(id->value);
+		auto levelResult = session_.Open(assetDirectory / L"Levels/DemoLevel.json");
+		if(!levelResult) return levelResult;
+		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // Diffuse sky fill for shaded interiors.
+		renderScene_.fog.enabled = true;
 		return session_.GetLevel()->Update(0.0f);
 	}
 
@@ -84,6 +57,63 @@ namespace NexusEngine {
 			return;
 		}
 		DrawLevelDemoGui(session_);
+		if(ImGui::Begin("Distance Fog")) {
+			auto settings = renderScene_.fog;
+			bool changed = ImGui::Checkbox("Fog Enabled", &settings.enabled);
+			changed |= ImGui::DragFloat("Start Distance", &settings.startDistance, 0.5f, 0, 10000);
+			changed |= ImGui::DragFloat("End Distance", &settings.endDistance, 0.5f, 0.01f, 10000);
+			auto displayColor = ColorSpace::LinearToSrgb(settings.color);
+			if(ImGui::ColorEdit3("Fog Color (sRGB)", displayColor.data())) {
+				settings.color = ColorSpace::SrgbToLinear(displayColor); changed = true;
+			}
+			if(changed && settings.IsValid()) renderScene_.fog = settings;
+			if(!settings.IsValid()) ImGui::TextUnformatted("End distance must be greater than start distance.");
+			if(ImGui::Button("Reset Fog")) { renderScene_.fog = {}; renderScene_.fog.enabled = true; }
+		}
+		ImGui::End();
+		if(graphicsSystem_) {
+			if(ImGui::Begin("Post Processing")) {
+				auto settings = graphicsSystem_->GetPostProcessSettings();
+				int mapper = static_cast<int>(settings.GetEffectiveToneMapper());
+				bool changed = ImGui::Combo("Tone Mapping", &mapper, "Linear Clamp\0ACES Fitted\0PBR Neutral\0");
+				if(changed) { settings.toneMapper = static_cast<ToneMapper>(mapper); settings.filmicEnabled = true; }
+				changed |= ImGui::Checkbox("Anti-aliasing (FXAA)", &settings.antiAliasingEnabled);
+				changed |= ImGui::SliderFloat("Exposure (EV)", &settings.exposureEV, -10, 10);
+				changed |= ImGui::Checkbox("Bloom", &settings.bloomEnabled);
+				changed |= ImGui::SliderFloat("Bloom Intensity", &settings.bloomIntensity, 0, 2);
+				changed |= ImGui::DragFloat("Bloom Threshold (linear)", &settings.bloomThreshold, 0.05f, 0, 100);
+				changed |= ImGui::SliderFloat("Bloom Soft Knee", &settings.bloomSoftKnee, 0, 1);
+				changed |= ImGui::DragFloat3("White Balance RGB", settings.whiteBalance.data(), 0.01f, 0.01f, 16);
+				changed |= ImGui::SliderFloat("Saturation", &settings.saturation, 0, 4);
+				changed |= ImGui::SliderFloat("Contrast", &settings.contrast, 0.01f, 4);
+				changed |= ImGui::SliderFloat("Grading Gamma", &settings.gamma, 0.01f, 4);
+				changed |= ImGui::DragFloat3("Gain", settings.gain.data(), 0.01f, 0, 16);
+				changed |= ImGui::DragFloat3("Offset", settings.offset.data(), 0.001f, -16, 16);
+				if(ImGui::Button("Reset Post Processing")) { settings = {}; changed = true; }
+				if(changed) {
+					auto result = graphicsSystem_->SetPostProcessSettings(settings);
+					if(!result) NEXUS_LOG_ERROR("Editor", result.error().GetMessageText());
+				}
+			}
+			ImGui::End();
+		}
+		// UI は設定を操作するだけ。AS/MS や Resource を Editor から生成しない。
+		if(materialRenderer_) {
+			if(ImGui::Begin("Mesh Shader")) {
+				const bool available = materialRenderer_->AreMeshShadersAvailable();
+				ImGui::TextUnformatted(available ? "Mesh Shader Tier 1 / Pipeline ready" : "Mesh Shader unavailable / Traditional rendering");
+				ImGui::BeginDisabled(!available);
+				auto& settings = materialRenderer_->GetMeshletSettings();
+				ImGui::Checkbox("Use Mesh Shader", &settings.enabled);
+				ImGui::Checkbox("Enable Meshlet Culling", &settings.enableCulling);
+				int mode = static_cast<int>(settings.visualization);
+				if(ImGui::Combo("Debug Visualization", &mode, "Normal\0Meshlet Color\0Culling Result\0"))
+					settings.visualization = static_cast<MeshletVisualization>(mode);
+				ImGui::TextWrapped("Culling Result renders all candidates: green = visible, red = outside. Outside geometry may still be clipped by the rasterizer.");
+				ImGui::EndDisabled();
+			}
+			ImGui::End();
+		}
 		DrawHierarchy(session_);
 		DrawTransformInspector(session_);
 		if(optics_ && ImGui::Begin("Ray Traced Optics")) {
@@ -171,9 +201,26 @@ namespace NexusEngine {
 						NEXUS_LOG_WARNING("Editor", result.error().GetMessageText());
 					}
 				}
-				ImGui::DragFloat3("Light Direction", renderScene_.directionalLight.direction.data(), 0.01f);
-				ImGui::DragFloat("Angular Radius (rad)", &renderScene_.directionalLight.angularRadius, 0.001f, 0, 1.5f);
-				ImGui::DragFloat("Light Intensity", &renderScene_.directionalLight.intensity, 0.01f, 0, 10);
+				float ambientIntensity = renderScene_.ambientIrradiance[0] / 0.5f;
+				if(ImGui::SliderFloat("Ambient Light Intensity", &ambientIntensity, 0.0f, 10.0f))
+					renderScene_.ambientIrradiance = {0.5f * ambientIntensity, 0.6f * ambientIntensity, 0.8f * ambientIntensity};
+				if(auto* level = session_.GetLevel(); level && level->GetScene()) {
+					level->GetScene()->ForEach<DirectionalLightComponent>([&](Entity entity, DirectionalLightComponent& component) {
+						ImGui::PushID(static_cast<int>(entity.GetId().index));
+						auto edited = component;
+						bool changed = ImGui::Checkbox("Light Enabled", &edited.enabled);
+						changed |= ImGui::DragFloat3("Light Direction", edited.light.direction.data(), 0.01f);
+						auto displayColor = ColorSpace::LinearToSrgb(edited.light.color);
+						if(ImGui::ColorEdit3("Light Color (sRGB)", displayColor.data())) {
+							edited.light.color = ColorSpace::SrgbToLinear(displayColor);
+							changed = true;
+						}
+						changed |= ImGui::DragFloat("Angular Radius (rad)", &edited.light.angularRadius, 0.001f, 0, 1.5f);
+						changed |= ImGui::DragFloat("Light Intensity", &edited.light.intensity, 0.05f, 0, 100000);
+						if(changed && edited.IsValid()) component = edited;
+						ImGui::PopID();
+					});
+				}
 			}
 			ImGui::End();
 		}
@@ -182,8 +229,6 @@ namespace NexusEngine {
 	Result<void> EditorApplication::Initialize(const GraphicsRenderExtensionContext& context) {
 		auto rendererResult = imguiRenderer_.Initialize(context);
 		if(!rendererResult) {
-			cameraEntity_	= {};
-			rotatingEntity_ = {};
 			session_.Close();
 			return rendererResult;
 		}
@@ -191,13 +236,12 @@ namespace NexusEngine {
 		auto guiResult = guiContext_.Initialize();
 		if(!guiResult) {
 			imguiRenderer_.Shutdown();
-			cameraEntity_	= {};
-			rotatingEntity_ = {};
 			session_.Close();
 			return guiResult;
 		}
 
 		outlinerPanel_ = std::make_unique<OutlinerPanel>();
+		graphicsSystem_ = context.graphicsSystem;
 
 		return {};
 	}
@@ -231,10 +275,9 @@ namespace NexusEngine {
 	}
 
 	void EditorApplication::Shutdown() noexcept {
+		graphicsSystem_ = nullptr;
 		guiContext_.Shutdown();
 		imguiRenderer_.Shutdown();
-		cameraEntity_	= {};
-		rotatingEntity_ = {};
 		modelPose_.Shutdown();
 		renderScene_ = {};
 		session_.Close();

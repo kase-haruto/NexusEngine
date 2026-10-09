@@ -23,11 +23,12 @@ namespace NexusEngine {
 		settings_ = settings; return {};
 	}
 	Result<ShaderResourceRef> OpticalSystem::Render(GraphicsContext& context, const Matrix4x4& vp,
-		const DirectionalLightData& light, std::span<const OpticalDrawItem> draws, std::span<const OpticalSurfaceMaterial> materials) {
+		const DirectionalLightData& light, std::span<const OpticalDrawItem> draws, std::span<const OpticalSurfaceMaterial> materials,
+		const std::array<float, 3>& ambientIrradiance) {
 		if(!impl_) return std::unexpected(Error(ErrorCategory::Graphics, 70, "OpticalSystem is not initialized."));
 		auto connected = context.RegisterRecording(&impl_->backend, &OpticalBackend::CompleteRecording);
 		if(!connected) return std::unexpected(std::move(connected.error()));
-		return impl_->backend.Render(context, context.nativeCommandList_, vp, light, draws, materials, settings_);
+		return impl_->backend.Render(context, context.nativeCommandList_, vp, light, draws, materials, settings_, ambientIrradiance);
 	}
 	void OpticalSystem::Shutdown() noexcept { if(impl_) impl_->backend.Shutdown(); impl_.reset(); }
 }

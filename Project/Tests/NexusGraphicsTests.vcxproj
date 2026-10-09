@@ -60,12 +60,20 @@
     <ClCompile Include="..\Graphics\Resource\WicImageDecoder.cpp" />
     <ClCompile Include="..\Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsContext.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsResourceFactory.cpp" />
     <ClCompile Include="..\Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Meshlet\MeshletBuilder.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp" />
     <ClCompile Include="..\Graphics\Shader\Shader.cpp" />
     <ClCompile Include="..\Graphics\Shader\ShaderCompiler.cpp" />
     <ClCompile Include="..\Graphics\Shader\ShaderReflector.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <None Include="ColorManagementTests.inl" />
+    <None Include="ColorSpaceTest.hlsl" />
+  </ItemGroup>
 </Project>

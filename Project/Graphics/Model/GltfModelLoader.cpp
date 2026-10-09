@@ -126,6 +126,17 @@ namespace NexusEngine {
 			const cgltf_node* first) noexcept {
 			return static_cast<uint32_t>(pointer - first);
 		}
+		SamplerDesc ReadSampler(const cgltf_sampler* source) {
+			SamplerDesc result;
+			if(source) {
+				result.filter = source->mag_filter == cgltf_filter_type_nearest ||
+					source->min_filter == cgltf_filter_type_nearest ||
+					source->min_filter == cgltf_filter_type_nearest_mipmap_nearest ||
+					source->min_filter == cgltf_filter_type_nearest_mipmap_linear ? TextureFilter::Nearest : TextureFilter::Linear;
+				result.addressU = ConvertWrapMode(source->wrap_s); result.addressV = ConvertWrapMode(source->wrap_t);
+			}
+			return result;
+		}
 
 		[[nodiscard]] Matrix4x4 ConvertMatrix(const cgltf_float* source) noexcept {
 			Matrix4x4 result;
@@ -240,6 +251,7 @@ namespace NexusEngine {
 					"primitive has no valid POSITION accessor"));
 			}
 			const cgltf_accessor* normals = FindAttribute(primitive, cgltf_attribute_type_normal);
+			const cgltf_accessor* tangents = FindAttribute(primitive, cgltf_attribute_type_tangent);
 			const cgltf_accessor* texcoords = FindAttribute(primitive, cgltf_attribute_type_texcoord);
 			const cgltf_accessor* colors = FindAttribute(primitive, cgltf_attribute_type_color);
 			const cgltf_accessor* joints = FindAttribute(primitive, cgltf_attribute_type_joints);
@@ -252,11 +264,12 @@ namespace NexusEngine {
 				return accessor != nullptr && accessor->count != positions->count;
 			};
 			if(hasInvalidCount(normals) || hasInvalidCount(texcoords) || hasInvalidCount(colors) ||
-			   hasInvalidCount(joints) || hasInvalidCount(weights)) {
+			   hasInvalidCount(joints) || hasInvalidCount(weights) || hasInvalidCount(tangents)) {
 				return std::unexpected(MakeGltfError(path, kGltfInvalidData,
 					"vertex attribute accessor counts do not match POSITION"));
 			}
 			if((normals != nullptr && normals->type != cgltf_type_vec3) ||
+			   (tangents != nullptr && tangents->type != cgltf_type_vec4) ||
 			   (texcoords != nullptr && texcoords->type != cgltf_type_vec2) ||
 			   (colors != nullptr && colors->type != cgltf_type_vec3 && colors->type != cgltf_type_vec4) ||
 			   (joints != nullptr && joints->type != cgltf_type_vec4) ||
@@ -275,6 +288,11 @@ namespace NexusEngine {
 					vertex.normal[2] = -vertex.normal[2];
 				}
 				if(texcoords != nullptr) cgltf_accessor_read_float(texcoords, vertexIndex, vertex.texcoord, 2);
+				if(tangents != nullptr) {
+					cgltf_accessor_read_float(tangents, vertexIndex, vertex.tangent, 4);
+					vertex.tangent[2] = -vertex.tangent[2];
+					vertex.tangent[3] = -vertex.tangent[3]; // Reflect glTF's right-handed basis.
+				}
 				if(colors != nullptr) {
 					const cgltf_size componentCount = colors->type == cgltf_type_vec3 ? 3 : 4;
 					cgltf_accessor_read_float(colors, vertexIndex, vertex.color, componentCount);
@@ -357,6 +375,24 @@ namespace NexusEngine {
 			material.name = source.name != nullptr ? source.name : "Material";
 			std::copy_n(source.pbr_metallic_roughness.base_color_factor, 4,
 				material.baseColorFactor.begin());
+			material.metallicFactor = source.pbr_metallic_roughness.metallic_factor;
+			material.roughnessFactor = source.pbr_metallic_roughness.roughness_factor;
+			material.normalScale = source.normal_texture.scale;
+			auto readMap = [&](const cgltf_texture_view& view, std::vector<uint8_t>& bytes, SamplerDesc& sampler) -> Result<void> {
+				if(view.texture == nullptr) return {};
+				if(view.texcoord != 0 || view.has_transform || view.texture->image == nullptr)
+					return std::unexpected(MakeGltfError(filePath, kGltfUnsupported, "PBR maps require TEXCOORD_0, no texture transform, and an image"));
+				auto image = ReadImageData(*view.texture->image, filePath);
+				if(!image) return std::unexpected(std::move(image.error()));
+				bytes = std::move(*image);
+				sampler = ReadSampler(view.texture->sampler);
+				return {};
+			};
+			auto mapResult = readMap(source.pbr_metallic_roughness.metallic_roughness_texture,
+				material.metallicRoughnessImageData, material.metallicRoughnessSampler);
+			if(!mapResult) return std::unexpected(std::move(mapResult.error()));
+			mapResult = readMap(source.normal_texture, material.normalImageData, material.normalSampler);
+			if(!mapResult) return std::unexpected(std::move(mapResult.error()));
 
 			const cgltf_texture_view& textureView = source.pbr_metallic_roughness.base_color_texture;
 			if(textureView.texture != nullptr) {

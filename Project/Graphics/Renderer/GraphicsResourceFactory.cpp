@@ -1,4 +1,7 @@
 #include "GraphicsResourceFactory.h"
+#include "Graphics/Color/ColorSpace.h"
+#include "Graphics/Meshlet/MeshShaderPipeline.h"
+#include "Graphics/Meshlet/MeshletResource.h"
 
 // c++
 #include <cmath>
@@ -30,6 +33,17 @@
 #include "Graphics/Shadow/ShadowSystem.h"
 
 namespace NexusEngine {
+	Result<void> GraphicsResourceFactory::CreateMeshShaderPipeline(MeshShaderPipeline& pipeline, const std::filesystem::path& shaders) const {
+		if(!capabilities_.SupportsMeshShaders()) return std::unexpected(Error(ErrorCategory::Graphics, 82, "Mesh shaders unsupported."));
+		return pipeline.Initialize(nativeDevice_, shaders);
+	}
+	Result<void> GraphicsResourceFactory::CreateMeshletResource(MeshletResource& resource, const MeshletData& data, const MeshResource& mesh) const {
+		if(!mesh.IsInitialized() || !capabilities_.SupportsMeshShaders()) return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet source unavailable."));
+		if(data.submeshes.size() != mesh.GetSubmeshes().size()) return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet submesh count mismatch."));
+		for(uint32_t index : data.vertices) if(index >= mesh.vertexBuffer_.GetVertexCount())
+			return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet original vertex index out of bounds."));
+		return resource.Initialize(nativeDevice_, commandQueue_, data, mesh.GetGeometryGeneration());
+	}
 	namespace {
 		constexpr int32_t kInvalidResourceArgument = 1;
 
@@ -231,6 +245,12 @@ namespace NexusEngine {
 		}
 
 		std::vector<std::unique_ptr<MeshResource>> meshes;
+		for(const auto& material : assetData.materials) {
+			if(!std::isfinite(material.metallicFactor) || material.metallicFactor < 0 || material.metallicFactor > 1 ||
+				!std::isfinite(material.roughnessFactor) || material.roughnessFactor < 0 || material.roughnessFactor > 1 ||
+				!std::isfinite(material.normalScale) || material.normalScale < 0)
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Invalid PBR material factors."));
+		}
 		meshes.reserve(assetData.meshes.size());
 		for(const MeshAssetData& source : assetData.meshes) {
 			auto mesh = std::make_unique<MeshResource>();
@@ -268,7 +288,8 @@ namespace NexusEngine {
 		} else {
 			model.materials_.reserve(assetData.materials.size());
 			for(const ModelMaterialAssetData& material : assetData.materials) {
-				model.materials_.push_back({ material.name, material.baseColorFactor, material.sampler, material.optics });
+				model.materials_.push_back({ material.name, material.baseColorFactor, material.sampler, material.optics,
+					material.metallicFactor, material.roughnessFactor, material.normalScale });
 			}
 		}
 		return {};
@@ -321,11 +342,24 @@ namespace NexusEngine {
 	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
 		TextureResource& texture,
 		const std::span<const uint8_t> encodedData) const {
+		return CreateTexture2DFromEncodedData(texture, encodedData, TextureColorSpace::Srgb);
+	}
+
+	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
+		TextureResource& texture, const std::span<const uint8_t> encodedData, TextureColorSpace colorSpace) const {
+		if(colorSpace != TextureColorSpace::Srgb && colorSpace != TextureColorSpace::Linear)
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Unsupported texture colour space."));
+		return CreateTexture2DFromEncodedData(texture, encodedData,
+			colorSpace == TextureColorSpace::Srgb ? TextureFormat::Rgba8UnormSrgb : TextureFormat::Rgba8Unorm);
+	}
+
+	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
+		TextureResource& texture, const std::span<const uint8_t> encodedData, TextureFormat format) const {
 		const WicImageDecoder decoder;
 		auto image = decoder.Decode(encodedData);
 		if(!image) return std::unexpected(std::move(image.error()));
 		return CreateTexture2D(texture,
-			TextureDesc { image->width, image->height, TextureFormat::Rgba8UnormSrgb },
+			TextureDesc { image->width, image->height, format },
 			image->rgbaPixels);
 	}
 

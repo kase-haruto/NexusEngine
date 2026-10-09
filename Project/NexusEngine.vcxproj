@@ -204,9 +204,13 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Resource\WicImageDecoder.cpp" />
     <ClCompile Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsContext.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp" />
     <ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="Graphics\Meshlet\MeshletBuilder.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp" />
     <ClCompile Include="Graphics\Shader\Shader.cpp" />
     <ClCompile Include="Graphics\Shader\ShaderCompiler.cpp" />
     <ClCompile Include="Graphics\Shader\ShaderReflector.cpp" />
@@ -316,6 +320,10 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilTypes.h" />
     <ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilFormatDx12.h" />
     <ClInclude Include="Graphics\Renderer\GraphicsSystem.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.h" />
+    <ClInclude Include="Graphics\PostProcess\PostProcessSettings.h" />
+    <ClInclude Include="Graphics\Color\ColorSpace.h" />
+    <ClInclude Include="Graphics\Fog\FogSettings.h" />
     <ClInclude Include="Graphics\Renderer\GraphicsContext.h" />
     <ClInclude Include="Graphics\Renderer\GraphicsRenderer.h" />
     <ClInclude Include="Graphics\Renderer\GraphicsResourceFactory.h" />
@@ -333,6 +341,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Runtime\Scene\Components\HierarchyComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\TransformComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\DirectionalLightComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\PersistentIdComponent.h" />
     <ClInclude Include="Runtime\Scene\Entity.h" />
@@ -356,9 +365,29 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Editor\Gui\Core\GuiTheme.h" />
     <ClInclude Include="Editor\Gui\Core\GuiTypes.h" />
     <ClInclude Include="Editor\Gui\Core\IGuiTextureProvider.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletConfig.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletData.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletBuilder.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletResource.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshShaderPipeline.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletDebugSettings.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Docs\PostProcessing.md" />
+    <None Include="Shaders\PostProcess\PostProcess.hlsl" />
+    <None Include="Shaders\Common\PBR.hlsli" />
+    <None Include="Shaders\Common\ColorSpace.hlsli" />
+    <None Include="Shaders\Common\Fog.hlsli" />
+    <None Include="Docs\Lighting.md" />
+    <None Include="Docs\Fog.md" />
+    <None Include="Shaders\PostProcess\ACES-LICENSE.txt" />
     <None Include="Docs\GraphicsREADME.md" />
+    <None Include="Docs\MeshShader.md" />
+    <None Include="Shaders\Mesh\MeshletConfig.h" />
+    <None Include="Shaders\Mesh\MeshletCommon.hlsli" />
+    <None Include="Shaders\Mesh\MeshletAS.hlsl" />
+    <None Include="Shaders\Mesh\MeshletMS.hlsl" />
+    <None Include="Shaders\Mesh\MeshletPS.hlsl" />
     <None Include="Docs\RayTracing.md" />
     <None Include="Shaders\RayTracing\Optical.hlsl" />
     <None Include="Docs\RayTracingReport.md" />

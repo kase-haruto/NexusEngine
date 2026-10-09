@@ -14,6 +14,8 @@ namespace NexusEngine {
 		std::array<float, 4> color {1, 1, 1, 1};
 		OpticalMaterial optics;
 		ShaderResourceRef texture, sampler; //< Renderer所有のMaterial資源への非所有参照
+		std::array<float, 4> pbr {0, 1, 1, 0};
+		ShaderResourceRef normalTexture, normalSampler, metallicRoughnessTexture, metallicRoughnessSampler;
 	};
 	struct OpticalDrawItem {
 		ShadowDrawItem geometry;
@@ -41,7 +43,8 @@ namespace NexusEngine {
 		[[nodiscard]] const OpticalSettings& GetSettings() const noexcept { return settings_; }
 		/** \brief Camera rayから光学Materialの最終色を評価。alpha=1のpixelだけForwardへ合成する */
 		[[nodiscard]] Result<ShaderResourceRef> Render(GraphicsContext&, const Matrix4x4& viewProjection,
-			const DirectionalLightData&, std::span<const OpticalDrawItem>, std::span<const OpticalSurfaceMaterial>);
+			const DirectionalLightData&, std::span<const OpticalDrawItem>, std::span<const OpticalSurfaceMaterial>,
+			const std::array<float, 3>& ambientIrradiance = {0.03f, 0.03f, 0.03f});
 		/** \brief GPU idleを保証してすべての所有資源を解放する */
 		void Shutdown() noexcept;
 	private:

@@ -18,6 +18,8 @@ namespace NexusEngine {
 	public:
 		/** \brief 既存選択を解除して編集用Worldを生成する */
 		[[nodiscard]] Result<void> Create();
+		/** Open an existing level document; preserve the current session on failure. */
+		[[nodiscard]] Result<void> Open(const std::filesystem::path& path);
 		/** \brief World参照を破棄する前に選択状態を解除する */
 		void Close() noexcept;
 		/** \brief 現在のWorldで解決できる永続IDだけを選択する */

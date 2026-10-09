@@ -9,6 +9,7 @@
 // engine
 #include "Foundation/Math/Matrix4x4.h"
 #include "Graphics/Shadow/ShadowTypes.h"
+#include "Graphics/Fog/FogSettings.h"
 
 namespace NexusEngine {
 
@@ -56,6 +57,8 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	struct RenderScene {
 		DirectionalLightData directionalLight; //< API非依存Lightingと影の共通入力
+		std::array<float, 3> ambientIrradiance {0.03f, 0.03f, 0.03f};
+		FogSettings fog;
 		std::optional<RenderCamera> camera;          //< Camera未配置のSceneでは空
 		std::vector<PrimitiveRenderItem> primitives; //< 組み込みPrimitive描画項目
 	};

@@ -23,6 +23,7 @@ namespace NexusEngine {
 		float color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float jointIndices[4] = {};
 		float jointWeights[4] = {};
+		float tangent[4] = {}; // xyz tangent, w handedness; zero means derive from UVs.
 	};
 
 	/** Loaderが生成するGPU upload前の1 Mesh分CPU data。 */
@@ -44,6 +45,11 @@ namespace NexusEngine {
 		std::vector<uint8_t> baseColorImageData;
 		SamplerDesc sampler;
 		OpticalMaterial optics; //< Raster/RTで共有する鏡面と透過の値
+		float metallicFactor = 0.0f;
+		float roughnessFactor = 1.0f;
+		float normalScale = 1.0f;
+		std::vector<uint8_t> metallicRoughnessImageData, normalImageData;
+		SamplerDesc metallicRoughnessSampler, normalSampler;
 	};
 
 	/** Model hierarchy上のNode。Meshを持たないTransform Nodeも許可する。 */

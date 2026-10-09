@@ -8,8 +8,10 @@
 namespace NexusEngine {
 	class DescriptorAllocator;
 	class GraphicsContext;
+	class GraphicsSystem;
 
 	struct GraphicsRenderExtensionContext {
+		GraphicsSystem* graphicsSystem = nullptr; //< Non-owning settings API; valid until extension Shutdown.
 		void* nativeDevice = nullptr; //< Graphics backendが所有するDeviceへの非所有参照
 		void* nativeCommandQueue = nullptr; //< Graphics backendが所有するQueueへの非所有参照
 		DescriptorAllocator* resourceDescriptors = nullptr; //< 共有CBV/SRV/UAV allocator

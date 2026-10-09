@@ -98,6 +98,14 @@ namespace NexusEngine {
 		// Info QueueはDeviceのインターフェースなので、Device生成成功後にのみ設定できる。
 		// OPTIONS5はDXR非対応環境では取得失敗もあり得る。オプション機能なので
 		// Device初期化を失敗させず、Unsupportedへ落として通常描画を継続する。
+		// Mesh Shader はオプション。問い合わせ失敗でも Device 初期化を継続する。
+		D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 {};
+		Microsoft::WRL::ComPtr<ID3D12Device2> meshDevice;
+		if(SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))) &&
+		   options7.MeshShaderTier >= D3D12_MESH_SHADER_TIER_1 && SUCCEEDED(device_.As(&meshDevice))) {
+			capabilities_.meshShader = MeshShaderSupport::Tier1;
+		}
+		NEXUS_LOG_INFO("Graphics", capabilities_.SupportsMeshShaders() ? "Mesh Shader: Tier 1 supported." : "Mesh Shader: unsupported.");
 		D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 {};
 		if(SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
 			if(options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1) {

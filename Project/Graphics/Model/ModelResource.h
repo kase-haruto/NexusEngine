@@ -33,6 +33,9 @@ namespace NexusEngine {
 		std::array<float, 4> baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
 		SamplerDesc sampler;
 		OpticalMaterial optics;
+		float metallicFactor = 0.0f;
+		float roughnessFactor = 1.0f;
+		float normalScale = 1.0f;
 	};
 
 	/*-----------------------------------------------------------------------------------------

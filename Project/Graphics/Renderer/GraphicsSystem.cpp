@@ -20,6 +20,7 @@
 #include "GraphicsRenderer.h"
 #include "GraphicsResourceFactory.h"
 #include "GraphicsRenderExtension.h"
+#include "Graphics/Backend/DirectX12/PostProcess/PostProcessBackend.h"
 
 namespace NexusEngine {
 	namespace {
@@ -48,6 +49,8 @@ namespace NexusEngine {
 		BindlessDescriptorTable bindlessDescriptors;
 		TransientDescriptorArena transientDescriptors;
 		GraphicsResourceFactory resourceFactory;
+		PostProcessBackend postProcess;
+		PostProcessSettings postProcessSettings;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
 		std::filesystem::path shaderDirectory;
@@ -69,6 +72,8 @@ namespace NexusEngine {
 	// Graphicsサブシステムを依存順に初期化する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> GraphicsSystem::Initialize(const WindowSurfaceDesc& surface, const GraphicsSystemDesc& desc) {
+		if(!desc.postProcess.IsValid())
+			return std::unexpected(Error(ErrorCategory::Graphics, 88, "Invalid post-process settings."));
 		// PImplの存在を初期化済み状態として扱い、COMオブジェクトの二重生成を防ぐ。
 		if(impl_) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kAlreadyInitialized, "GraphicsSystem is already initialized."));
@@ -158,6 +163,9 @@ namespace NexusEngine {
 			&implementation->bindlessDescriptors, SwapChain::kBufferCount,
 			&implementation->descriptors, implementation->device.GetCapabilities());
 
+		result = implementation->postProcess.Initialize(implementation->device.GetDevice(), desc.shaderDirectory, surface.width, surface.height);
+		if(!result) return std::unexpected(std::move(result.error()));
+		implementation->postProcessSettings = desc.postProcess;
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
 		implementation->shaderDirectory = desc.shaderDirectory;
@@ -199,6 +207,7 @@ namespace NexusEngine {
 		// Renderer Resourceの破棄完了後に、非所有Device参照だけを持つFactoryを破棄する。
 		impl_->resourceFactory.ConnectBackend(nullptr, nullptr, nullptr, 0);
 		impl_->transientDescriptors.Shutdown();
+		impl_->postProcess.Shutdown();
 		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
 		// DSV allocatorの所有者であるDescriptorManagerより先にDepth Bufferを破棄する。
@@ -259,8 +268,7 @@ namespace NexusEngine {
 		const D3D12_CPU_DESCRIPTOR_HANDLE rtv = impl_->swapChain.GetCurrentRtv();
 		// ColorとDepthを同一PassのOutput Mergerへ設定し、3D描画前に両方を初期化する。
 		const D3D12_CPU_DESCRIPTOR_HANDLE dsv { impl_->depthStencilBuffer.GetNativeDsvHandle() };
-		frame.commandList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
-		frame.commandList->ClearRenderTargetView(rtv, impl_->clearColor.data(), 0, nullptr);
+		impl_->postProcess.BeginScene(frame.commandList.Get(), dsv, impl_->clearColor.data());
 		frame.commandList->ClearDepthStencilView(
 			dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
@@ -282,11 +290,16 @@ namespace NexusEngine {
 			frame.commandList.Get(), &impl_->bindlessDescriptors,
 			&impl_->transientDescriptors, frameIndex,
 			impl_->swapChain.GetWidth(), impl_->swapChain.GetHeight());
-		graphicsContext.nativeRtv_ = rtv.ptr;
+		graphicsContext.nativeRtv_ = impl_->postProcess.GetSceneRtv().ptr;
 		graphicsContext.nativeDsv_ = dsv.ptr;
 		if(impl_->renderer != nullptr) {
 			impl_->renderer->Render(graphicsContext);
 		}
+		impl_->postProcess.Resolve(frame.commandList.Get(), rtv, impl_->postProcessSettings);
+		// UI/extensions draw in display space after scene post processing.
+		impl_->bindlessDescriptors.Bind(frame.commandList.Get());
+		graphicsContext.nativeRtv_ = rtv.ptr;
+		graphicsContext.RestoreMainRenderTargets();
 		if(impl_->renderExtension != nullptr) {
 			impl_->renderExtension->BeginFrame();
 			impl_->renderExtension->Record(graphicsContext);
@@ -336,7 +349,9 @@ namespace NexusEngine {
 		// GPU idle保証後にColorとDepthを同じサイズへ再生成する。
 		auto resizeResult = impl_->swapChain.Resize(impl_->device.GetDevice(), width, height);
 		if(!resizeResult) return resizeResult;
-		return impl_->depthStencilBuffer.Resize(impl_->device.GetDevice(), width, height);
+		resizeResult = impl_->depthStencilBuffer.Resize(impl_->device.GetDevice(), width, height);
+		if(!resizeResult) return resizeResult;
+		return impl_->postProcess.Resize(impl_->device.GetDevice(), width, height);
 	}
 
 	void GraphicsSystem::SetClearColor(const std::array<float, 4>& color) noexcept {
@@ -344,6 +359,16 @@ namespace NexusEngine {
 		if(impl_) {
 			impl_->clearColor = color;
 		}
+	}
+
+	Result<void> GraphicsSystem::SetPostProcessSettings(const PostProcessSettings& settings) {
+		if(!impl_ || !settings.IsValid())
+			return std::unexpected(Error(ErrorCategory::Graphics, 88, "Invalid post-process settings or uninitialized graphics system."));
+		impl_->postProcessSettings = settings;
+		return {};
+	}
+	PostProcessSettings GraphicsSystem::GetPostProcessSettings() const noexcept {
+		return impl_ ? impl_->postProcessSettings : PostProcessSettings {};
 	}
 
 	Result<void> GraphicsSystem::AttachRenderer(IGraphicsRenderer* const renderer) {
@@ -370,6 +395,7 @@ namespace NexusEngine {
 			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Render extension cannot be attached."));
 		}
 		GraphicsRenderExtensionContext context;
+		context.graphicsSystem = this;
 		context.nativeDevice = impl_->device.GetDevice();
 		context.nativeCommandQueue = impl_->commandQueue.GetNativeQueue();
 		context.resourceDescriptors = &impl_->descriptors.Resources();

@@ -18,6 +18,15 @@ void NexusEngine::EditorSession::Close() noexcept {
 	levelDocument_.reset();
 }
 
+NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem::path& path) {
+	auto document = std::make_unique<LevelDocument>();
+	auto result = document->Open(path);
+	if(!result) return result;
+	Close();
+	levelDocument_ = std::move(document);
+	return {};
+}
+
 void NexusEngine::EditorSession::Select(PersistentId id) {
 	auto* level = GetLevel();
 	selected_ = level && level->FindEntity(id).IsAlive() ? id : PersistentId{};

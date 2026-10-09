@@ -109,7 +109,7 @@ namespace NexusEngine {
 		desc.InputLayout = { elements.data(), static_cast<UINT>(elements.size()) };
 		desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		desc.NumRenderTargets = 1;
-		desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+		desc.RTVFormats[0] = pipelineDesc.hdrRenderTarget ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 		desc.SampleDesc.Count = 1;
 		Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
 		const HRESULT result = device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState));

@@ -3,6 +3,7 @@
 // c++
 #include <cstdint>
 #include <cstddef>
+#include <filesystem>
 #include <span>
 #include <vector>
 
@@ -13,6 +14,9 @@
 #include "Graphics/Device/GraphicsCapabilities.h"
 
 namespace NexusEngine {
+	class MeshShaderPipeline;
+	class MeshletResource;
+	struct MeshletData;
 	class BindlessDescriptorTable;
 	class CommandQueue;
 	class ConstantBuffer;
@@ -27,6 +31,8 @@ namespace NexusEngine {
 	class DescriptorManager;
 	struct SamplerDesc;
 	struct TextureDesc;
+	enum class TextureFormat : uint8_t;
+	enum class TextureColorSpace : uint8_t;
 	enum class IndexFormat : uint8_t;
 	struct SubmeshRange;
 	struct ModelAssetData;
@@ -39,6 +45,20 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class GraphicsResourceFactory final {
 	public:
+		/** \brief Native Feature 型を公開せず起動時能力を返す */
+		[[nodiscard]] const GraphicsCapabilities& GetCapabilities() const noexcept { return capabilities_; }
+		/** \brief 対応 GPU 上で独立 AS/MS/PS Pipeline を作成する */
+		[[nodiscard]] Result<void> CreateMeshShaderPipeline(MeshShaderPipeline& pipeline, const std::filesystem::path& shaders) const;
+		/**
+		 * \brief CPU Meshlet を同期 Upload。元 Mesh の世代を保持する
+		 * \param resource GPU Buffer の所有先。成功時は Upload 完了済み
+		 * \param data Builder または Importer が生成した Meshlet と Bounds
+		 * \param mesh 元 Vertex Buffer と Submesh を所有する Mesh
+		 * \return 入力検証、生成、Upload の結果
+		 * \note Signal / Wait 失敗時は投入済み Resource が残り得る。エラー時も
+		 *       resource を GPU idle 後まで保持し、Shutdown で解放すること
+		 */
+		[[nodiscard]] Result<void> CreateMeshletResource(MeshletResource& resource, const MeshletData& data, const MeshResource& mesh) const;
 		/** \brief 既存Device/Descriptor/Frame同期に接続したShadow基盤を初期化する */
 		[[nodiscard]] Result<void> CreateShadowSystem(ShadowSystem& shadows, const std::filesystem::path& shaders);
 		GraphicsResourceFactory() noexcept = default;
@@ -119,6 +139,11 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> CreateTexture2DFromEncodedData(
 			TextureResource& texture,
 			std::span<const uint8_t> encodedData) const;
+		[[nodiscard]] Result<void> CreateTexture2DFromEncodedData(
+			TextureResource& texture, std::span<const uint8_t> encodedData, TextureFormat format) const;
+		/** Specify sRGB for colour images, Linear for normal/roughness/metallic data. */
+		[[nodiscard]] Result<void> CreateTexture2DFromEncodedData(
+			TextureResource& texture, std::span<const uint8_t> encodedData, TextureColorSpace colorSpace) const;
 
 		/** \brief 完成済みTextureから永続Bindless SRV参照を生成する */
 		[[nodiscard]] Result<ShaderResourceRef> CreatePersistentTextureShaderResource(

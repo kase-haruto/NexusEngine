@@ -20,7 +20,8 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> Initialize(void*, CommandQueue*, BindlessDescriptorTable*, GraphicsResourceFactory*,
 			uint32_t frames, bool supported, const std::filesystem::path&);
 		[[nodiscard]] Result<ShaderResourceRef> Render(GraphicsContext&, void*, const Matrix4x4&,
-			const DirectionalLightData&, std::span<const OpticalDrawItem>, std::span<const OpticalSurfaceMaterial>, const OpticalSettings&);
+			const DirectionalLightData&, std::span<const OpticalDrawItem>, std::span<const OpticalSurfaceMaterial>, const OpticalSettings&,
+			const std::array<float, 3>& ambientIrradiance);
 		/** \brief 未投入記録のAS/Texture状態を復帰する */
 		static void CompleteRecording(void*, bool, uint32_t) noexcept;
 		void Shutdown() noexcept;
@@ -35,14 +36,17 @@ namespace NexusEngine {
 			std::array<float, 4> color {};
 			std::array<float, 4> optical {}; //< reflection/transmission/IOR/padding
 			std::array<float, 4> absorption {};
+			std::array<float, 4> pbr {};
+			std::array<uint32_t, 4> maps {};
 		};
 		struct Constants {
 			Matrix4x4 inverseViewProjection;
 			std::array<float, 4> lightDirection {}, lightColor {};
 			std::array<uint32_t, 4> indices {}; //< UAV/geometryByteOffset/bounces/padding
 			std::array<float, 4> rays {}; //< Bias/TMax/padding
+			std::array<float, 4> ambient {};
 		};
-		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 80 && sizeof(Constants) == 128);
+		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 112 && sizeof(Constants) == 144);
 		[[nodiscard]] Result<void> CreatePipeline();
 		[[nodiscard]] Result<void> Resize(uint32_t, uint32_t);
 		[[nodiscard]] Result<GeometryViews*> GetViews(const MeshResource&);

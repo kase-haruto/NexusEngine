@@ -29,7 +29,15 @@ namespace NexusEngine {
 		std::array<float, 4> lightColor { 1, 1, 1, 0 }; //< 線形RGBとpadding
 		uint32_t opticalRadianceIndex = 0; //< Reflection/Transmission合成Texture
 		std::array<uint32_t, 3> opticalPadding {};
+		Matrix4x4 world;
+		std::array<float, 4> cameraPosition {};
+		std::array<float, 4> ambientIrradiance {0.03f, 0.03f, 0.03f, 0};
+		std::array<float, 4> pbrParameters {0, 1, 1, 0}; // metallic, roughness, normal scale
+		uint32_t normalTextureIndex = 0, normalSamplerIndex = 0;
+		uint32_t metallicRoughnessTextureIndex = 0, metallicRoughnessSamplerIndex = 0;
+		std::array<float, 4> fogColorEnabled {};
+		std::array<float, 4> fogDistances {8, 40, 0, 0};
 	};
 
-	static_assert(sizeof(PrimitiveDrawData) == 4320);
+	static_assert(sizeof(PrimitiveDrawData) == 4480);
 } // namespace NexusEngine
