@@ -1,7 +1,10 @@
 #pragma once
 
+// engine
 #include "Runtime/Level/LevelDocument.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
+
+// c++ standard
 #include <cmath>
 
 namespace NexusEngine {
@@ -31,7 +34,8 @@ namespace NexusEngine {
 
 	private:
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
-		PersistentId				   selected_;	   //< EntityやComponentのアドレスを保持しない
-		bool						   dirty_ = false; //< 編集操作が適用されたか
+
+		PersistentId selected_;		 //< EntityやComponentのアドレスを保持しない
+		bool		 dirty_ = false; //< 編集操作が適用されたか
 	};
 } // namespace NexusEngine

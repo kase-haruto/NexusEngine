@@ -129,6 +129,9 @@ namespace NexusEngine {
 		if(optics_) {
 			ImGui::End();
 		}
+
+		outlinerPanel_->ShowGui();
+
 		if(shadows_ != nullptr) {
 			if(ImGui::Begin("Shadows")) {
 				const auto capabilities = shadows_->GetCapabilities();
@@ -193,6 +196,9 @@ namespace NexusEngine {
 			session_.Close();
 			return guiResult;
 		}
+
+		outlinerPanel_ = std::make_unique<OutlinerPanel>();
+
 		return {};
 	}
 

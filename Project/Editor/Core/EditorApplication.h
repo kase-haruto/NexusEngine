@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Gui/Panels/OutlinerPanel.h"
 #include "Core/Framework/FrameworkUpdateClient.h"
 #include "Editor/Gui/Core/GuiContext.h"
 #include "Editor/ImGui/ImGuiRenderer.h"
@@ -90,6 +91,9 @@ namespace NexusEngine {
 		EditorSession		 session_;	   //< 編集Worldと選択状態を所有する
 		RenderSceneExtractor extractor_;   //< Runtimeから描画snapshotへの境界
 		RenderScene			 renderScene_; //< Rendererへの値snapshot。EditorApplicationと同寿命
+
+		// panels
+		std::unique_ptr<OutlinerPanel> outlinerPanel_; //< LevelDocumentのEntityを階層表示する
 
 		// demo用モデル描画
 		ModelAssetData modelAsset_;									  //< Sceneで選択したCPU Asset。modelPose_より長く生存する

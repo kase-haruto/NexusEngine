@@ -175,6 +175,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Shadow\ShadowSystem.cpp" />
     <ClCompile Include="Graphics\RayTracing\OpticalSystem.cpp" />
     <ClCompile Include="Graphics\Model\PrimitiveMeshBuilder.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\OutlinerPanel.cpp" />
+    <ClCompile Include="Editor\Gui\Widgets\PropertyWidgets.cpp" />
     <ClCompile Include="Runtime\Level\LevelDocument.cpp" />
     <ClCompile Include="Samples\OpticalDemoScene.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.cpp" />
@@ -221,6 +223,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
     <ClCompile Include="Editor\Core\EditorApplication.cpp" />
     <ClCompile Include="Editor\Gui\Core\GuiContext.cpp" />
+    <ClCompile Include="Editor\Gui\Widgets\SearchBar.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui.cpp">
       <TreatWarningAsError>false</TreatWarningAsError>
     </ClCompile>
@@ -278,6 +281,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Graphics\RayTracing\OpticalSystem.h" />
     <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.h" />
     <ClInclude Include="Graphics\Model\PrimitiveMeshBuilder.h" />
+    <ClInclude Include="Editor\Gui\Panels\OutlinerPanel.h" />
+    <ClInclude Include="Editor\Gui\Widgets\PropertyWidgets.h" />
     <ClInclude Include="Runtime\Level\LevelDocument.h" />
     <ClInclude Include="Samples\OpticalDemoScene.h" />
     <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.h" />
@@ -346,6 +351,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Editor\Core\EditorSession.h" />
     <ClInclude Include="Editor\Core\ScenePanels.h" />
     <ClInclude Include="Editor\Gui\Core\GuiContext.h" />
+    <ClInclude Include="Editor\Gui\Widgets\SearchBar.h" />
     <ClInclude Include="Editor\Gui\Core\GuiItem.h" />
     <ClInclude Include="Editor\Gui\Core\GuiTheme.h" />
     <ClInclude Include="Editor\Gui\Core\GuiTypes.h" />
