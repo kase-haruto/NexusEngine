@@ -1,5 +1,4 @@
 #include "EditorApplication.h"
-#include "ScenePanels.h"
 #include "Graphics/Model/ModelLoader.h"
 
 #include "Graphics/Shadow/ShadowSystem.h"
@@ -8,6 +7,7 @@
 #include "Graphics/Renderer/GraphicsSystem.h"
 #include "Samples/OpticalDemoScene.h"
 #include "Foundation/Logging/Logger.h"
+#include "Foundation/Utility/String/ConvertString.h"
 #include "Graphics/Color/ColorSpace.h"
 #include <cmath>
 
@@ -44,7 +44,9 @@ namespace NexusEngine {
 				return poseResult;
 			}
 		}
-		auto levelResult = session_.Open(assetDirectory / L"Levels/DemoLevel.json");
+		EditorSettingsStore bootSettings;
+		bootSettings.Load(std::filesystem::current_path());
+		auto levelResult = session_.Open(std::filesystem::path{ConvertString(bootSettings.project.startupLevel)});
 		if(!levelResult) return levelResult;
 		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // Diffuse sky fill for shaded interiors.
 		renderScene_.fog.enabled = true;
@@ -52,11 +54,15 @@ namespace NexusEngine {
 	}
 
 	void EditorApplication::ShowGui() {
+		if(workspace_) workspace_->Draw();
+		if(showLegacyDiagnostics_) ShowLegacyDiagnostics();
+	}
+
+	void EditorApplication::ShowLegacyDiagnostics() {
 		// フレームが開始していない場合は終了
 		if(!guiContext_.IsFrameActive()) {
 			return;
 		}
-		DrawLevelDemoGui(session_);
 		if(ImGui::Begin("Distance Fog")) {
 			auto settings = renderScene_.fog;
 			bool changed = ImGui::Checkbox("Fog Enabled", &settings.enabled);
@@ -114,8 +120,6 @@ namespace NexusEngine {
 			}
 			ImGui::End();
 		}
-		DrawHierarchy(session_);
-		DrawTransformInspector(session_);
 		if(optics_ && ImGui::Begin("Ray Traced Optics")) {
 			ImGui::TextUnformatted("Left sphere: mirror / Right sphere: refractive glass");
 			ImGui::TextUnformatted("Sponza architecture reflects / refracts through the spheres.");
@@ -160,7 +164,6 @@ namespace NexusEngine {
 			ImGui::End();
 		}
 
-		outlinerPanel_->ShowGui();
 
 		if(shadows_ != nullptr) {
 			if(ImGui::Begin("Shadows")) {
@@ -227,20 +230,36 @@ namespace NexusEngine {
 	}
 
 	Result<void> EditorApplication::Initialize(const GraphicsRenderExtensionContext& context) {
-		auto rendererResult = imguiRenderer_.Initialize(context);
+		if(!context.graphicsSystem)
+			return std::unexpected(Error(ErrorCategory::Graphics, 102, "Editor viewport requires GraphicsSystem."));
+		auto viewportResult = context.graphicsSystem->EnableSceneViewport();
+		if(!viewportResult) return viewportResult;
+		// UIはBackBuffer、Sceneは専用RT/Depthへ描くため、UI PSOにDepth形式を要求しない。
+		auto uiContext = context;
+		uiContext.depthStencilFormat = DepthStencilFormat::None;
+		auto rendererResult = imguiRenderer_.Initialize(uiContext);
 		if(!rendererResult) {
 			session_.Close();
 			return rendererResult;
 		}
 
-		auto guiResult = guiContext_.Initialize();
+		auto guiResult = guiContext_.Initialize({.textureProvider = &imguiRenderer_});
 		if(!guiResult) {
 			imguiRenderer_.Shutdown();
 			session_.Close();
 			return guiResult;
 		}
 
-		outlinerPanel_ = std::make_unique<OutlinerPanel>();
+		workspace_ = std::make_unique<EditorWorkspace>(session_);
+		workspace_->Initialize(std::filesystem::current_path());
+		if(!workspace_->Viewport().AttachLocalPreview(imguiRenderer_, ImGuiRenderer::SceneViewportTexture,
+			[graphics = context.graphicsSystem](uint32_t width, uint32_t height) { return graphics->RequestSceneViewportSize(width, height); })) {
+			workspace_->Shutdown(); workspace_.reset(); guiContext_.Shutdown(); imguiRenderer_.Shutdown();
+			return std::unexpected(Error(ErrorCategory::Graphics, 103, "Failed to connect local scene viewport."));
+		}
+		workspace_->Commands().Register("tools.rendererDiagnostics", {
+			[this] { showLegacyDiagnostics_ = !showLegacyDiagnostics_; }, {}});
+		workspace_->Menu().RegisterTool({"tools.rendererDiagnostics", "tools.rendererDiagnostics"});
 		graphicsSystem_ = context.graphicsSystem;
 
 		return {};
@@ -257,14 +276,23 @@ namespace NexusEngine {
 	}
 
 	Result<void> EditorApplication::PrepareRender(const uint32_t width, const uint32_t height) {
-		if(session_.GetLevel() == nullptr || session_.GetLevel()->GetScene() == nullptr || height == 0) return {};
-		return extractor_.ExtractInto(*session_.GetLevel()->GetScene(), static_cast<float>(width) / static_cast<float>(height), renderScene_);
+		uint32_t sceneWidth = width, sceneHeight = height;
+		if(graphicsSystem_) {
+			// Panelの前frame要求を記録開始前に適用し、CameraとRTに同じaspectを使う。
+			auto result = graphicsSystem_->PrepareSceneViewport();
+			if(!result) return result;
+			const auto image = graphicsSystem_->GetSceneViewportImage();
+			if(image.width && image.height) { sceneWidth = image.width; sceneHeight = image.height; }
+		}
+		if(session_.GetLevel() == nullptr || session_.GetLevel()->GetScene() == nullptr || sceneHeight == 0) return {};
+		return extractor_.ExtractInto(*session_.GetLevel()->GetScene(), static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight), renderScene_);
 	}
 
 	void EditorApplication::BeginFrame() {
+		// フォントサイズと共通StyleはImGuiがframeの寸法を計算する前に反映する。
+		if(workspace_) workspace_->PrepareFrame();
 		imguiRenderer_.BeginFrame();
 		guiContext_.BeginFrame();
-		DrawDockSpace();
 		ShowGui();
 		if(showDemoWindow_) ImGui::ShowDemoWindow(&showDemoWindow_);
 	}
@@ -275,6 +303,11 @@ namespace NexusEngine {
 	}
 
 	void EditorApplication::Shutdown() noexcept {
+		if(workspace_) {
+			try { workspace_->Shutdown(); }
+			catch(...) { NEXUS_LOG_WARNING("Editor", "Failed to persist workspace during shutdown."); }
+			workspace_.reset();
+		}
 		graphicsSystem_ = nullptr;
 		guiContext_.Shutdown();
 		imguiRenderer_.Shutdown();
@@ -291,22 +324,4 @@ namespace NexusEngine {
 		return imguiRenderer_.HandleWindowMessage(window, message, wParam, lParam);
 	}
 
-	void EditorApplication::DrawDockSpace() {
-		ImGui::DockSpaceOverViewport(
-			0,
-			ImGui::GetMainViewport(),
-			ImGuiDockNodeFlags_PassthruCentralNode);
-		// DrawMainMenuBar();
-	}
-
-	void EditorApplication::DrawMainMenuBar() {
-		if(!ImGui::BeginMainMenuBar()) return;
-
-		if(ImGui::BeginMenu("Window")) {
-			ImGui::MenuItem("Dear ImGui Demo", nullptr, &showDemoWindow_);
-			ImGui::EndMenu();
-		}
-
-		ImGui::EndMainMenuBar();
-	}
 } // namespace NexusEngine

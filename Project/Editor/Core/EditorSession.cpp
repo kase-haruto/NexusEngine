@@ -13,7 +13,8 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
 }
 
 void NexusEngine::EditorSession::Close() noexcept {
-	selected_ = {};
+	selection_.Clear();
+	++generation_;
 	dirty_	  = false;
 	levelDocument_.reset();
 }
@@ -29,12 +30,12 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem
 
 void NexusEngine::EditorSession::Select(PersistentId id) {
 	auto* level = GetLevel();
-	selected_ = level && level->FindEntity(id).IsAlive() ? id : PersistentId{};
+	selection_.Select(level && level->FindEntity(id).IsAlive() ? id : PersistentId{});
 }
 
 NexusEngine::Entity NexusEngine::EditorSession::GetSelectedEntity() {
 	auto* level = GetLevel();
-	return level ? level->FindEntity(selected_) : Entity{};
+	return level ? level->FindEntity(selection_.Primary()) : Entity{};
 }
 
 bool NexusEngine::EditorSession::SetTransform(PersistentId id, Vector3 translation, Quaternion rotation, Vector3 scale) {

@@ -21,6 +21,7 @@
 #include "GraphicsResourceFactory.h"
 #include "GraphicsRenderExtension.h"
 #include "Graphics/Backend/DirectX12/PostProcess/PostProcessBackend.h"
+#include "Graphics/Backend/DirectX12/Viewport/ViewportTarget.h"
 
 namespace NexusEngine {
 	namespace {
@@ -50,6 +51,9 @@ namespace NexusEngine {
 		TransientDescriptorArena transientDescriptors;
 		GraphicsResourceFactory resourceFactory;
 		PostProcessBackend postProcess;
+		ViewportTarget viewportTarget; //< GPU idle後にdescriptor allocatorより先に破棄する
+		bool viewportEnabled = false; //< ローカルEditorの専用出力経路
+		uint32_t viewportWidth = 0, viewportHeight = 0; //< 次frameへ集約するResize要求
 		PostProcessSettings postProcessSettings;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
@@ -208,6 +212,7 @@ namespace NexusEngine {
 		impl_->resourceFactory.ConnectBackend(nullptr, nullptr, nullptr, 0);
 		impl_->transientDescriptors.Shutdown();
 		impl_->postProcess.Shutdown();
+		impl_->viewportTarget.Shutdown();
 		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
 		// DSV allocatorの所有者であるDescriptorManagerより先にDepth Bufferを破棄する。
@@ -266,6 +271,14 @@ namespace NexusEngine {
 
 		// 現在Bufferに対応するRTVだけをOutput Mergerへ設定し、設定色で全面Clearする。
 		const D3D12_CPU_DESCRIPTOR_HANDLE rtv = impl_->swapChain.GetCurrentRtv();
+		if(impl_->viewportEnabled) {
+			// Editor背景にはSceneを描かず、Panel内の専用画像だけに表示する。
+			const float background[] = {0.055f, 0.055f, 0.055f, 1.0f};
+			frame.commandList->ClearRenderTargetView(rtv, background, 0, nullptr);
+		}
+		const auto sceneImage = GetSceneViewportImage();
+		const uint32_t sceneWidth = impl_->viewportEnabled ? sceneImage.width : impl_->swapChain.GetWidth();
+		const uint32_t sceneHeight = impl_->viewportEnabled ? sceneImage.height : impl_->swapChain.GetHeight();
 		// ColorとDepthを同一PassのOutput Mergerへ設定し、3D描画前に両方を初期化する。
 		const D3D12_CPU_DESCRIPTOR_HANDLE dsv { impl_->depthStencilBuffer.GetNativeDsvHandle() };
 		impl_->postProcess.BeginScene(frame.commandList.Get(), dsv, impl_->clearColor.data());
@@ -275,13 +288,13 @@ namespace NexusEngine {
 		// SM 6.6 ShaderがDirect Heap Indexingで参照するResource/Sampler Heapを設定する。
 		impl_->bindlessDescriptors.Bind(frame.commandList.Get());
 
-		// ViewportとScissorは現在のSwapChainサイズから毎フレーム構築し、Resize後の値を即時反映する。
+		// Scene用Viewport/Scissorを設定する。Editorの場合はSwapChainと独立したPanel寸法。
 		const D3D12_VIEWPORT viewport {
-			0.0f, 0.0f, static_cast<float>(impl_->swapChain.GetWidth()),
-			static_cast<float>(impl_->swapChain.GetHeight()), 0.0f, 1.0f
+			0.0f, 0.0f, static_cast<float>(sceneWidth),
+			static_cast<float>(sceneHeight), 0.0f, 1.0f
 		};
 		const D3D12_RECT scissor {
-			0, 0, static_cast<LONG>(impl_->swapChain.GetWidth()), static_cast<LONG>(impl_->swapChain.GetHeight())
+			0, 0, static_cast<LONG>(sceneWidth), static_cast<LONG>(sceneHeight)
 		};
 		frame.commandList->RSSetViewports(1, &viewport);
 		frame.commandList->RSSetScissorRects(1, &scissor);
@@ -289,16 +302,22 @@ namespace NexusEngine {
 		GraphicsContext graphicsContext(
 			frame.commandList.Get(), &impl_->bindlessDescriptors,
 			&impl_->transientDescriptors, frameIndex,
-			impl_->swapChain.GetWidth(), impl_->swapChain.GetHeight());
+			sceneWidth, sceneHeight);
 		graphicsContext.nativeRtv_ = impl_->postProcess.GetSceneRtv().ptr;
 		graphicsContext.nativeDsv_ = dsv.ptr;
 		if(impl_->renderer != nullptr) {
 			impl_->renderer->Render(graphicsContext);
 		}
-		impl_->postProcess.Resolve(frame.commandList.Get(), rtv, impl_->postProcessSettings);
+		if(impl_->viewportEnabled) impl_->viewportTarget.BeginWrite(frame.commandList.Get());
+		impl_->postProcess.Resolve(frame.commandList.Get(), impl_->viewportEnabled ? impl_->viewportTarget.Rtv() : rtv, impl_->postProcessSettings);
+		if(impl_->viewportEnabled) impl_->viewportTarget.EndWrite(frame.commandList.Get());
 		// UI/extensions draw in display space after scene post processing.
 		impl_->bindlessDescriptors.Bind(frame.commandList.Get());
 		graphicsContext.nativeRtv_ = rtv.ptr;
+		graphicsContext.renderWidth_ = impl_->swapChain.GetWidth();
+		graphicsContext.renderHeight_ = impl_->swapChain.GetHeight();
+		// SceneとEditorの解像度は独立。UI描画時にはScene用Depthを接続しない。
+		graphicsContext.nativeDsv_ = impl_->viewportEnabled ? 0 : dsv.ptr;
 		graphicsContext.RestoreMainRenderTargets();
 		if(impl_->renderExtension != nullptr) {
 			impl_->renderExtension->BeginFrame();
@@ -349,9 +368,46 @@ namespace NexusEngine {
 		// GPU idle保証後にColorとDepthを同じサイズへ再生成する。
 		auto resizeResult = impl_->swapChain.Resize(impl_->device.GetDevice(), width, height);
 		if(!resizeResult) return resizeResult;
+		if(impl_->viewportEnabled) return {}; // Sceneの解像度はPanel要求で独立して更新する。
 		resizeResult = impl_->depthStencilBuffer.Resize(impl_->device.GetDevice(), width, height);
 		if(!resizeResult) return resizeResult;
 		return impl_->postProcess.Resize(impl_->device.GetDevice(), width, height);
+	}
+
+	Result<void> GraphicsSystem::EnableSceneViewport() {
+		if(!impl_) return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "GraphicsSystem is not initialized."));
+		if(impl_->viewportEnabled) return {};
+		auto idle = impl_->commandQueue.WaitForIdle();
+		if(!idle) return idle;
+		auto result = impl_->viewportTarget.Resize(impl_->device.GetDevice(), impl_->descriptors.Resources(), impl_->descriptors.RenderTargets(),
+			impl_->swapChain.GetWidth(), impl_->swapChain.GetHeight());
+		if(!result) return result;
+		impl_->viewportWidth = impl_->swapChain.GetWidth(); impl_->viewportHeight = impl_->swapChain.GetHeight();
+		impl_->viewportEnabled = true;
+		return {};
+	}
+	bool GraphicsSystem::RequestSceneViewportSize(uint32_t width, uint32_t height) noexcept {
+		if(!impl_ || !impl_->viewportEnabled || width > 16384 || height > 16384) return false;
+		// 非表示時は最後の画像を維持する。0サイズのGPU Resourceは作らない。
+		if(width == 0 || height == 0) return width == 0 && height == 0;
+		impl_->viewportWidth = width; impl_->viewportHeight = height; return true;
+	}
+	Result<void> GraphicsSystem::PrepareSceneViewport() {
+		if(!impl_ || !impl_->viewportEnabled) return {};
+		const auto image = impl_->viewportTarget.Image();
+		if(image.width == impl_->viewportWidth && image.height == impl_->viewportHeight) return {};
+		// 前frameのUI sampling完了後にのみ画像・HDR・Depthを同じ寸法へ置き換える。
+		auto result = impl_->commandQueue.WaitForIdle();
+		if(!result) return result;
+		result = impl_->viewportTarget.Resize(impl_->device.GetDevice(), impl_->descriptors.Resources(), impl_->descriptors.RenderTargets(),
+			impl_->viewportWidth, impl_->viewportHeight);
+		if(!result) return result;
+		result = impl_->depthStencilBuffer.Resize(impl_->device.GetDevice(), impl_->viewportWidth, impl_->viewportHeight);
+		if(!result) return result;
+		return impl_->postProcess.Resize(impl_->device.GetDevice(), impl_->viewportWidth, impl_->viewportHeight);
+	}
+	ViewportImage GraphicsSystem::GetSceneViewportImage() const noexcept {
+		return impl_ && impl_->viewportEnabled ? impl_->viewportTarget.Image() : ViewportImage{};
 	}
 
 	void GraphicsSystem::SetClearColor(const std::array<float, 4>& color) noexcept {

@@ -77,7 +77,7 @@ namespace NexusEngine {
 	void GraphicsContext::RestoreMainRenderTargets() noexcept {
 		auto* commands = static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_);
 		const D3D12_CPU_DESCRIPTOR_HANDLE rtv { nativeRtv_ }, dsv { nativeDsv_ };
-		commands->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+		commands->OMSetRenderTargets(1, &rtv, FALSE, nativeDsv_ ? &dsv : nullptr);
 		const D3D12_VIEWPORT viewport { 0, 0, static_cast<float>(renderWidth_), static_cast<float>(renderHeight_), 0, 1 };
 		const D3D12_RECT scissor { 0, 0, static_cast<LONG>(renderWidth_), static_cast<LONG>(renderHeight_) };
 		commands->RSSetViewports(1, &viewport);

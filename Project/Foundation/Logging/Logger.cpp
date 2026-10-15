@@ -26,6 +26,7 @@ namespace NexusEngine {
 			if(initialized_) {
 				return;
 			}
+			if(sinkCount_ + 2 > sinks_.size()) return;
 			sinks_[sinkCount_++] = std::move(consoleSink);
 			sinks_[sinkCount_++] = std::move(debugSink);
 			initialized_ = true;
@@ -48,6 +49,17 @@ namespace NexusEngine {
 
 		sinks_[sinkCount_++] = std::move(sink);
 		return true;
+	}
+
+	bool Logger::RemoveSink(const ILogSink* sink) noexcept {
+		std::scoped_lock lock(mutex_);
+		for(size_t index = 0; index < sinkCount_; ++index) {
+			if(sinks_[index].get() != sink) continue;
+			for(size_t next = index + 1; next < sinkCount_; ++next) sinks_[next - 1] = std::move(sinks_[next]);
+			sinks_[--sinkCount_].reset();
+			return true;
+		}
+		return false;
 	}
 
 	void Logger::Log(

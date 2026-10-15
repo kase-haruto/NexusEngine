@@ -1,5 +1,9 @@
 # Editor Session
 
+> 2026-10-16追記: 以下は旧設計の記録。現在のPanel/Reflection/Settingsと未接続の別プロセス境界は
+> [EditorFoundationREADME.md](EditorFoundationREADME.md) を参照。Selectionは複数IDサービスへ移行し、
+> EditorWorkspaceが既存SessionへUIサービスを接続する。実IPC/GPU共有はまだ未実装。
+
 ## 現在の構成
 
 - `EditorApplication`: Framework更新とGUI・Renderer接続を担当する。

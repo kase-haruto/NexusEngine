@@ -74,7 +74,7 @@ namespace NexusEngine::UI {
             // InputTextExの長さはint。表現できない入力を切り詰めず、描画を拒否する。
             if(text.size() >= static_cast<std::size_t>(INT_MAX - 1)) return false;
 
-            const float scale = std::max(ImGui::GetWindowDpiScale(), 0.01f);
+            const float scale = std::max(ImGui::GetWindowDpiScale() * ImGui::GetStyle().FontScaleMain, 0.01f);
             const float height = std::max(kHeight * scale, ImGui::GetFontSize() + 2.0f * scale);
             const float iconSize = kIconSize * scale;
             const float inputPadding = (kLeftPadding + kIconSize + kIconGap) * scale;

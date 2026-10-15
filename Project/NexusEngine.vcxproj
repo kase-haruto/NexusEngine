@@ -204,6 +204,9 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Resource\WicImageDecoder.cpp" />
     <ClCompile Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Viewport\ViewportTarget.cpp" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Viewport\ViewportTarget.h" />
+    <ClInclude Include="Graphics\Viewport\ViewportImage.h" />
     <ClCompile Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsContext.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp" />
@@ -225,6 +228,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Runtime\Level\LevelSerializer.cpp" />
     <ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp" />
     <ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
+    <ClCompile Include="Editor\ImGui\ImGuiStyle.cpp" />
+    <ClInclude Include="Editor\ImGui\ImGuiStyle.h" />
     <ClCompile Include="Editor\Core\EditorApplication.cpp" />
     <ClCompile Include="Editor\Gui\Core\GuiContext.cpp" />
     <ClCompile Include="Editor\Gui\Widgets\SearchBar.cpp" />
@@ -407,6 +412,46 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
       </SubType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="Editor\Gui\DockingLayout.cpp" />
+    <ClCompile Include="Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="Editor\Gui\MainMenuBar.cpp" />
+    <ClCompile Include="Editor\Services\PropertyEditService.cpp" />
+    <ClCompile Include="Editor\Services\LocalizationService.cpp" />
+    <ClCompile Include="Editor\Services\EditorSettings.cpp" />
+    <ClCompile Include="Editor\Gui\PropertyDrawerRegistry.cpp" />
+    <ClCompile Include="Editor\Core\EditorWorkspace.cpp" />
+    <ClCompile Include="Foundation\IPC\RuntimeProtocol.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\PanelRegistry.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\UtilityPanels.cpp" />
+    <ClCompile Include="Editor\Runtime\ViewportSession.cpp" />
+    <ClInclude Include="Runtime\Reflection\TypeRegistry.h" />
+    <ClInclude Include="Editor\Services\AssetCatalog.h" />
+    <ClInclude Include="Editor\Gui\DockingLayout.h" />
+    <ClInclude Include="Editor\Gui\MainMenuBar.h" />
+    <ClInclude Include="Editor\Services\SelectionService.h" />
+    <ClInclude Include="Graphics\Viewport\IViewportFrameTransport.h" />
+    <ClInclude Include="Editor\Services\PropertyEditService.h" />
+    <ClInclude Include="Editor\Services\LocalizationService.h" />
+    <ClInclude Include="Editor\Services\EditorSettings.h" />
+    <ClInclude Include="Editor\Services\EditorCommandRegistry.h" />
+    <ClInclude Include="Editor\Services\ConsoleService.h" />
+    <ClInclude Include="Editor\Gui\PropertyDrawerRegistry.h" />
+    <ClInclude Include="Editor\Core\EditorWorkspace.h" />
+    <ClInclude Include="Foundation\IPC\RuntimeProtocol.h" />
+    <ClInclude Include="Editor\Gui\Panels\IEditorPanel.h" />
+    <ClInclude Include="Editor\Gui\Panels\PanelRegistry.h" />
+    <ClInclude Include="Editor\Gui\Panels\UtilityPanels.h" />
+    <ClInclude Include="Editor\Runtime\ViewportSession.h" />
+    <ClInclude Include="Foundation\Logging\BufferedLogSink.h" />
+    <None Include="Resources\Editor\Localization\*.lang" />
+    <None Include="Config\*.settings" />
+  </ItemGroup>
+  <Target Name="CopyEditorConfig" AfterTargets="Build">
+    <ItemGroup><EditorConfig Include="$(ProjectDir)Config\*.settings" /></ItemGroup>
+    <Copy SourceFiles="@(EditorConfig)" DestinationFolder="$(OutDir)Config" SkipUnchangedFiles="true" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
