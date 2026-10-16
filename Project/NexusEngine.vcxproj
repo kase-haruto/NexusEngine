@@ -407,7 +407,56 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
       </SubType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Graphics\Environment\EnvironmentLighting.cpp" />
+    <ClCompile Include="Graphics\Resource\HdrImage.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ItemGroup>
+    <ClInclude Include="Graphics\Environment\EnvironmentLighting.h" />
+    <ClInclude Include="Graphics\Environment\EnvironmentLightingData.h" />
+    <ClInclude Include="Graphics\Resource\HdrImage.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.h" />
+    <None Include="Shaders\Common\BRDF.hlsli" />
+    <None Include="Shaders\Common\SurfaceData.hlsli" />
+    <None Include="Shaders\Common\Material.hlsli" />
+    <None Include="Shaders\Common\DirectLighting.hlsli" />
+    <None Include="Shaders\Common\IndirectLighting.hlsli" />
+    <None Include="Shaders\Environment\EnvironmentMap.CS.hlsl" />
+    <None Include="Docs\IBL.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Graphics\Lighting\GlobalIlluminationSettings.h" />
+    <None Include="Shaders\RayTracing\GlobalIllumination.hlsli" />
+    <None Include="Docs\GlobalIllumination.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="Graphics\Lighting\BakedLighting.cpp" />
+    <ClCompile Include="Graphics\Lighting\BakedLightingAsset.cpp" />
+    <ClCompile Include="Graphics\Lighting\LightBaker.cpp" />
+    <ClCompile Include="Graphics\Lighting\LightmapGeometry.cpp" />
+    <ClInclude Include="Graphics\Lighting\BakedLighting.h" />
+    <ClInclude Include="Graphics\Lighting\BakedLightingData.h" />
+    <ClInclude Include="Graphics\Lighting\LightBaker.h" />
+    <ClInclude Include="Graphics\Lighting\LightmapGeometry.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\BakedLighting.md" />
+    <None Include="Shaders\Common\BakedLighting.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.cpp" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.h" />
+    <ClInclude Include="Graphics\Lighting\DDGISettings.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\DDGI.md" />
+    <None Include="Shaders\Common\DDGI.hlsli" />
+    <None Include="Shaders\Lighting\DDGIUpdate.hlsl" />
+    <None Include="Shaders\RayTracing\DDGIProbe.hlsli" />
+  </ItemGroup>
 </Project>

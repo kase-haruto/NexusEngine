@@ -33,6 +33,8 @@ namespace NexusEngine {
 
 		/** \brief IDとLocal値による編集を適用する。派生MatrixはLevel更新で再計算する */
 		[[nodiscard]] bool SetTransform(PersistentId id, Vector3 translation, Quaternion rotation, Vector3 scale);
+		/** \brief 静的ベイク対象か、動的なプローブ受光対象かを永続ID付きで編集する。 */
+		[[nodiscard]] bool SetStaticLighting(PersistentId id, bool enabled);
 
 	private:
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない

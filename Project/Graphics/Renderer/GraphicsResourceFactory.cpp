@@ -5,6 +5,7 @@
 
 // c++
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -33,6 +34,10 @@
 #include "Graphics/Shadow/ShadowSystem.h"
 
 namespace NexusEngine {
+	Result<void> GraphicsResourceFactory::WaitForIdle() const {
+		if(!commandQueue_) return std::unexpected(Error(ErrorCategory::Graphics, 91, "Graphics queue not connected."));
+		return commandQueue_->WaitForIdle();
+	}
 	Result<void> GraphicsResourceFactory::CreateMeshShaderPipeline(MeshShaderPipeline& pipeline, const std::filesystem::path& shaders) const {
 		if(!capabilities_.SupportsMeshShaders()) return std::unexpected(Error(ErrorCategory::Graphics, 82, "Mesh shaders unsupported."));
 		return pipeline.Initialize(nativeDevice_, shaders);
@@ -246,6 +251,9 @@ namespace NexusEngine {
 
 		std::vector<std::unique_ptr<MeshResource>> meshes;
 		for(const auto& material : assetData.materials) {
+			if(!std::isfinite(material.occlusionStrength) || material.occlusionStrength < 0 || material.occlusionStrength > 1 ||
+				std::any_of(material.emissiveFactor.begin(), material.emissiveFactor.end(), [](float value) { return !std::isfinite(value) || value < 0; }))
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Invalid emissive/occlusion material factors."));
 			if(!std::isfinite(material.metallicFactor) || material.metallicFactor < 0 || material.metallicFactor > 1 ||
 				!std::isfinite(material.roughnessFactor) || material.roughnessFactor < 0 || material.roughnessFactor > 1 ||
 				!std::isfinite(material.normalScale) || material.normalScale < 0)
@@ -289,7 +297,7 @@ namespace NexusEngine {
 			model.materials_.reserve(assetData.materials.size());
 			for(const ModelMaterialAssetData& material : assetData.materials) {
 				model.materials_.push_back({ material.name, material.baseColorFactor, material.sampler, material.optics,
-					material.metallicFactor, material.roughnessFactor, material.normalScale });
+					material.metallicFactor, material.roughnessFactor, material.normalScale, material.emissiveFactor, material.occlusionStrength });
 			}
 		}
 		return {};
@@ -355,6 +363,8 @@ namespace NexusEngine {
 
 	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
 		TextureResource& texture, const std::span<const uint8_t> encodedData, TextureFormat format) const {
+		if(format != TextureFormat::Rgba8Unorm && format != TextureFormat::Rgba8UnormSrgb)
+			return std::unexpected(Error(ErrorCategory::Resource,91,"Encoded images require an RGBA8 format."));
 		const WicImageDecoder decoder;
 		auto image = decoder.Decode(encodedData);
 		if(!image) return std::unexpected(std::move(image.error()));

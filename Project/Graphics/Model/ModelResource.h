@@ -36,6 +36,8 @@ namespace NexusEngine {
 		float metallicFactor = 0.0f;
 		float roughnessFactor = 1.0f;
 		float normalScale = 1.0f;
+		std::array<float, 3> emissiveFactor {};
+		float occlusionStrength = 1;
 	};
 
 	/*-----------------------------------------------------------------------------------------

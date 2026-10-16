@@ -138,7 +138,7 @@ Normal Cone は今回生成・判定しない。
 
 | register | 種別 / stride | 所有者 |
 |---|---|---|
-| b0 | Root CBV、PrimitiveDrawData、4480bytes | 既存 Renderer の Draw ごとの frame-sliced ConstantBuffer |
+| b0 | Root CBV、PrimitiveDrawData、4720bytes | 既存 Renderer の Draw ごとの frame-sliced ConstantBuffer |
 | b1 | Root constants、6 float4 planes + 4 uint、112bytes / 28 DWORD | Command 内にコピー |
 | t0 | Root SRV、StructuredBuffer MeshVertex、80bytes | 元 MeshResource の既存 VertexBuffer |
 | t1 | Root SRV、StructuredBuffer Meshlet、16bytes | MeshletResource |

@@ -10,6 +10,10 @@
 #include "Foundation/Math/Matrix4x4.h"
 #include "Graphics/Shadow/ShadowTypes.h"
 #include "Graphics/Fog/FogSettings.h"
+#include "Graphics/Lighting/GlobalIlluminationSettings.h"
+#include "Graphics/Lighting/BakedLightingData.h"
+#include "Graphics/Lighting/DDGISettings.h"
+#include "Graphics/Environment/EnvironmentLightingData.h"
 
 namespace NexusEngine {
 
@@ -48,6 +52,8 @@ namespace NexusEngine {
 		Matrix4x4 worldMatrix;                                  //< 抽出時点のWorld変換
 		std::array<float, 4> tint { 1.0f, 1.0f, 1.0f, 1.0f }; //< RGBA色倍率
 		uint32_t nodeIndex = kAllNodes; //< Model全体または指定Nodeのみを描画する
+        bool staticLighting = true; //< falseの物体はベイクから除外し、プローブで受光
+        uint64_t lightingId = 0; //< 再ロード後も変わらないベイク照合ID。0はsourceObjectを使用
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -59,6 +65,10 @@ namespace NexusEngine {
 		DirectionalLightData directionalLight; //< API非依存Lightingと影の共通入力
 		std::array<float, 3> ambientIrradiance {0.03f, 0.03f, 0.03f};
 		FogSettings fog;
+		BakedLightingSettings bakedLighting; //< 保存済みのライトマップ・プローブ設定
+		DDGISettings ddgi; //< 動的な照度フィールド。GPU参照は保持しない
+        GlobalIlluminationSettings globalIllumination; //< 拡散RTGIの品質設定
+		EnvironmentLightingData environment; //< CPU settings only
 		std::optional<RenderCamera> camera;          //< Camera未配置のSceneでは空
 		std::vector<PrimitiveRenderItem> primitives; //< 組み込みPrimitive描画項目
 	};

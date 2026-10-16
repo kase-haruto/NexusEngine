@@ -20,7 +20,6 @@ namespace NexusEngine {
 		constexpr int32_t  kTextureCreationFailed = 2;
 		constexpr int32_t  kUploadCreationFailed  = 3;
 		constexpr int32_t  kUploadMapFailed		  = 4;
-		constexpr uint32_t kBytesPerPixel		  = 4;
 
 	} // namespace
 
@@ -33,6 +32,9 @@ namespace NexusEngine {
 		TextureResource&			   texture,
 		const TextureDesc&			   desc,
 		const std::span<const uint8_t> pixels) const {
+		const uint32_t kBytesPerPixel = desc.format == TextureFormat::Rgba32Float ? 16 : 4;
+		if(ToNativeTextureFormat(desc.format) == DXGI_FORMAT_UNKNOWN)
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Unsupported texture format."));
 		if(device == nullptr || commandQueue == nullptr || texture.IsInitialized() || desc.width == 0 || desc.height == 0 ||
 		   desc.width > (std::numeric_limits<size_t>::max)() / kBytesPerPixel) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Texture upload arguments or state are invalid."));

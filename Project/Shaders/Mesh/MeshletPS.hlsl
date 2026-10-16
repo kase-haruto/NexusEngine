@@ -16,5 +16,6 @@ float4 main(MeshOutput input) : SV_TARGET {
     surface.position = input.position; surface.worldNormal = input.worldNormal;
     surface.texcoord = input.texcoord; surface.color = input.color;
     surface.worldPosition = input.worldPosition; surface.worldTangent = input.worldTangent;
+    surface.lightmapUV = input.lightmapUV;
     return TraditionalPixelMain(surface);
 }

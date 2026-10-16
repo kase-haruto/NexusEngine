@@ -393,6 +393,15 @@ namespace NexusEngine {
 			if(!mapResult) return std::unexpected(std::move(mapResult.error()));
 			mapResult = readMap(source.normal_texture, material.normalImageData, material.normalSampler);
 			if(!mapResult) return std::unexpected(std::move(mapResult.error()));
+			// Reuse the same image/UV/sampler validation for all glTF material maps.
+			mapResult = readMap(source.emissive_texture, material.emissiveImageData, material.emissiveSampler);
+			if(!mapResult) return std::unexpected(std::move(mapResult.error()));
+			mapResult = readMap(source.occlusion_texture, material.occlusionImageData, material.occlusionSampler);
+			if(!mapResult) return std::unexpected(std::move(mapResult.error()));
+			material.occlusionStrength = source.occlusion_texture.scale;
+			const float emissionStrength = source.has_emissive_strength ? source.emissive_strength.emissive_strength : 1;
+			for(size_t channel = 0; channel < 3; ++channel)
+				material.emissiveFactor[channel] = source.emissive_factor[channel] * emissionStrength;
 
 			const cgltf_texture_view& textureView = source.pbr_metallic_roughness.base_color_texture;
 			if(textureView.texture != nullptr) {

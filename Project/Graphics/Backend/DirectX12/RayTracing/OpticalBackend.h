@@ -5,6 +5,7 @@
 #include "Graphics/RayTracing/OpticalSystem.h"
 #include "Graphics/Backend/DirectX12/RayTracing/RayTracingScene.h"
 #include "Graphics/Resource/ConstantBuffer.h"
+#include "Graphics/Backend/DirectX12/Lighting/DDGIProcessor.h"
 
 namespace NexusEngine {
 	class CommandQueue;
@@ -12,7 +13,7 @@ namespace NexusEngine {
 	class GraphicsResourceFactory;
 	/*-----------------------------------------------------------------------------------------
 	 * OpticalBackend
-	 * - 反射/透過のDXR Pipeline、hit属性view、Frame metadata、Radianceを所有する
+	 * - 反射・透過・拡散GIのDXR Pipeline、交差属性view、フレーム情報、放射出力を所有する
 	 * - 共通RayTracingSceneを利用しScene/Editor管理とForward合成は担当しない
 	 *---------------------------------------------------------------------------------------*/
 	class OpticalBackend final {
@@ -21,10 +22,13 @@ namespace NexusEngine {
 			uint32_t frames, bool supported, const std::filesystem::path&);
 		[[nodiscard]] Result<ShaderResourceRef> Render(GraphicsContext&, void*, const Matrix4x4&,
 			const DirectionalLightData&, std::span<const OpticalDrawItem>, std::span<const OpticalSurfaceMaterial>, const OpticalSettings&,
-			const std::array<float, 3>& ambientIrradiance);
+			const std::array<float, 3>& ambientIrradiance, const EnvironmentDrawData& environment, const GlobalIlluminationSettings& gi, const BakedLightingDrawData& baked, const DDGISettings& ddgi);
 		/** \brief 未投入記録のAS/Texture状態を復帰する */
 		static void CompleteRecording(void*, bool, uint32_t) noexcept;
 		void Shutdown() noexcept;
+		[[nodiscard]] ShaderResourceRef GetDiffuseGlobalIllumination() const noexcept { return giSrv_; }
+		[[nodiscard]] DDGIDrawData GetDDGIDrawData(float intensity) const noexcept {return ddgi_.GetDrawData(intensity);}
+		[[nodiscard]] uint32_t GetDDGIFrameCount() const noexcept {return ddgi_.FrameCount();}
 	private:
 		struct GeometryViews {
 			Microsoft::WRL::ComPtr<ID3D12Resource> vertices, indices; //< Asset解放後もGPU入力を保持
@@ -38,15 +42,23 @@ namespace NexusEngine {
 			std::array<float, 4> absorption {};
 			std::array<float, 4> pbr {};
 			std::array<uint32_t, 4> maps {};
+			std::array<float, 4> emissiveOcclusion {};
+			std::array<uint32_t, 4> extraMaps {};
 		};
 		struct Constants {
 			Matrix4x4 inverseViewProjection;
 			std::array<float, 4> lightDirection {}, lightColor {};
-			std::array<uint32_t, 4> indices {}; //< UAV/geometryByteOffset/bounces/padding
+			std::array<uint32_t, 4> indices {}; //< 光学出力UAV・形状情報の位置・光学交差数・光学描画の有効状態
 			std::array<float, 4> rays {}; //< Bias/TMax/padding
 			std::array<float, 4> ambient {};
+			EnvironmentDrawData environment;
+			std::array<uint32_t, 4> giOptions {}; //< 有効・経路数・最大区間数・出力UAV
+			std::array<float, 4> giParameters {}; //< 間接拡散の倍率と境界調整領域
+			BakedLightingDrawData bakedLighting;
+			DDGIDrawData ddgi;
+			std::array<uint32_t,4> probeTrace {}; //< レイUAV・方向位相・フィードバック有効・予約
 		};
-		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 112 && sizeof(Constants) == 144);
+		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 144 && sizeof(Constants) == 400);
 		[[nodiscard]] Result<void> CreatePipeline();
 		[[nodiscard]] Result<void> Resize(uint32_t, uint32_t);
 		[[nodiscard]] Result<GeometryViews*> GetViews(const MeshResource&);
@@ -60,7 +72,11 @@ namespace NexusEngine {
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pipeline_;
 		Microsoft::WRL::ComPtr<ID3D12Resource> shaderTable_, output_;
 		ShaderResourceRef outputSrv_, outputUav_;
+		Microsoft::WRL::ComPtr<ID3D12Resource> giOutput_; //< 共通DXRパスが書き込む間接拡散の専用出力
+		ShaderResourceRef giSrv_, giUav_; //< 光学出力と同じ画面寸法・Fence寿命
 		ConstantBuffer constants_;
+		ConstantBuffer probeConstants_; //< 同じFrame内の追跡と光学描画でCBを上書きしない
+		DDGIProcessor ddgi_; //< ASとは独立したGPUプローブ履歴の所有者
 		std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> metadata_; //< Fence待機済みFrameだけ書込
 		std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> hitTables_; //< Geometry別local-root records、Frame独立
 		std::array<uint8_t, 32> hitIdentifier_ {}; //< StateObject寿命中不変

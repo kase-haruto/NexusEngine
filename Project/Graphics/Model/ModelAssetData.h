@@ -24,6 +24,7 @@ namespace NexusEngine {
 		float jointIndices[4] = {};
 		float jointWeights[4] = {};
 		float tangent[4] = {}; // xyz tangent, w handedness; zero means derive from UVs.
+        float lightmapUV[2] = {}; //< 自動生成する専用UV。材質UVとは独立
 	};
 
 	/** Loaderが生成するGPU upload前の1 Mesh分CPU data。 */
@@ -50,6 +51,10 @@ namespace NexusEngine {
 		float normalScale = 1.0f;
 		std::vector<uint8_t> metallicRoughnessImageData, normalImageData;
 		SamplerDesc metallicRoughnessSampler, normalSampler;
+		std::array<float, 3> emissiveFactor {}; //< Linear HDR emission
+		float occlusionStrength = 1;
+		std::vector<uint8_t> emissiveImageData, occlusionImageData;
+		SamplerDesc emissiveSampler, occlusionSampler;
 	};
 
 	/** Model hierarchy上のNode。Meshを持たないTransform Nodeも許可する。 */

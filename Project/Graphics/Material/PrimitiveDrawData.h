@@ -7,6 +7,9 @@
 // engine
 #include "Foundation/Math/Matrix4x4.h"
 #include "Graphics/Model/ModelAnimation.h"
+#include "Graphics/Environment/EnvironmentLightingData.h"
+#include "Graphics/Lighting/BakedLightingData.h"
+#include "Graphics/Lighting/DDGISettings.h"
 
 namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
@@ -28,7 +31,8 @@ namespace NexusEngine {
 		std::array<float, 4> lightDirectionIntensity { 0.0f, 1.0f, 0.0f, 1.0f }; //< Surface->Light方向/強度
 		std::array<float, 4> lightColor { 1, 1, 1, 0 }; //< 線形RGBとpadding
 		uint32_t opticalRadianceIndex = 0; //< Reflection/Transmission合成Texture
-		std::array<uint32_t, 3> opticalPadding {};
+		uint32_t diffuseGIIndex = 0; //< 間接拡散放射。alpha=0は未計算、1～2は有効フラグと鏡面環境の可視率
+		std::array<uint32_t, 2> opticalPadding {};
 		Matrix4x4 world;
 		std::array<float, 4> cameraPosition {};
 		std::array<float, 4> ambientIrradiance {0.03f, 0.03f, 0.03f, 0};
@@ -37,7 +41,12 @@ namespace NexusEngine {
 		uint32_t metallicRoughnessTextureIndex = 0, metallicRoughnessSamplerIndex = 0;
 		std::array<float, 4> fogColorEnabled {};
 		std::array<float, 4> fogDistances {8, 40, 0, 0};
+		std::array<float, 4> emissiveOcclusion {0, 0, 0, 1};
+		std::array<uint32_t, 4> extraMaps {}; //< emissive/sampler/AO/sampler
+		EnvironmentDrawData environment;
+		BakedLightingDrawData bakedLighting;
+		DDGIDrawData ddgi;
 	};
 
-	static_assert(sizeof(PrimitiveDrawData) == 4480);
+	static_assert(sizeof(PrimitiveDrawData) == 4720);
 } // namespace NexusEngine

@@ -157,6 +157,7 @@ namespace NexusEngine::Tests {
 		auto* independentPrimitive = independent.AddComponent<PrimitiveRenderComponent>();
 		assert(independentPrimitive != nullptr);
 		independentPrimitive->nodeIndex = 7;
+		independentPrimitive->staticLighting = false;
 		child.GetComponent<TransformComponent>()->translation.x = 12.0f;
 		assert(source.Update(0.0f).has_value());
 		assert(extractor.ExtractInto(*source.GetScene(), 1.5f, snapshot).has_value());
@@ -167,6 +168,7 @@ namespace NexusEngine::Tests {
 			if(item.nodeIndex == 7) {
 				foundIndependent = true;
 				assert(item.worldMatrix.At(3, 0) == 0.0f);
+				assert(!item.staticLighting && item.lightingId != 0);
 			}
 			if(item.nodeIndex == 3) {
 				foundEdited = true;
@@ -180,6 +182,11 @@ namespace NexusEngine::Tests {
 		assert(nodeRestored.Load(path).has_value());
 		const auto independentId = independent.GetComponent<PersistentIdComponent>()->value;
 		assert(nodeRestored.FindEntity(independentId).GetComponent<PrimitiveRenderComponent>()->nodeIndex == 7);
+		assert(!nodeRestored.FindEntity(independentId).GetComponent<PrimitiveRenderComponent>()->staticLighting);
+		RenderScene restoredSnapshot;
+		assert(extractor.ExtractInto(*nodeRestored.GetScene(),1.5f,restoredSnapshot).has_value());
+		for(const auto& original:snapshot.primitives) for(const auto& restoredItem:restoredSnapshot.primitives)
+			if(original.nodeIndex==restoredItem.nodeIndex) assert(original.lightingId==restoredItem.lightingId);
 		source.Unload();
 		assert(source.GetState() == LevelState::Unloaded && source.GetScene() == nullptr);
 		std::filesystem::remove(path);

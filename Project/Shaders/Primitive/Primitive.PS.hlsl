@@ -11,6 +11,7 @@ struct PSInput
     float4 color : COLOR;
     float3 worldPosition : TEXCOORD3;
     float4 worldTangent : TANGENT;
+    float2 lightmapUV : TEXCOORD4;
 };
 
 float3 SurfaceNormal(PSInput input) {
@@ -18,8 +19,7 @@ float3 SurfaceNormal(PSInput input) {
     if(normalTextureIndex == 0) return n;
     Texture2D<float4> map = NexusGetTexture2D(normalTextureIndex);
     SamplerState sampleState = NexusGetSampler(normalSamplerIndex);
-    float3 mapped = map.Sample(sampleState, input.texcoord).xyz * 2 - 1;
-    mapped.xy *= pbrParameters.z;
+    float3 normalTexel = map.Sample(sampleState, input.texcoord).xyz;
     float3 t, b;
     if(abs(input.worldTangent.w) > 0.5 && dot(input.worldTangent.xyz, input.worldTangent.xyz) > 1e-12) {
         t = SafeNormalize(input.worldTangent.xyz - n * dot(n, input.worldTangent.xyz), float3(1, 0, 0));
@@ -35,12 +35,12 @@ float3 SurfaceNormal(PSInput input) {
         t = SafeNormalize(t - n * dot(n, t), float3(1, 0, 0));
         b = cross(n, t) * (dot(cross(n, t), b) < 0 ? -1 : 1);
     }
-    return SafeNormalize(t * mapped.x + b * mapped.y + n * mapped.z, n);
+    return MaterialNormal(normalTexel, pbrParameters.z, n, t, b);
 }
 
 float4 main(PSInput input) : SV_TARGET
 {
-    if (opticalRadianceIndex != 0)
+    if (opticalRadianceIndex != 0 && environment.options.z == 0)
     {
         Texture2D<float4> radiance = ResourceDescriptorHeap[opticalRadianceIndex];
         const float4 optical = radiance.Load(int3(uint2(input.position.xy), 0));
@@ -57,20 +57,42 @@ float4 main(PSInput input) : SV_TARGET
         visibility = shadowMask.Load(int3(uint2(input.position.xy), 0));
     }
     const float4 albedo = input.color * materialTexture.Sample(materialSampler, input.texcoord) * materialTint;
-    float metallic = pbrParameters.x, roughness = pbrParameters.y;
+    float4 mr = 1;
     if(metallicRoughnessTextureIndex != 0) {
         Texture2D<float4> map = NexusGetTexture2D(metallicRoughnessTextureIndex);
         SamplerState sampleState = NexusGetSampler(metallicRoughnessSamplerIndex);
-        float4 mr = map.Sample(sampleState, input.texcoord);
-        roughness *= mr.g; metallic *= mr.b;
+        mr = map.Sample(sampleState, input.texcoord);
     }
-    metallic = saturate(metallic); roughness = clamp(roughness, 0.05, 1);
+    float2 metallicRoughness = MaterialMetallicRoughness(pbrParameters.xy, mr);
     float3 n = SurfaceNormal(input);
     float3 v = SafeNormalize(cameraPosition.xyz - input.worldPosition, n);
-    float3 baseColor = saturate(albedo.rgb);
-    float3 radiance = EvaluatePBR(baseColor, metallic, roughness, n, v, lightDirection) *
-        lightColor.rgb * max(lightDirectionIntensity.w, 0) * saturate(visibility);
-    radiance += ambientIrradiance.rgb * baseColor * (1 - metallic) * (1 - 0.04) / NexusPi;
+    float3 emission = emissiveOcclusion.rgb;
+    float ao = 1;
+    if(extraMaps.x != 0) {
+        Texture2D<float4> map = NexusGetTexture2D(extraMaps.x);
+        SamplerState state = NexusGetSampler(extraMaps.y);
+        emission *= map.Sample(state, input.texcoord).rgb;
+    }
+    if(extraMaps.z != 0) {
+        Texture2D<float4> map = NexusGetTexture2D(extraMaps.z);
+        SamplerState state = NexusGetSampler(extraMaps.w);
+        ao = MaterialOcclusion(map.Sample(state, input.texcoord).r, emissiveOcclusion.w);
+    }
+    SurfaceData surface = MakeSurface(albedo.rgb, metallicRoughness.x, metallicRoughness.y, n, ao, emission);
+    float4 diffuseGI = 0;
+    // 材質検査や直接光だけの表示では、8点のプローブ参照を省略する。
+    if(environment.options.z == 0 || environment.options.z == 2 || environment.options.z == 11) {
+        diffuseGI = EvaluateBakedLighting(surface,v,input.worldPosition,input.lightmapUV,bakedLighting,environment);
+        float4 dynamicGI = EvaluateDDGILighting(surface,v,input.worldPosition,ddgi,environment);
+        if(dynamicGI.a>.5) diffuseGI=dynamicGI;
+    }
+    if(diffuseGIIndex != 0) {
+        Texture2D<float4> map = ResourceDescriptorHeap[diffuseGIIndex];
+        diffuseGI = map.Load(int3(uint2(input.position.xy), 0));
+    }
+    float3 radiance = EvaluatePBRLighting(surface, v, lightDirection,
+        lightColor.rgb * max(lightDirectionIntensity.w, 0), visibility, environment, ambientIrradiance.rgb, diffuseGI);
+    if(environment.options.z != 0) return float4(clamp(radiance, 0, 65504), albedo.a);
     // Preserve HDR values above 1 while avoiding half-float overflow in the scene target.
     return float4(clamp(ApplyDistanceFog(radiance, input.worldPosition), 0, 65504), albedo.a);
 }

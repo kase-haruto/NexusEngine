@@ -17,6 +17,8 @@
 #include "Graphics/Material/PrimitiveDrawData.h"
 #include "GraphicsRenderer.h"
 #include "RenderScene.h"
+#include "Graphics/Environment/EnvironmentLighting.h"
+#include "Graphics/Lighting/BakedLighting.h"
 #include "Graphics/Shadow/ShadowSystem.h"
 #include "Graphics/RayTracing/OpticalSystem.h"
 #include "Graphics/Meshlet/MeshShaderPipeline.h"
@@ -55,6 +57,12 @@ namespace NexusEngine {
 		/** \brief Editorは設定/統計だけを利用する。ImGuiをRuntimeへ持ち込まない */
 		[[nodiscard]] ShadowSystem& GetShadows() noexcept { return shadows_; }
 		[[nodiscard]] OpticalSystem& GetOptics() noexcept { return optics_; }
+		/** \brief 直近の描画でDXRのGI出力が利用可能か返す。GPU参照をEditorへ公開しない。 */
+		[[nodiscard]] bool IsGlobalIlluminationActive() const noexcept { return drawData_.diffuseGIIndex != 0; }
+		/** \brief 現在の静的Sceneをベイクして指定キャッシュへ保存する。Editorの明示操作専用。 */
+		[[nodiscard]] Result<void> BakeLighting(const BakedLightingSettings&);
+		/** \brief GPUを公開せず、ベイク済み照明の読み込み状態を取得する。 */
+		[[nodiscard]] const std::string& GetBakedLightingStatus() const noexcept { return bakedLighting_.GetStatus(); }
 		/** \brief Materialごとの光学設定を公開する。GPU参照はRendererが所有する */
 		[[nodiscard]] std::span<const OpticalSurfaceMaterial> GetOpticalMaterials() const noexcept { return opticalMaterials_; }
 		/** \brief 次FrameのRT評価へ光学係数を反映する。Geometry/BLAS再生成は不要 */
@@ -73,6 +81,8 @@ namespace NexusEngine {
 			ShaderResourceRef textureRef;
 			ShaderResourceRef samplerRef;
 			std::unique_ptr<TextureResource> normalTexture, metallicRoughnessTexture;
+			std::unique_ptr<TextureResource> emissiveTexture, occlusionTexture;
+			ShaderResourceRef emissiveRef, emissiveSamplerRef, occlusionRef, occlusionSamplerRef;
 			ShaderResourceRef normalRef, normalSamplerRef, metallicRoughnessRef, metallicRoughnessSamplerRef;
 		};
 
@@ -82,6 +92,8 @@ namespace NexusEngine {
 		std::vector<std::unique_ptr<MeshletResource>> meshletResources_; //< 元 Mesh と同じ index の静的 Resource
 		MeshletDebugSettings meshletSettings_; //< Editor が変更する表示 / Culling 設定
 		ShadowSystem shadows_; //< Shadow方式とGPU影Resourceの独立所有者
+		EnvironmentLighting environment_; //< IBL GPU ownership independent of materials and viewport
+		BakedLighting bakedLighting_; //< 保存済みGIのGPU所有者
 		OpticalSystem optics_; //< Reflection/Transmission Radianceの独立所有者
 		std::vector<OpticalDrawItem> opticalDraws_;
 		std::vector<OpticalSurfaceMaterial> opticalMaterials_;

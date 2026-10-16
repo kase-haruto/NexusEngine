@@ -71,9 +71,34 @@
     <ClCompile Include="..\Graphics\Shader\ShaderCompiler.cpp" />
     <ClCompile Include="..\Graphics\Shader\ShaderReflector.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Graphics\Environment\EnvironmentLighting.cpp" />
+    <ClCompile Include="..\Graphics\Resource\HdrImage.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup>
     <None Include="ColorManagementTests.inl" />
     <None Include="ColorSpaceTest.hlsl" />
   </ItemGroup>
+  <ItemGroup><None Include="EnvironmentLightingTests.inl" /><None Include="EnvironmentLightingTest.hlsl" /></ItemGroup>
+  <ItemGroup><None Include="GlobalIlluminationTests.inl" /></ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="..\Graphics\Lighting\BakedLighting.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\BakedLightingAsset.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\LightBaker.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\LightmapGeometry.cpp" />
+    <ClInclude Include="..\Graphics\Lighting\BakedLighting.h" />
+    <ClInclude Include="..\Graphics\Lighting\BakedLightingData.h" />
+    <ClInclude Include="..\Graphics\Lighting\LightBaker.h" />
+    <ClInclude Include="..\Graphics\Lighting\LightmapGeometry.h" />
+  </ItemGroup>
+  <ItemGroup><None Include="BakedLightingTests.inl" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Lighting\DDGIProcessor.cpp" />
+    <ClInclude Include="..\Graphics\Backend\DirectX12\Lighting\DDGIProcessor.h" />
+    <ClInclude Include="..\Graphics\Lighting\DDGISettings.h" />
+  </ItemGroup>
+  <ItemGroup><None Include="DDGITests.inl" /></ItemGroup>
 </Project>

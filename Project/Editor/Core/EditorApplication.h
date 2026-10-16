@@ -76,6 +76,8 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		std::array<char, 1024> environmentPath_ {}; //< Editor入力。RendererはScene設定だけを参照する
+		std::array<char, 1024> bakedPath_ {}; //< ベイク成果物の入力パス。GPU参照は保持しない
 		GraphicsSystem* graphicsSystem_ = nullptr; //< Non-owning post-process controls.
 		ShadowSystem*	   shadows_			   = nullptr; //< Runtime設定/診断のみ参照する。ImGuiはEditor内に限定
 		OpticalSystem*	   optics_			   = nullptr; //< Optical Passの設定のみを編集する非所有参照

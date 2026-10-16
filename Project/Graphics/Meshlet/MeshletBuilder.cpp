@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <limits>
 namespace NexusEngine {
-static_assert(sizeof(ModelVertex) == 96 && offsetof(ModelVertex, position) == 0 &&
+static_assert(sizeof(ModelVertex) == 104 && offsetof(ModelVertex, position) == 0 &&
     offsetof(ModelVertex, normal) == 12 && offsetof(ModelVertex, texcoord) == 24 &&
     offsetof(ModelVertex, color) == 32 && offsetof(ModelVertex, jointIndices) == 48 && offsetof(ModelVertex, jointWeights) == 64);
 Result<MeshletData> MeshletBuilder::Build(const MeshAssetData& mesh) const {

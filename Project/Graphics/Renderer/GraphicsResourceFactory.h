@@ -157,6 +157,8 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> RetirePersistentShaderResource(ShaderResourceRef reference) const;
 		/** \brief generationを含めて現在のBindless参照が利用可能か検証する */
 		[[nodiscard]] bool IsPersistentShaderResourceValid(ShaderResourceRef reference) const noexcept;
+		/** \brief 永続リソースの明示的な置換前に、投入済み描画の完了を保証する。毎フレーム使用しない。 */
+		[[nodiscard]] Result<void> WaitForIdle() const;
 
 	private:
 		friend class GraphicsSystem;
@@ -165,6 +167,7 @@ namespace NexusEngine {
 #endif
 		friend class ShadowSystem;
 		friend class OpticalSystem;
+		friend class EnvironmentLighting;
 		void ConnectBackend(
 			void* nativeDevice,
 			CommandQueue* commandQueue,

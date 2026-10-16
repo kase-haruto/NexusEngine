@@ -11,13 +11,14 @@ namespace NexusEngine {
 	/** ShaderからsampleするTextureのpixel format。Graphics API固有formatはBackendで変換する。 */
 	enum class TextureFormat : uint8_t {
 		Rgba8Unorm,
-		Rgba8UnormSrgb
+		Rgba8UnormSrgb,
+		Rgba32Float //< 線形HDRのライトマップ・SH係数用
 	};
 
 	/*-----------------------------------------------------------------------------------------
 	 * TextureDesc
 	 * - 2D Textureの論理寸法とpixel formatを保持するBackend非依存記述
-	 * - 現段階では1 mip、1 array slice、4byte RGBA pixelを対象とする
+	 * - 1 mip、1 array sliceのRGBA pixelを対象とする
 	 *---------------------------------------------------------------------------------------*/
 	struct TextureDesc {
 		uint32_t width = 0;

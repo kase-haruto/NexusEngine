@@ -667,4 +667,50 @@
     <None Include="Shaders\PostProcess\ACES-LICENSE.txt"><Filter>Shaders\PostProcess</Filter></None>
     <None Include="Docs\PostProcessing.md"><Filter>Docs</Filter></None>
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Graphics\Environment" />
+    <Filter Include="Graphics\Backend\DirectX12\Environment" />
+    <Filter Include="Shaders\Environment" />
+    <ClCompile Include="Graphics\Environment\EnvironmentLighting.cpp"><Filter>Graphics\Environment</Filter></ClCompile>
+    <ClCompile Include="Graphics\Resource\HdrImage.cpp"><Filter>Graphics\Resource</Filter></ClCompile>
+    <ClCompile Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp"><Filter>Graphics\Backend\DirectX12\Environment</Filter></ClCompile>
+    <ClInclude Include="Graphics\Environment\EnvironmentLighting.h"><Filter>Graphics\Environment</Filter></ClInclude>
+    <ClInclude Include="Graphics\Environment\EnvironmentLightingData.h"><Filter>Graphics\Environment</Filter></ClInclude>
+    <ClInclude Include="Graphics\Resource\HdrImage.h"><Filter>Graphics\Resource</Filter></ClInclude>
+    <ClInclude Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.h"><Filter>Graphics\Backend\DirectX12\Environment</Filter></ClInclude>
+    <None Include="Shaders\Common\BRDF.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Common\SurfaceData.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Common\Material.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Common\DirectLighting.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Common\IndirectLighting.hlsli"><Filter>Shaders</Filter></None>
+    <None Include="Shaders\Environment\EnvironmentMap.CS.hlsl"><Filter>Shaders\Environment</Filter></None>
+    <None Include="Docs\IBL.md"><Filter>Docs</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Graphics\Lighting" />
+    <ClInclude Include="Graphics\Lighting\GlobalIlluminationSettings.h"><Filter>Graphics\Lighting</Filter></ClInclude>
+    <None Include="Shaders\RayTracing\GlobalIllumination.hlsli"><Filter>Shaders\RayTracing</Filter></None>
+    <None Include="Docs\GlobalIllumination.md"><Filter>Docs</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Graphics\Lighting\BakedLighting.cpp"><Filter>Graphics</Filter></ClCompile>
+    <ClCompile Include="Graphics\Lighting\BakedLightingAsset.cpp"><Filter>Graphics</Filter></ClCompile>
+    <ClCompile Include="Graphics\Lighting\LightBaker.cpp"><Filter>Graphics</Filter></ClCompile>
+    <ClCompile Include="Graphics\Lighting\LightmapGeometry.cpp"><Filter>Graphics</Filter></ClCompile>
+    <ClInclude Include="Graphics\Lighting\BakedLighting.h"><Filter>Graphics</Filter></ClInclude>
+    <ClInclude Include="Graphics\Lighting\BakedLightingData.h"><Filter>Graphics</Filter></ClInclude>
+    <ClInclude Include="Graphics\Lighting\LightBaker.h"><Filter>Graphics</Filter></ClInclude>
+    <ClInclude Include="Graphics\Lighting\LightmapGeometry.h"><Filter>Graphics</Filter></ClInclude>
+    <None Include="Docs\BakedLighting.md" />
+    <None Include="Shaders\Common\BakedLighting.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\DDGI.md" />
+    <None Include="Shaders\Common\DDGI.hlsli" />
+    <None Include="Shaders\Lighting\DDGIUpdate.hlsl" />
+    <None Include="Shaders\RayTracing\DDGIProbe.hlsli" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.cpp"><Filter>Graphics</Filter></ClCompile>
+    <ClInclude Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.h"><Filter>Graphics</Filter></ClInclude>
+    <ClInclude Include="Graphics\Lighting\DDGISettings.h"><Filter>Graphics</Filter></ClInclude>
+  </ItemGroup>
 </Project>

@@ -1,6 +1,18 @@
 #include "EditorSession.h"
 
 #include "Runtime/Scene/Components/TransformComponent.h"
+#include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+
+bool NexusEngine::EditorSession::SetStaticLighting(PersistentId id, bool enabled) {
+	auto* level=GetLevel();
+	if(!level) return false;
+	auto entity=level->FindEntity(id);
+	auto* primitive=entity.GetComponent<PrimitiveRenderComponent>();
+	if(!primitive) return false;
+	primitive->staticLighting=enabled;
+	dirty_=true;
+	return true;
+}
 
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Create() {

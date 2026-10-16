@@ -9,6 +9,7 @@ struct VSInput
     float4 jointIndices : BLENDINDICES;
     float4 jointWeights : BLENDWEIGHT;
     float4 tangent : TANGENT;
+    float2 lightmapUV : TEXCOORD1;
 };
 
 struct VSOutput
@@ -19,6 +20,7 @@ struct VSOutput
     float4 color : COLOR;
     float3 worldPosition : TEXCOORD3;
     float4 worldTangent : TANGENT;
+    float2 lightmapUV : TEXCOORD4;
 };
 
 VSOutput main(VSInput input)
@@ -52,6 +54,7 @@ VSOutput main(VSInput input)
     output.worldTangent = float4(mul(localTangent, (float3x3)world),
         input.tangent.w * (determinant((float3x3)world) < 0 ? -1 : 1));
     output.texcoord = input.texcoord;
+    output.lightmapUV = input.lightmapUV;
     output.color = input.color;
     return output;
 }

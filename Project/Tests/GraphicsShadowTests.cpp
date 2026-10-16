@@ -22,6 +22,8 @@
 #include "Graphics/Renderer/GraphicsContext.h"
 #include "Graphics/Renderer/GraphicsResourceFactory.h"
 #include "Graphics/Renderer/PrimitiveRenderer.h"
+#include "Graphics/Lighting/LightBaker.h"
+#include "Graphics/Lighting/LightmapGeometry.h"
 #include "Graphics/Shadow/ShadowSystem.h"
 #include "Foundation/Logging/Logger.h"
 
@@ -225,7 +227,10 @@ namespace {
 		std::cout << (warp ? "WARP" : "Hardware") << (forceUnsupported ? " (forced unsupported capability)" : "")
 			<< " Shadow tests passed; RayTracing=" << capabilities.SupportsRayTracing() << '\n';
 	}
-	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false) {
+	#include "GlobalIlluminationTests.inl"
+	#include "BakedLightingTests.inl"
+	#include "DDGITests.inl"
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = sponza ? 384U : (opticalDemo ? 256U : 64U), height = sponza ? 216U : (opticalDemo ? 192U : 64U);
         uint32_t glassSlot = kOpticalGlassMaterial;
@@ -239,6 +244,9 @@ namespace {
         }
         else if(opticalDemo) { auto asset = CreateOpticalDemoScene(); Check(asset); test.asset = std::move(*asset); }
         else test.asset.materials[0].baseColorFactor = {0.35f,0.35f,0.35f,1}; // Avoid UNORM saturation when comparing shadow lighting.
+		if(giVariant > 0 && (giVariant < 4 || giVariant == 5)) test.asset = MakeGITestRoom(giVariant);
+		if(bakedVariant>0 && bakedVariant<=3) test.asset=MakeGITestRoom(bakedVariant);
+		if(ddgiVariant!=0 && ddgiVariant!=4) test.asset=MakeDDGITestRoom(ddgiVariant<=3?ddgiVariant:1);
 		if(pbrVariant != 0) {
 			auto& material = test.asset.materials[0];
 			material.roughnessFactor = pbrVariant == 1 || pbrVariant == 2 ? 0.1f : 1;
@@ -253,6 +261,11 @@ namespace {
 			if(pbrVariant == 3 || pbrVariant == 6 || pbrVariant == 7) material.normalImageData = pixelImage(230, 128, 204);
 			if(pbrVariant == 4) material.normalImageData = pixelImage(128, 128, 255);
 			if(pbrVariant == 5) material.metallicRoughnessImageData = pixelImage(255, 255, 0);
+			if(pbrVariant == 8) {
+				material.emissiveFactor = {2, 0.4f, 0.1f};
+				material.emissiveImageData = pixelImage(128, 255, 255);
+				material.occlusionImageData = pixelImage(0, 255, 255);
+			}
 			if(pbrVariant == 6 || pbrVariant == 7) {
 				auto& mesh = test.asset.meshes[0];
 				for(size_t offset = 0; offset < mesh.vertexData.size(); offset += sizeof(ModelVertex)) {
@@ -281,8 +294,34 @@ namespace {
 			// Open courtyard sky contributes diffuse irradiance to shaded interiors.
 			scene.ambientIrradiance = {0.5f, 0.6f, 0.8f};
 		}
-		scene.primitives.push_back({ {1}, Matrix4x4::Identity(), {1,1,1,1} });
+		if(iblTest) { scene.environment.imagePath=L"Generated/IBLDirectional.hdr"; scene.directionalLight.intensity=0; scene.ambientIrradiance={0,0,0}; }
+		if(giVariant != 0) {
+            if(giVariant==5) scene.environment.imagePath=L"Generated/GIWhite.hdr";
+            scene.globalIllumination.enabled=true; scene.globalIllumination.samplesPerPixel=32; scene.globalIllumination.maxBounces=2;
+            if(giVariant<4 || giVariant==5) { scene.directionalLight.intensity=0; scene.ambientIrradiance=giVariant==1 || giVariant==5?std::array<float,3>{1,1,1}:std::array<float,3>{0,0,0}; }
+        }
+        scene.primitives.push_back({ {1}, Matrix4x4::Identity(), {1,1,1,1} });
+		if(bakedVariant) {
+			scene.bakedLighting.cachePath=L"Generated/BakedGI"+std::to_wstring(bakedVariant)+L".nxgi";
+			scene.bakedLighting.samples=128;scene.bakedLighting.probeCounts={4,4,4};
+			scene.bakedLighting.chartSize=bakedChartSize;
+			scene.directionalLight.intensity=0;scene.ambientIrradiance=bakedVariant==1?std::array<float,3>{1,1,1}:std::array<float,3>{0,0,0};
+			if(bakedVariant==4) scene.ambientIrradiance={1,1,1};
+			// ベイクがRTGIを確実に抑止することも検証する。
+			scene.globalIllumination.enabled=false;
+		}
 		PrimitiveRenderer renderer;
+		if(ddgiVariant) {
+			scene.globalIllumination.enabled=true; // DDGIが旧RTGIを抑止することも検証する。
+			scene.ddgi.enabled=true;scene.ddgi.raysPerProbe=128;scene.ddgi.hysteresis=.8f;scene.ddgi.maxDistance=20;
+			scene.ddgi.origin={-.75f,-.75f,-.75f};scene.ddgi.spacing={.5f,.5f,.5f};scene.ddgi.counts={4,4,4};
+			scene.ambientIrradiance=ddgiVariant==1 || ddgiVariant==6?std::array<float,3>{1,1,1}:std::array<float,3>{0,0,0};
+			if(ddgiVariant==6) scene.ddgi.origin[1]=-1; // 床面上の格子点からの光漏れと再配置を検証する。
+			scene.directionalLight.intensity=ddgiVariant==5?3.0f:0;
+			scene.directionalLight.direction={0,1,0};scene.environment.debugMode=LightingDebugMode::DiffuseGI;
+			if(ddgiVariant==4) {scene.ddgi.origin={-4,-.1f,-2};scene.ddgi.spacing={2,2,2};scene.ddgi.counts={5,3,4};scene.ambientIrradiance={.5f,.6f,.8f};scene.environment.debugMode=LightingDebugMode::Final;}
+			else {scene.primitives.clear();for(uint32_t node=0;node<test.asset.nodes.size();++node) scene.primitives.push_back({{uint64_t(node)+1},Matrix4x4::Identity(),{1,1,1,1},node});}
+		}
 		renderer.SetModelInput(&test.asset, &pose); renderer.SetRenderScene(&scene);
 		Check(renderer.Initialize({ test.factory, L"Project/Shaders", L"Project/Resources/Assets" }));
 		if(pbrVariant == 7) {
@@ -365,7 +404,64 @@ namespace {
 			context.RestoreMainRenderTargets(); renderer.Render(context); Native(test.commands->Close());
 			// No Execute/Submitted call: the following actual frames must recover correctly.
 		}
-		if(opticalDemo) {
+		if(giVariant != 0) {
+            return ValidateGIIntegration(giVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
+        }
+		if(bakedVariant) return ValidateBakedIntegration(bakedVariant,scene,renderer,render,test,depth,rtv,transient,width,height);
+		if(ddgiVariant) return ValidateDDGIIntegration(ddgiVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
+        if(iblTest) {
+            auto visible = [](const auto& pixels) { size_t count=0; for(size_t i=0;i<pixels.size();i+=4) if(pixels[i]+pixels[i+1]+pixels[i+2]>3) ++count; return count; };
+            auto writeImage = [&](const std::filesystem::path& path,const auto& pixels) {
+                std::ofstream file(path,std::ios::binary); file << "P6\n" << width << ' ' << height << "\n255\n";
+                for(size_t i=0;i<pixels.size();i+=4) file.write(reinterpret_cast<const char*>(pixels.data()+i),3);
+            };
+            auto on=render(ShadowMode::Auto,false);
+            Require(visible(on)>100,"Environment-only raster/optical lighting produced no visible geometry.");
+            if(!opticalDemo) {
+                Require(render(ShadowMode::ShadowMap,true)==on,"Shadow Map incorrectly attenuated environment lighting.");
+                Require(render(ShadowMode::RayTracing,true)==on,"RT shadow incorrectly attenuated environment lighting.");
+                renderer.GetMeshletSettings().enabled=true;
+                Require(renderer.AreMeshShadersAvailable(),"IBL Mesh Shader pipeline unavailable.");
+                auto mesh=render(ShadowMode::Auto,false); Require(mesh==on,"Raster/Mesh Shader IBL mismatch.");
+                renderer.GetMeshletSettings().enabled=false;
+                scene.environment.debugMode=LightingDebugMode::Direct;
+                Require(visible(render(ShadowMode::Auto,false))==0,"Direct-only debug contains indirect light.");
+                scene.environment.debugMode=LightingDebugMode::Indirect;
+                auto indirect=render(ShadowMode::Auto,false);
+                if(pbrVariant == 8) Require(visible(indirect)==0,"AO texture did not occlude indirect lighting.");
+                else Require(indirect==on,"Indirect-only debug does not match unlit environment scene.");
+                for(uint32_t mode=3;mode<=10;++mode) { scene.environment.debugMode=static_cast<LightingDebugMode>(mode); render(ShadowMode::Auto,false); }
+                scene.environment.debugMode=LightingDebugMode::Final;
+                scene.environment.intensity=0;
+                auto zeroIntensity=render(ShadowMode::Auto,false);
+                if(pbrVariant == 8) Require(zeroIntensity==on,"IBL intensity attenuated emissive.");
+                else Require(visible(zeroIntensity)==0,"Zero IBL intensity retained illumination.");
+                scene.environment.intensity=1;
+            }
+            scene.environment.enabled=false;
+            auto off=render(ShadowMode::Auto,false);
+            if(!opticalDemo && pbrVariant != 8) Require(visible(off)==0,"Disabled IBL retained indirect lighting with zero fallback.");
+            if(pbrVariant == 8) {
+                Require(off==on,"AO/emissive results depend on environment enable.");
+                size_t referencePixels=0;
+                for(size_t i=0;i<on.size();i+=4) if(on[i+3]==255) {
+                    Require(std::abs(int(on[i])-110)<=1 && std::abs(int(on[i+1])-102)<=1 && std::abs(int(on[i+2])-26)<=1,
+                        "Emissive texture sRGB decode or factor multiplication incorrect."); ++referencePixels;
+                }
+                Require(referencePixels>100,"Emissive raster test had no geometry.");
+            }
+            scene.environment.enabled=true;
+            ++scene.environment.revision;
+            auto reloaded=render(ShadowMode::Auto,false); Require(reloaded==on,"Same HDR reload changed rendering.");
+            const std::wstring prefix=opticalDemo?L"Generated/IBLSponza":pbrVariant==8?L"Generated/IBLMaterial":
+                pbrVariant==3?L"Generated/IBLNormal":pbrVariant==2?L"Generated/IBLMetal":pbrVariant==1?L"Generated/IBLSmooth":L"Generated/IBLRaster";
+            writeImage(prefix+L"Before.ppm",off); writeImage(prefix+L"After.ppm",on);
+            Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
+            std::cout << "IBL raster/mesh/optical integration passed; optical=" << opticalDemo << '\n';
+            return on;
+        }
+        if(opticalDemo) {
             OpticalSettings settings; settings.enabled = false; Check(renderer.GetOptics().SetSettings(settings));
             const auto off = render(ShadowMode::Auto, false);
             settings.enabled = true; Check(renderer.GetOptics().SetSettings(settings));
@@ -567,10 +663,55 @@ namespace {
 }
 
 #include "ColorManagementTests.inl"
+#include "EnvironmentLightingTests.inl"
 
 int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
+
 	try {
+		if(argc==2 && std::strcmp(argv[1],"--ddgi")==0) {
+			DDGISettings invalid;invalid.spacing[0]=0;Require(!invalid.IsValid(),"Zero DDGI spacing accepted.");
+			invalid={};invalid.hysteresis=1;Require(!invalid.IsValid(),"Non-convergent DDGI hysteresis accepted.");
+			invalid={};invalid.raysPerProbe=100000;Require(!invalid.IsValid(),"DDGI ray budget ignored.");
+			for(uint32_t variant:{1U,2U,3U,5U,6U}) ForwardIntegration(false,false,false,0,false,false,0,0,4,variant);
+			ForwardIntegration(true,false,false,0,false,false,0,0,4,2);
+			ForwardIntegration(false,true,false,0,false,false,0,0,4,4);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--baked-quality") == 0) {
+			// 異なるアトラス解像度でも、同じ独立UVの生成規則を利用できることを検証する。
+			ForwardIntegration(false,false,false,0,false,false,0,2,16);
+			ForwardIntegration(false,false,false,0,false,false,0,3,16);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--baked") == 0) {
+			BakedLightingCpuTests();
+			for(uint32_t variant=1;variant<=3;++variant) ForwardIntegration(false,false,false,0,false,false,0,variant);
+			ForwardIntegration(true,false,false,0,false,false,0,2);
+			ForwardIntegration(false,true,false,0,false,false,0,4);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--gi") == 0) {
+			GlobalIlluminationSettings invalid; invalid.samplesPerPixel=0; Require(!invalid.IsValid(),"Invalid GI sample count accepted.");
+			invalid={}; invalid.maxBounces=5; Require(!invalid.IsValid(),"Invalid GI bounce count accepted.");
+			invalid={}; invalid.intensity=std::numeric_limits<float>::infinity(); Require(!invalid.IsValid(),"Non-finite GI intensity accepted.");
+			for(uint32_t variant=1;variant<=3;++variant) ForwardIntegration(false,false,false,0,false,false,variant);
+			ForwardIntegration(false,false,false,0,false,false,5);
+			ForwardIntegration(true,false,false,0,false,false,1);
+			ForwardIntegration(false,true,false,0,false,false,4);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--ibl") == 0) {
+			EnvironmentLightingIntegration();
+			const auto diffuse = ForwardIntegration(false, false, false, 0, false, true);
+			const auto smooth = ForwardIntegration(false, false, false, 1, false, true);
+			const auto metal = ForwardIntegration(false, false, false, 2, false, true);
+			const auto normal = ForwardIntegration(false, false, false, 3, false, true);
+			Require(diffuse != smooth && smooth != metal && diffuse != normal, "IBL ignored roughness, metallicity or normal mapping.");
+			ForwardIntegration(false, false, false, 8, false, true);
+			ForwardIntegration(false, true, true, 0, false, true);
+			return 0;
+		}
 		if(argc == 2 && std::strcmp(argv[1], "--fog") == 0) {
 			FogSettings invalidFog; invalidFog.endDistance = invalidFog.startDistance;
 			Require(!invalidFog.IsValid(), "Invalid fog range accepted.");

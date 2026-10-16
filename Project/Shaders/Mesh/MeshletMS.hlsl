@@ -20,6 +20,7 @@ void main(uint lane : SV_GroupIndex, uint3 group : SV_GroupID,
         result.worldTangent = float4(mul(vertex.tangent.xyz, (float3x3)world),
             vertex.tangent.w * (determinant((float3x3)world) < 0 ? -1 : 1));
         result.texcoord = vertex.texcoord; result.color = vertex.color;
+        result.lightmapUV = vertex.lightmapUV;
         result.meshletID = id; result.visible = payload.visibility[group.x];
         outputVertices[v] = result;
     }

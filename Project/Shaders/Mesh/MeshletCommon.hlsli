@@ -4,11 +4,12 @@
 #include "../Primitive/PrimitiveDrawData.hlsli"
 struct Meshlet { uint vertexOffset; uint vertexCount; uint primitiveOffset; uint primitiveCount; };
 struct MeshletBounds { float3 center; float radius; };
-// ModelVertex と同じ96bytes。StructuredBuffer の各要素は cbuffer packing を使用しない。
+// ModelVertexと同じ104bytes。StructuredBufferはcbufferの配置規約を使用しない。
 struct MeshVertex {
     float3 position; float3 normal; float2 texcoord; float4 color;
     float4 jointIndices; float4 jointWeights;
     float4 tangent;
+    float2 lightmapUV;
 };
 StructuredBuffer<MeshVertex> vertexData : register(t0);
 StructuredBuffer<Meshlet> meshlets : register(t1);
@@ -30,6 +31,7 @@ struct MeshOutput {
     float4 color : COLOR;
     float3 worldPosition : TEXCOORD3;
     float4 worldTangent : TANGENT;
+    float2 lightmapUV : TEXCOORD4;
     nointerpolation uint meshletID : TEXCOORD1;
     nointerpolation uint visible : TEXCOORD2;
 };

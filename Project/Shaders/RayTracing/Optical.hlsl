@@ -1,9 +1,11 @@
-// Hit exports only gather surface attributes. Bounded Raygen paths handle both
-// reflection and refraction without recursively growing the DXR pipeline stack.
+// 交差shaderは材質・幾何属性を収集し、raygenが反射・屈折・GIの経路を追跡する。
+// 反復回数に上限を設け、DXRの再帰スタックを増やさない。
 #include "../Common/PBR.hlsli"
+#include "../Common/BakedLighting.hlsli"
+#include "../Common/DDGI.hlsli"
 RaytracingAccelerationStructure opticalScene : register(t0);
 ByteAddressBuffer surfaceData : register(t1);
-// Local ShaderTable constants work on Tier1.0 too; GeometryIndex() requires Tier1.1.
+// ローカル定数で形状を識別し、GeometryIndex()を持たないDXR Tier1.0にも対応する。
 cbuffer GeometryRecord : register(b1) { uint geometryRecordIndex; };
 cbuffer OpticalConstants : register(b0)
 {
@@ -13,9 +15,15 @@ cbuffer OpticalConstants : register(b0)
     uint outputIndex;
     uint geometryByteOffset;
     uint maxBounces;
-    uint opticalPadding;
+    uint opticalEnabled;
     float4 rayParameters;
     float4 ambientIrradiance;
+    EnvironmentData environment;
+    uint4 giOptions; // 有効・経路数・最大区間数・出力UAV
+    float4 giParameters; // 間接拡散の倍率・境界調整領域
+    BakedLightingData bakedLighting;
+    DDGIData ddgi;
+    uint4 probeTrace;
 };
 
 struct Surface
@@ -25,7 +33,9 @@ struct Surface
     float3 absorption; float transmission;
     float ior; uint hit; uint front; uint padding;
     float metallic; float roughness;
-}; // 72byte payload, matched by Backend ShaderConfig.
+    float3 emissive; float ao;
+    float3 geometricNormal;
+}; // BackendのShaderConfigと一致する100byteの交差ペイロード。
 
 uint ReadIndex(ByteAddressBuffer buffer, uint index, uint wide)
 {
@@ -38,7 +48,7 @@ uint ReadIndex(ByteAddressBuffer buffer, uint index, uint wide)
 void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes attr)
 {
     const uint instance = InstanceID() * 80;
-    const uint geometry = geometryByteOffset + geometryRecordIndex * 112;
+    const uint geometry = geometryByteOffset + geometryRecordIndex * 144;
     const uint4 buffers = surfaceData.Load4(geometry);
     const uint4 draw = surfaceData.Load4(geometry + 16);
     ByteAddressBuffer vertices = ResourceDescriptorHeap[NonUniformResourceIndex(buffers.x)];
@@ -53,7 +63,14 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
     const row_major float4x4 transform = float4x4(asfloat(surfaceData.Load4(instance)),
         asfloat(surfaceData.Load4(instance + 16)), asfloat(surfaceData.Load4(instance + 32)), asfloat(surfaceData.Load4(instance + 48)));
     payload.normal = normalize(mul(float4(normal, 0), transform).xyz);
-    payload.front = dot(payload.normal, WorldRayDirection()) < 0;
+    // 法線マップによって法線が三角形の裏へ向くことがある。
+    // 幾何法線でレイの始点をずらし、自己交差や光漏れを防ぐ。
+    float3 edgeOrigin = asfloat(vertices.Load3(addresses.x));
+    float3 edgeA = mul(ObjectToWorld3x4(), float4(asfloat(vertices.Load3(addresses.y)) - edgeOrigin, 0));
+    float3 edgeB = mul(ObjectToWorld3x4(), float4(asfloat(vertices.Load3(addresses.z)) - edgeOrigin, 0));
+    payload.geometricNormal = SafeNormalize(cross(edgeA, edgeB), payload.normal);
+    if(dot(payload.geometricNormal, payload.normal) < 0) payload.geometricNormal = -payload.geometricNormal;
+    payload.front = dot(payload.geometricNormal, WorldRayDirection()) < 0;
     float2 uv = asfloat(vertices.Load2(addresses.x + 24)) * weights.x +
         asfloat(vertices.Load2(addresses.y + 24)) * weights.y + asfloat(vertices.Load2(addresses.z + 24)) * weights.z;
     float3 vertexColor = asfloat(vertices.Load3(addresses.x + 32)) * weights.x +
@@ -63,7 +80,7 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
     {
         Texture2D<float4> texture = ResourceDescriptorHeap[NonUniformResourceIndex(draw.z)];
         SamplerState sampler = SamplerDescriptorHeap[NonUniformResourceIndex(draw.w)];
-        // Secondary rays have no raster derivatives. Explicit LOD keeps sampling legal.
+        // 二次レイには画面微分がないため、明示的なLODで材質をサンプルする。
         payload.color *= texture.SampleLevel(sampler, uv, 0).rgb;
     }
     const float4 optics = asfloat(surfaceData.Load4(geometry + 48));
@@ -71,14 +88,28 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
     payload.absorption = asfloat(surfaceData.Load4(geometry + 64)).rgb;
     float4 pbr = asfloat(surfaceData.Load4(geometry + 80));
     uint4 maps = surfaceData.Load4(geometry + 96);
-    payload.metallic = pbr.x; payload.roughness = pbr.y;
+    float4 mrTexel = 1;
     if(maps.z != 0) {
         Texture2D<float4> map = ResourceDescriptorHeap[NonUniformResourceIndex(maps.z)];
         SamplerState sampleState = SamplerDescriptorHeap[NonUniformResourceIndex(maps.w)];
         float4 mr = map.SampleLevel(sampleState, uv, 0);
-        payload.metallic *= mr.b; payload.roughness *= mr.g;
+        mrTexel = mr;
     }
-    payload.metallic = saturate(payload.metallic); payload.roughness = clamp(payload.roughness, 0.05, 1);
+    float2 metallicRoughness = MaterialMetallicRoughness(pbr.xy, mrTexel);
+    payload.metallic = metallicRoughness.x; payload.roughness = metallicRoughness.y;
+    float4 emissionAO = asfloat(surfaceData.Load4(geometry + 112));
+    uint4 extraMaps = surfaceData.Load4(geometry + 128);
+    payload.emissive = emissionAO.rgb; payload.ao = 1;
+    if(extraMaps.x != 0) {
+        Texture2D<float4> map = ResourceDescriptorHeap[NonUniformResourceIndex(extraMaps.x)];
+        SamplerState state = SamplerDescriptorHeap[NonUniformResourceIndex(extraMaps.y)];
+        payload.emissive *= map.SampleLevel(state, uv, 0).rgb;
+    }
+    if(extraMaps.z != 0) {
+        Texture2D<float4> map = ResourceDescriptorHeap[NonUniformResourceIndex(extraMaps.z)];
+        SamplerState state = SamplerDescriptorHeap[NonUniformResourceIndex(extraMaps.w)];
+        payload.ao = MaterialOcclusion(map.SampleLevel(state, uv, 0).r, emissionAO.w);
+    }
     if(maps.x != 0) {
         float4 tangent = asfloat(vertices.Load4(addresses.x + 80)) * weights.x +
             asfloat(vertices.Load4(addresses.y + 80)) * weights.y + asfloat(vertices.Load4(addresses.z + 80)) * weights.z;
@@ -102,8 +133,8 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
         if(dot(b, b) > 1e-12) {
             Texture2D<float4> map = ResourceDescriptorHeap[NonUniformResourceIndex(maps.x)];
             SamplerState sampleState = SamplerDescriptorHeap[NonUniformResourceIndex(maps.y)];
-            float3 mapped = map.SampleLevel(sampleState, uv, 0).xyz * 2 - 1; mapped.xy *= pbr.z;
-            payload.normal = SafeNormalize(t * mapped.x + b * mapped.y + n * mapped.z, n);
+            float3 normalTexel = map.SampleLevel(sampleState, uv, 0).xyz;
+            payload.normal = MaterialNormal(normalTexel, pbr.z, n, t, b);
         }
     }
     payload.distance = RayTCurrent(); payload.hit = 1;
@@ -123,12 +154,16 @@ Surface Intersect(float3 origin, float3 direction)
 
 float3 Environment(float3 direction)
 {
+    if(environment.options.y != 0) return SampleEnvironment(direction, environment);
     return lerp(float3(0.08, 0.11, 0.16), float3(0.45, 0.65, 0.95), saturate(direction.y * 0.5 + 0.5));
 }
 float3 Offset(float3 position, float3 normal, float3 direction)
 {
     return position + normal * (dot(normal, direction) > 0 ? rayParameters.x : -rayParameters.x);
 }
+#include "GlobalIllumination.hlsli"
+// プローブraygenも既存のclosesthit・材質マップ・TLASを共有する。
+#include "DDGIProbe.hlsli"
 struct Path
 {
     float3 origin; float3 direction;
@@ -147,10 +182,18 @@ void OpticalRaygen()
     const float3 nearPosition = nearH.xyz / nearH.w;
     const float3 direction = normalize(farH.xyz / farH.w - nearPosition);
     RWTexture2D<float4> output = ResourceDescriptorHeap[outputIndex];
+    RWTexture2D<float4> diffuseOutput = ResourceDescriptorHeap[giOptions.w];
     const Surface primary = Intersect(nearPosition, direction);
-    if (primary.hit == 0 || (primary.reflectivity == 0 && primary.transmission == 0))
+    float4 primaryGI = 0;
+    const bool evaluateGI = giOptions.x != 0 && (environment.options.z == 0 || environment.options.z == 2 || environment.options.z == 11);
+    if(primary.hit != 0 && evaluateGI) {
+        const bool pureOptical = opticalEnabled != 0 && (primary.reflectivity == 1 || primary.transmission == 1);
+        primaryGI = pureOptical ? float4(0,0,0,1) : EvaluateGI(primary, nearPosition + direction * primary.distance, -direction, pixel);
+    }
+    if(giOptions.x != 0) diffuseOutput[pixel] = float4(clamp(primaryGI.rgb, 0, 65504), primaryGI.a);
+    if (primary.hit == 0 || opticalEnabled == 0 || environment.options.z != 0 || (primary.reflectivity == 0 && primary.transmission == 0))
     {
-        output[pixel] = 0; // Opaque Forward Lighting retains ownership of ordinary pixels.
+        output[pixel] = 0; // 通常pixelの最終合成はRasterの照明処理が担当する。
         return;
     }
 
@@ -170,12 +213,19 @@ void OpticalRaygen()
         const float3 normal = hit.front != 0 ? hit.normal : -hit.normal;
         const float diffuse = (1 - hit.reflectivity) * (1 - hit.transmission);
         float3 l = SafeNormalize(lightDirectionIntensity.xyz, float3(0, 1, 0));
-        Surface blocker = Intersect(Offset(position, hit.normal, l), l);
-        float visibility = blocker.hit == 0 ? 1 : 0;
-        float3 lighting = EvaluatePBR(saturate(hit.color), hit.metallic, hit.roughness, normal, -path.direction, l) *
-            lightColor.rgb * max(lightDirectionIntensity.w, 0) * visibility;
-        lighting += ambientIrradiance.rgb * hit.color * (1 - hit.metallic) * 0.96 / NexusPi;
-        radiance += weight * diffuse * lighting;
+        float visibility = lightDirectionIntensity.w > 0 && Occluded(Offset(position, hit.geometricNormal, l), l) ? 0 : 1;
+        SurfaceData surface = MakeSurface(hit.color, hit.metallic, hit.roughness, normal, hit.ao, hit.emissive);
+        // 通常PBRローブと理想反射・透過の重みを分配し、
+        // 同じエネルギーをIBLとDXRで二重加算しない。
+        surface.emissive = 0;
+        float4 secondaryGI = EvaluateBakedLighting(surface,-path.direction,position,0,bakedLighting,environment);
+        float4 dynamicGI=EvaluateDDGILighting(surface,-path.direction,position,ddgi,environment);
+        if(dynamicGI.a>.5) secondaryGI=dynamicGI;
+        if(evaluateGI && diffuse > 0) secondaryGI = path.depth == 0 ? primaryGI :
+            EvaluateGI(hit, position, -path.direction, pixel + uint2(path.depth * 17, 31));
+        float3 lighting = EvaluatePBRLighting(surface, -path.direction, l,
+            lightColor.rgb * max(lightDirectionIntensity.w, 0), visibility, environment, ambientIrradiance.rgb, secondaryGI);
+        radiance += weight * (diffuse * lighting + hit.emissive);
         if (path.depth + 1 >= maxBounces) continue;
         const float nextMedium = hit.front != 0 ? hit.ior : 1;
         const float cosine = saturate(dot(-path.direction, normal));
@@ -201,13 +251,13 @@ void OpticalRaygen()
         }
         if (transmission > 0 && max(weight.r, max(weight.g, weight.b)) * transmission > 0.002 && count < 16)
         {
-            // Enter/exit are both traced. Beer attenuation therefore uses actual glass thickness.
+            // 入射と出射を追跡し、実際のガラス厚でBeer吸収を評価する。
             child.direction = normalize(refracted); child.origin = Offset(position, hit.normal, child.direction);
             child.weight = weight * transmission; child.medium = nextMedium;
             child.absorption = hit.front != 0 ? hit.absorption : 0;
             paths[count++] = child;
         }
     }
-    // The optical UAV uses RGBA16_FLOAT; infinity would contaminate post-processing.
+    // RGBA16_FLOATの範囲に制限し、無限大がポスト処理へ伝播することを防ぐ。
     output[pixel] = float4(clamp(radiance, 0, 65504), 1);
 }

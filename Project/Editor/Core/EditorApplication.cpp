@@ -10,6 +10,7 @@
 #include "Foundation/Logging/Logger.h"
 #include "Graphics/Color/ColorSpace.h"
 #include <cmath>
+#include <algorithm>
 
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "ThirdParty/imgui/imgui.h"
@@ -46,7 +47,13 @@ namespace NexusEngine {
 		}
 		auto levelResult = session_.Open(assetDirectory / L"Levels/DemoLevel.json");
 		if(!levelResult) return levelResult;
-		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // Diffuse sky fill for shaded interiors.
+		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // HDR未指定時の遠方環境の照度
+		renderScene_.globalIllumination.enabled = false;
+		renderScene_.bakedLighting.enabled = false;
+		renderScene_.ddgi.enabled = true;
+		renderScene_.bakedLighting.cachePath = "Generated/Lighting/DemoLevel.nxgi";
+		constexpr char bakedPath[] = "Generated/Lighting/DemoLevel.nxgi";
+		std::copy_n(bakedPath, sizeof(bakedPath), bakedPath_.begin());
 		renderScene_.fog.enabled = true;
 		return session_.GetLevel()->Update(0.0f);
 	}
@@ -202,7 +209,92 @@ namespace NexusEngine {
 					}
 				}
 				float ambientIntensity = renderScene_.ambientIrradiance[0] / 0.5f;
-				if(ImGui::SliderFloat("Ambient Light Intensity", &ambientIntensity, 0.0f, 10.0f))
+				auto& environment = renderScene_.environment;
+				ImGui::SeparatorText("Environment / PBR");
+				ImGui::InputText("HDR image path", environmentPath_.data(), environmentPath_.size());
+				if(ImGui::Button("Load / Reload HDR")) {
+					environment.imagePath = std::filesystem::path(reinterpret_cast<const char8_t*>(environmentPath_.data()));
+					++environment.revision;
+				}
+				ImGui::Checkbox("IBL Enabled", &environment.enabled);
+				ImGui::DragFloat("IBL Intensity", &environment.intensity, 0.01f, 0, 100);
+				ImGui::SliderAngle("Environment Rotation", &environment.rotation, -180, 180);
+				ImGui::Checkbox("Legacy Half-Lambert", &environment.legacyHalfLambert);
+				auto& gi = renderScene_.globalIllumination;
+				auto& baked = renderScene_.bakedLighting;
+				auto& ddgi=renderScene_.ddgi;
+				ImGui::SeparatorText("DDGI / Dynamic Irradiance Field");
+				ImGui::Checkbox("DDGI Enabled",&ddgi.enabled);
+				ImGui::Checkbox("Freeze DDGI",&ddgi.freeze);
+				ImGui::Text("Probe updates: %u",optics_?optics_->GetDDGIFrameCount():0);
+				ImGui::TextUnformatted(optics_ && optics_->IsDDGIActive()?"DDGI Active":"DDGI Inactive / requires DXR and valid geometry");
+				ImGui::DragFloat3("DDGI Origin",ddgi.origin.data(),.1f);
+				ImGui::DragFloat3("DDGI Spacing",ddgi.spacing.data(),.05f,.05f,100);
+				int ddgiCounts[3] {static_cast<int>(ddgi.counts[0]),static_cast<int>(ddgi.counts[1]),static_cast<int>(ddgi.counts[2])};
+				if(ImGui::SliderInt3("DDGI Counts",ddgiCounts,2,16)) {
+					auto edited=ddgi;for(size_t n=0;n<3;++n) edited.counts[n]=static_cast<uint32_t>(ddgiCounts[n]);
+					if(edited.IsValid()) ddgi.counts=edited.counts;
+				}
+				ImGui::TextUnformatted("Maximum: 2048 probes / 256 rays per probe");
+				int rayLevel=static_cast<int>(ddgi.raysPerProbe/32)-1;
+				if(ImGui::SliderInt("DDGI Rays x32",&rayLevel,0,7)) ddgi.raysPerProbe=static_cast<uint32_t>(rayLevel+1)*32;
+				ImGui::SliderFloat("DDGI Hysteresis",&ddgi.hysteresis,0,.995f);
+				ImGui::SliderFloat("DDGI Intensity",&ddgi.intensity,0,10);
+				ImGui::DragFloat("DDGI Normal Bias",&ddgi.normalBias,.001f,0,1);
+				ImGui::DragFloat("DDGI View Bias",&ddgi.viewBias,.001f,0,1);
+				ImGui::DragFloat("DDGI Ray Distance",&ddgi.maxDistance,1,1,1000);
+				ImGui::Checkbox("DDGI Relocation",&ddgi.relocation);
+				ImGui::Checkbox("DDGI Multi-bounce Feedback",&ddgi.feedback);
+				ImGui::Checkbox("DDGI Rotate Rays",&ddgi.rotateRays);
+				if(ImGui::Button("Reset DDGI History")) ++ddgi.revision;
+				ImGui::TextUnformatted("DDGI requires DXR. Fixed rays + history reduce flicker; lighting changes need convergence.");
+				ImGui::TextUnformatted("Priority: DDGI > Baked GI > RTGI. Diffuse GI Only displays the selected result.");
+				ImGui::SeparatorText("Baked GI / Light Probes");
+				ImGui::Checkbox("Baked GI Enabled", &baked.enabled);
+				ImGui::InputText("Baked GI Cache",bakedPath_.data(),bakedPath_.size());
+				ImGui::TextWrapped("%s", materialRenderer_ ? materialRenderer_->GetBakedLightingStatus().c_str() : "Renderer unavailable");
+				ImGui::TextUnformatted("Missing cache uses ambient. Bake explicitly after static scene/light changes.");
+				int bakeSamples = static_cast<int>(baked.samples), bakeBounces = static_cast<int>(baked.maxBounces);
+				if(ImGui::SliderInt("Bake Samples", &bakeSamples, 16, 4096)) baked.samples = static_cast<uint32_t>(bakeSamples);
+				if(ImGui::SliderInt("Bake Bounces", &bakeBounces, 1, 8)) baked.maxBounces = static_cast<uint32_t>(bakeBounces);
+				int chart = baked.chartSize == 4 ? 0 : baked.chartSize == 8 ? 1 : 2;
+				if(ImGui::Combo("Chart Resolution", &chart, "4\0" "8\0" "16\0")) baked.chartSize = 4U << chart;
+				int probeCounts[3] {static_cast<int>(baked.probeCounts[0]),static_cast<int>(baked.probeCounts[1]),static_cast<int>(baked.probeCounts[2])};
+				if(ImGui::SliderInt3("Probe Counts", probeCounts, 2, 16)) for(size_t n=0;n<3;++n) baked.probeCounts[n]=static_cast<uint32_t>(probeCounts[n]);
+				ImGui::SliderFloat("Baked GI Intensity", &baked.intensity, 0, 10);
+				ImGui::Checkbox("Automatic Probe Bounds",&baked.automaticBounds);
+				if(!baked.automaticBounds) {
+					ImGui::DragFloat3("Probe Minimum",baked.probeMin.data(),.1f);
+					ImGui::DragFloat3("Probe Maximum",baked.probeMax.data(),.1f);
+				}
+				if(ImGui::Button("Bake and Save (CPU)") && materialRenderer_) {
+					baked.cachePath=std::filesystem::path(reinterpret_cast<const char8_t*>(bakedPath_.data()));
+					// 編集時の明示操作のみCPUベイクする。描画ループからは呼び出さない。
+					auto status=materialRenderer_->BakeLighting(baked);
+					if(status) ++baked.revision;
+					else NEXUS_LOG_ERROR("BakedGI",status.error().GetMessageText());
+				}
+				ImGui::SameLine();
+				if(ImGui::Button("Reload Baked GI")) {
+					baked.cachePath=std::filesystem::path(reinterpret_cast<const char8_t*>(bakedPath_.data()));
+					++baked.revision;
+				}
+				ImGui::TextUnformatted("CPU bake pauses editing. Runtime samples saved lighting without GI rays.");
+				ImGui::BeginDisabled(baked.enabled || ddgi.enabled);
+				ImGui::Checkbox("Diffuse RTGI Enabled", &gi.enabled);
+				ImGui::Text("RTGI output (last frame): %s", materialRenderer_ && materialRenderer_->IsGlobalIlluminationActive()
+					? "Available" : "Inactive / fallback");
+				int giSamples = static_cast<int>(gi.samplesPerPixel), giBounces = static_cast<int>(gi.maxBounces);
+				if(ImGui::SliderInt("GI Samples Per Pixel", &giSamples, 1, 64)) gi.samplesPerPixel = static_cast<uint32_t>(giSamples);
+				if(ImGui::SliderInt("GI Diffuse Segments", &giBounces, 1, 4)) gi.maxBounces = static_cast<uint32_t>(giBounces);
+				ImGui::SliderFloat("GI Intensity", &gi.intensity, 0, 10);
+				ImGui::TextUnformatted("Diffuse RTGI replaces ambient / diffuse IBL. DXR static geometry required.");
+				ImGui::EndDisabled();
+				int lightingDebug = static_cast<int>(environment.debugMode);
+				if(ImGui::Combo("Lighting View", &lightingDebug,
+					"Final Lighting\0Direct Lighting Only\0Indirect Lighting Only\0Diffuse IBL Only\0Specular IBL Only\0Base Color\0Metallic\0Roughness\0Normal\0AO\0Emissive\0Diffuse GI Only\0"))
+					environment.debugMode = static_cast<LightingDebugMode>(lightingDebug);
+				if(ImGui::SliderFloat("Fallback Sky Intensity", &ambientIntensity, 0.0f, 10.0f))
 					renderScene_.ambientIrradiance = {0.5f * ambientIntensity, 0.6f * ambientIntensity, 0.8f * ambientIntensity};
 				if(auto* level = session_.GetLevel(); level && level->GetScene()) {
 					level->GetScene()->ForEach<DirectionalLightComponent>([&](Entity entity, DirectionalLightComponent& component) {

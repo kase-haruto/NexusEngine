@@ -1,6 +1,8 @@
 #include "PrimitiveRenderer.h"
 #include "Graphics/Color/ColorSpace.h"
 #include "Graphics/Meshlet/MeshletBuilder.h"
+#include "Graphics/Lighting/LightmapGeometry.h"
+#include "Graphics/Lighting/LightBaker.h"
 
 // c++
 #include <array>
@@ -17,6 +19,12 @@
 #include "Foundation/Logging/Logger.h"
 
 namespace NexusEngine {
+	Result<void> PrimitiveRenderer::BakeLighting(const BakedLightingSettings& settings) {
+		if(!modelAsset_ || !modelPose_ || !renderScene_) return std::unexpected(Error(ErrorCategory::Resource,91,"Bake requires model and render scene."));
+		auto baked=LightBaker{}.Bake(*modelAsset_,*modelPose_,*renderScene_,settings);
+		if(!baked) return std::unexpected(std::move(baked.error()));
+		return SaveBakedLighting(*baked,settings.cachePath);
+	}
 	Result<void> PrimitiveRenderer::SetOpticalMaterial(uint32_t slot, const OpticalMaterial& optics) {
 		if(slot >= opticalMaterials_.size() || !optics.IsValid())
 			return std::unexpected(Error(ErrorCategory::Graphics, 70, "Invalid optical material slot or coefficients."));
@@ -56,7 +64,8 @@ namespace NexusEngine {
 			{"COLOR", 0, VertexFormat::Float4, offsetof(ModelVertex, color)},
 			{"BLENDINDICES", 0, VertexFormat::Float4, offsetof(ModelVertex, jointIndices)},
 			{"BLENDWEIGHT", 0, VertexFormat::Float4, offsetof(ModelVertex, jointWeights)},
-			{"TANGENT", 0, VertexFormat::Float4, offsetof(ModelVertex, tangent)}};
+			{"TANGENT", 0, VertexFormat::Float4, offsetof(ModelVertex, tangent)},
+			{"TEXCOORD", 1, VertexFormat::Float2, offsetof(ModelVertex, lightmapUV)}};
 		pipelineDesc.depthStencilFormat				= DepthStencilFormat::D32Float;
 		pipelineDesc.depthStencil.depthTestEnabled	= true;
 		pipelineDesc.depthStencil.depthWriteEnabled = true;
@@ -72,7 +81,11 @@ namespace NexusEngine {
 			Shutdown();
 			return std::unexpected(Error(ErrorCategory::Resource, 1, "Scene model input is not connected."));
 		}
-		const ModelAssetData* asset = modelAsset_;
+		// 共有CPUモデルを変更せず、独立UV付きGPU形状を生成する。材質UVとSkinningは維持する。
+		ModelAssetData prepared = *modelAsset_;
+		result = GenerateLightmapGeometry(prepared);
+		if(!result) { Shutdown(); return result; }
+		const ModelAssetData* asset = &prepared;
 		result						= context.resources.CreateModelResource(model_, *asset);
 		if(!result) {
 			Shutdown();
@@ -86,7 +99,9 @@ namespace NexusEngine {
 			255, 255, 255, 255, 255, 255, 255, 255};
 		materialResources_.reserve(asset->materials.size());
 		for(const ModelMaterialAssetData& material : asset->materials) {
-			MaterialGpuResource gpuMaterial;
+			// Retain ownership before allocation so every failure retires its descriptors.
+			materialResources_.emplace_back();
+			auto& gpuMaterial = materialResources_.back();
 			gpuMaterial.texture = std::make_unique<TextureResource>();
 			result				= material.baseColorImageData.empty()
 									  ? resources_->CreateTexture2D(*gpuMaterial.texture,
@@ -109,13 +124,12 @@ namespace NexusEngine {
 				return std::unexpected(std::move(samplerReference.error()));
 			}
 			gpuMaterial.samplerRef = *samplerReference;
-			materialResources_.push_back(std::move(gpuMaterial));
 			// Retain ownership before upload so initialization failures retire every descriptor.
 			auto uploadMap = [&](const std::vector<uint8_t>& bytes, const SamplerDesc& sampler,
-				std::unique_ptr<TextureResource>& texture, ShaderResourceRef& ref, ShaderResourceRef& samplerRef) -> Result<void> {
+				std::unique_ptr<TextureResource>& texture, ShaderResourceRef& ref, ShaderResourceRef& samplerRef, TextureColorSpace space = TextureColorSpace::Linear) -> Result<void> {
 				if(bytes.empty()) return {};
 				texture = std::make_unique<TextureResource>();
-				auto status = resources_->CreateTexture2DFromEncodedData(*texture, bytes, TextureColorSpace::Linear);
+				auto status = resources_->CreateTexture2DFromEncodedData(*texture, bytes, space);
 				if(!status) return status;
 				auto srv = resources_->CreatePersistentTextureShaderResource(*texture);
 				if(!srv) return std::unexpected(std::move(srv.error()));
@@ -129,6 +143,8 @@ namespace NexusEngine {
 			result = uploadMap(material.normalImageData, material.normalSampler, gpu.normalTexture, gpu.normalRef, gpu.normalSamplerRef);
 			if(result) result = uploadMap(material.metallicRoughnessImageData, material.metallicRoughnessSampler,
 				gpu.metallicRoughnessTexture, gpu.metallicRoughnessRef, gpu.metallicRoughnessSamplerRef);
+			if(result) result = uploadMap(material.emissiveImageData, material.emissiveSampler, gpu.emissiveTexture, gpu.emissiveRef, gpu.emissiveSamplerRef, TextureColorSpace::Srgb);
+			if(result) result = uploadMap(material.occlusionImageData, material.occlusionSampler, gpu.occlusionTexture, gpu.occlusionRef, gpu.occlusionSamplerRef);
 			if(!result) { Shutdown(); return std::unexpected(std::move(result.error())); }
 		}
 
@@ -158,13 +174,18 @@ namespace NexusEngine {
 			Shutdown();
 			return result;
 		}
+		result = environment_.Initialize(context.resources, context.shaderDirectory);
+		if(!result) { Shutdown(); return result; }
+		bakedLighting_.Initialize(context.resources);
 		for(size_t i = 0; i < model_.GetMaterials().size(); ++i) {
 			const auto& material = model_.GetMaterials()[i];
 			opticalMaterials_.push_back({material.baseColorFactor, material.optics,
 				materialResources_[i].textureRef, materialResources_[i].samplerRef,
 				{material.metallicFactor, material.roughnessFactor, material.normalScale, 0},
 				materialResources_[i].normalRef, materialResources_[i].normalSamplerRef,
-				materialResources_[i].metallicRoughnessRef, materialResources_[i].metallicRoughnessSamplerRef});
+				materialResources_[i].metallicRoughnessRef, materialResources_[i].metallicRoughnessSamplerRef,
+				{material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2], material.occlusionStrength},
+				materialResources_[i].emissiveRef, materialResources_[i].emissiveSamplerRef, materialResources_[i].occlusionRef, materialResources_[i].occlusionSamplerRef});
 		}
 		////////////////////////////////////////////////////////////////////////////////
 		// 静的 Meshlet は Asset 初期化時だけ生成。Skinning は従来 Pipeline を維持する。
@@ -199,6 +220,8 @@ namespace NexusEngine {
 		meshletResources_.clear();
 		meshPipeline_.Shutdown();
 		optics_.Shutdown();
+		environment_.Shutdown();
+		bakedLighting_.Shutdown();
 		opticalDraws_.clear();
 		opticalMaterials_.clear();
 		shadows_.Shutdown();
@@ -218,6 +241,8 @@ namespace NexusEngine {
 					retire(material.samplerRef);
 					retire(material.normalRef); retire(material.normalSamplerRef);
 					retire(material.metallicRoughnessRef); retire(material.metallicRoughnessSamplerRef);
+					retire(material.emissiveRef); retire(material.emissiveSamplerRef);
+					retire(material.occlusionRef); retire(material.occlusionSamplerRef);
 				}
 			} catch(...) {
 				NEXUS_LOG_ERROR("Graphics", "Unexpected exception while retiring PrimitiveRenderer descriptors.");
@@ -234,6 +259,9 @@ namespace NexusEngine {
 	}
 
 	void PrimitiveRenderer::Render(GraphicsContext& context) {
+		optics_.ClearFrameOutputs();
+		drawData_.diffuseGIIndex=0;
+		drawData_.ddgi={};
 		const uint32_t frameIndex = context.GetFrameIndex();
 		if(meshDrawBuffers_.empty() || meshDrawBuffers_.front().empty() ||
 		   frameIndex >= meshDrawBuffers_.front().front()->GetFrameCount()) {
@@ -247,6 +275,18 @@ namespace NexusEngine {
 		const Matrix4x4 projection	= renderScene_->camera->viewProjectionMatrix;
 		const auto cameraWorld = TryInverse(renderScene_->camera->viewMatrix);
 		if(!cameraWorld) return;
+		auto environmentStatus = environment_.Prepare(renderScene_->environment);
+		if(!environmentStatus) NEXUS_LOG_ERROR("Environment", environmentStatus.error().GetMessageText());
+		drawData_.environment = environment_.GetDrawData(renderScene_->environment);
+		const bool dynamicGI=renderScene_->ddgi.enabled && resources_->GetCapabilities().SupportsRayTracing();
+		auto bakedStatus = dynamicGI?Result<void>{}:bakedLighting_.Prepare(*modelAsset_,*modelPose_,*renderScene_);
+		if(!bakedStatus) NEXUS_LOG_ERROR("BakedGI",bakedStatus.error().GetMessageText());
+		auto bakedSettings=renderScene_->bakedLighting;
+		if(dynamicGI) bakedSettings.enabled=false;
+		const auto bakedData = bakedLighting_.GetDrawData(bakedSettings);
+		auto realtimeGI = renderScene_->globalIllumination;
+		// ベイク方式を選択した場合はキャッシュ未作成時もRTGIを起動しない。
+		if(renderScene_->bakedLighting.enabled || renderScene_->ddgi.enabled) realtimeGI.enabled = false;
 		drawData_.cameraPosition = {cameraWorld->At(3, 0), cameraWorld->At(3, 1), cameraWorld->At(3, 2), 1};
 		for(size_t i = 0; i < 3; ++i) drawData_.ambientIrradiance[i] = renderScene_->ambientIrradiance[i];
 		const auto& fog = renderScene_->fog;
@@ -280,11 +320,16 @@ namespace NexusEngine {
 						draw.jointPalette = *palette;
 					}
 					shadowDraws_.push_back(draw);
-					opticalDraws_.push_back({draw, object.tint});
+					// VSだけで変形するSkinningはASへ投入できない。DDGIの受光自体はRasterで利用する。
+					if(!dynamicGI || !skinned) opticalDraws_.push_back({draw, object.tint});
 				}
 			}
 		}
-		auto radiance = optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_, renderScene_->ambientIrradiance);
+		auto radiance = (renderScene_->environment.debugMode == LightingDebugMode::Final || realtimeGI.enabled || renderScene_->ddgi.enabled)
+			? optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_, renderScene_->ambientIrradiance, drawData_.environment, realtimeGI, bakedData, renderScene_->ddgi)
+			: Result<ShaderResourceRef>{ShaderResourceRef{}};
+		drawData_.diffuseGIIndex = radiance && realtimeGI.enabled ? optics_.GetDiffuseGlobalIllumination().index : 0;
+		drawData_.ddgi=radiance && renderScene_->ddgi.enabled?optics_.GetDDGIDrawData():DDGIDrawData{};
 		if(!radiance) {
 			NEXUS_LOG_ERROR("Optics", radiance.error().GetMessageText());
 			drawData_.opticalRadianceIndex = 0;
@@ -363,6 +408,9 @@ namespace NexusEngine {
 					const MeshResource* mesh = model_.GetMesh(meshIndex);
 					if(mesh == nullptr) continue;
 					context.SetMesh(*mesh);
+					const auto& object = renderScene_->primitives[objectIndex];
+					drawData_.bakedLighting = bakedLighting_.GetDrawData(bakedSettings,
+						object.lightingId ? object.lightingId : object.sourceObject.value,static_cast<uint32_t>(nodeIndex),meshIndex,world,object.staticLighting && !hasSkin);
 					for(std::size_t submeshIndex = 0; submeshIndex < mesh->GetSubmeshes().size(); ++submeshIndex) {
 						const SubmeshRange& submesh = mesh->GetSubmeshes()[submeshIndex];
 						if(submesh.materialSlot >= materialResources_.size() ||
@@ -376,6 +424,8 @@ namespace NexusEngine {
 						drawData_.metallicRoughnessTextureIndex = gpuMaterial.metallicRoughnessRef.index;
 						drawData_.metallicRoughnessSamplerIndex = gpuMaterial.metallicRoughnessSamplerRef.index;
 						drawData_.pbrParameters = {material.metallicFactor, material.roughnessFactor, material.normalScale, 0};
+						drawData_.emissiveOcclusion = {material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2], material.occlusionStrength};
+						drawData_.extraMaps = {gpuMaterial.emissiveRef.index, gpuMaterial.emissiveSamplerRef.index, gpuMaterial.occlusionRef.index, gpuMaterial.occlusionSamplerRef.index};
 						drawData_.tint						   = material.baseColorFactor;
 						if(renderScene_ != nullptr) {
 							for(size_t channel = 0; channel < 4; ++channel) drawData_.tint[channel] *= renderScene_->primitives[objectIndex].tint[channel];

@@ -43,6 +43,8 @@ namespace NexusEngine {
 		metadata_.resize(frames); hitTables_.resize(frames); activeGenerations_.resize(frames);
 		auto result = factory->CreateConstantBuffer(constants_, sizeof(Constants));
 		if(!result) return result;
+		result=factory->CreateConstantBuffer(probeConstants_,sizeof(Constants));if(!result) return result;
+		result=ddgi_.Initialize(device_.Get(),queue_,bindless_,*factory,shaders_);if(!result) return result;
 		return scene_.Initialize(device_.Get(), frames);
 	}
 	Result<void> OpticalBackend::CreatePipeline() {
@@ -81,14 +83,14 @@ namespace NexusEngine {
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> localRoot;
 		hr = device_->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(&localRoot));
 		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70, hr, "Optical local root creation failed."));
-		const wchar_t* names[] {L"OpticalRaygen", L"OpticalMiss", L"OpticalHit"};
-		D3D12_EXPORT_DESC exports[3] {}; for(size_t i = 0; i < 3; ++i) exports[i].Name = names[i];
+		const wchar_t* names[] {L"OpticalRaygen", L"OpticalMiss", L"OpticalHit",L"DDGIProbeRaygen"};
+		D3D12_EXPORT_DESC exports[4] {}; for(size_t i = 0; i < 4; ++i) exports[i].Name = names[i];
 		const auto bytes = shader.GetBytecode();
-		D3D12_DXIL_LIBRARY_DESC library {{bytes.data(), bytes.size()}, 3, exports};
+		D3D12_DXIL_LIBRARY_DESC library {{bytes.data(), bytes.size()}, 4, exports};
 		D3D12_HIT_GROUP_DESC hit {}; hit.HitGroupExport = L"OpticalHitGroup";
 		hit.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES; hit.ClosestHitShaderImport = L"OpticalHit";
-		// Rays are iterated in Raygen. Hit never recursively traces, so recursion depth stays 1.
-		D3D12_RAYTRACING_SHADER_CONFIG config {72, 8};
+		// raygenで経路を反復する。交差shaderはレイを生成しないため再帰深度は1のまま。
+		D3D12_RAYTRACING_SHADER_CONFIG config {100, 8};
 		D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig {1};
 		ID3D12RootSignature* global = root_.Get();
 		ID3D12RootSignature* local = localRoot.Get();
@@ -108,30 +110,30 @@ namespace NexusEngine {
 		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70, hr, "Optical DXR StateObject creation failed."));
 		Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> props; hr = pipeline_.As(&props);
 		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70, hr, "Optical StateObject properties unavailable."));
-		result = UploadBuffer(device_.Get(), 192, shaderTable_); if(!result) return result;
+		result = UploadBuffer(device_.Get(), 256, shaderTable_); if(!result) return result;
 		void* mapped = nullptr; const D3D12_RANGE noReads {0, 0};
 		hr = shaderTable_->Map(0, &noReads, &mapped);
 		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70, hr, "Optical ShaderTable Map failed."));
-		std::memset(mapped, 0, 192);
-		const wchar_t* tableNames[] {L"OpticalRaygen", L"OpticalMiss", L"OpticalHitGroup"};
-		for(size_t i = 0; i < 3; ++i) {
+		std::memset(mapped, 0, 256);
+		const wchar_t* tableNames[] {L"OpticalRaygen", L"OpticalMiss", L"OpticalHitGroup",L"DDGIProbeRaygen"};
+		for(size_t i = 0; i < 4; ++i) {
 			const void* identifier = props->GetShaderIdentifier(tableNames[i]);
 			if(!identifier) { shaderTable_->Unmap(0, nullptr); return std::unexpected(Error(ErrorCategory::Graphics, 70, "Optical shader identifier missing.")); }
-			// 32byte identifiers with 64byte table starts. Raygen/Miss are immutable;
-			// the hit identifier is copied into Frame-local geometry records with b1 arguments.
+			// 32byteの識別子を64byte境界へ配置する。raygen・missのレコードは固定し、
+			// hit識別子とb1の形状番号はフレーム別テーブルへ複写する。
 			std::memcpy(static_cast<uint8_t*>(mapped) + i * 64, identifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 			if(i == 2) std::memcpy(hitIdentifier_.data(), identifier, hitIdentifier_.size());
 		}
 		shaderTable_->Unmap(0, nullptr); pipelineReady_ = true; return {};
 	}
 	void OpticalBackend::ReleaseOutput() noexcept {
-		for(auto& view : {&outputSrv_, &outputUav_}) {
+		for(auto& view : {&outputSrv_, &outputUav_, &giSrv_, &giUav_}) {
 			if(view->IsValid()) { auto result = bindless_->Retire(*view, queue_->GetCompletedFenceValue()); if(!result) NEXUS_LOG_ERROR("Optics", result.error().GetMessageText()); *view = {}; }
 		}
-		bindless_->CollectGarbage(queue_->GetCompletedFenceValue()); output_.Reset();
+		bindless_->CollectGarbage(queue_->GetCompletedFenceValue()); output_.Reset(); giOutput_.Reset();
 	}
 	Result<void> OpticalBackend::Resize(uint32_t width, uint32_t height) {
-		if(output_ && outputSrv_.IsValid() && outputUav_.IsValid() && output_->GetDesc().Width == width && output_->GetDesc().Height == height) return {};
+		if(output_ && outputSrv_.IsValid() && outputUav_.IsValid() && giOutput_ && giSrv_.IsValid() && giUav_.IsValid() && output_->GetDesc().Width == width && output_->GetDesc().Height == height) return {};
 		auto wait = queue_->WaitForIdle(); if(!wait) return wait;
 		ReleaseOutput();
 		D3D12_RESOURCE_DESC desc {}; desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -147,6 +149,13 @@ namespace NexusEngine {
 		auto view = bindless_->CreateShaderResourceView(output_.Get(), srv); if(!view) return std::unexpected(std::move(view.error())); outputSrv_ = *view;
 		D3D12_UNORDERED_ACCESS_VIEW_DESC uav {}; uav.Format = desc.Format; uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 		view = bindless_->CreateUnorderedAccessView(output_.Get(), nullptr, uav); if(!view) return std::unexpected(std::move(view.error())); outputUav_ = *view;
+		// 二つの出力で画面寸法・遷移・記録破棄時の復元を共有する。
+		// 所有者も揃え、GI用のTLAS再生成やScene再走査を増やさない。
+		const auto giCreated = device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+			D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&giOutput_));
+		if(FAILED(giCreated)) return std::unexpected(MakeDirectXError(70, giCreated, "Diffuse GI texture allocation failed."));
+		view = bindless_->CreateShaderResourceView(giOutput_.Get(), srv); if(!view) return std::unexpected(std::move(view.error())); giSrv_ = *view;
+		view = bindless_->CreateUnorderedAccessView(giOutput_.Get(), nullptr, uav); if(!view) return std::unexpected(std::move(view.error())); giUav_ = *view;
 		return {};
 	}
 	Result<OpticalBackend::GeometryViews*> OpticalBackend::GetViews(const MeshResource& mesh) {
@@ -170,11 +179,11 @@ namespace NexusEngine {
 	}
 	Result<ShaderResourceRef> OpticalBackend::Render(GraphicsContext& context, void* nativeCommands, const Matrix4x4& vp,
 		const DirectionalLightData& light, std::span<const OpticalDrawItem> draws,
-		std::span<const OpticalSurfaceMaterial> materials, const OpticalSettings& settings, const std::array<float, 3>& ambientIrradiance) {
+		std::span<const OpticalSurfaceMaterial> materials, const OpticalSettings& settings, const std::array<float, 3>& ambientIrradiance, const EnvironmentDrawData& environment, const GlobalIlluminationSettings& gi, const BakedLightingDrawData& baked, const DDGISettings& ddgi) {
 		const bool optical = std::any_of(materials.begin(), materials.end(), [](const auto& m) {return m.optics.IsOptical();});
-		if(!settings.enabled || !optical || draws.empty()) return ShaderResourceRef {};
+		if(((!settings.enabled || !optical) && !gi.enabled && !ddgi.enabled) || draws.empty()) return ShaderResourceRef {};
 		if(!supported_) {
-			if(!warned_) { NEXUS_LOG_WARNING("Optics", "DXR optical rendering unavailable; using opaque raster material fallback."); warned_ = true; }
+			if(!warned_) { NEXUS_LOG_WARNING("Optics", "DXR GI/optical rendering unavailable; using raster/IBL fallback."); warned_ = true; }
 			return ShaderResourceRef {};
 		}
 		for(const auto& draw : draws) if(!draw.geometry.jointPalette.empty())
@@ -191,7 +200,9 @@ namespace NexusEngine {
 		const auto inverse = TryInverse(vp);
 		if(!inverse) return std::unexpected(Error(ErrorCategory::Graphics, 70, "Optical camera matrix is singular."));
 		if(!pipelineReady_) { auto result = CreatePipeline(); if(!result) return std::unexpected(std::move(result.error())); }
-		auto resized = Resize(context.GetRenderWidth(), context.GetRenderHeight()); if(!resized) return std::unexpected(std::move(resized.error()));
+		const bool screenPass=(settings.enabled && optical) || gi.enabled;
+		if(screenPass) {auto resized = Resize(context.GetRenderWidth(), context.GetRenderHeight()); if(!resized) return std::unexpected(std::move(resized.error()));}
+		if(ddgi.enabled) {auto prepared=ddgi_.Prepare(ddgi);if(!prepared) return std::unexpected(std::move(prepared.error()));}
 		instances_.clear(); geometries_.clear(); accelerationDraws_.clear(); hitGroupOffsets_.clear();
 		auto& active = activeGenerations_.at(context.GetFrameIndex()); active.clear();
 		for(const auto& draw : draws) {
@@ -214,6 +225,8 @@ namespace NexusEngine {
 				for(size_t i = 0; i < 4; ++i) geometry.color[i] = m.color[i] * draw.tint[i];
 				geometry.optical = {m.optics.reflectivity, m.optics.transmission, m.optics.indexOfRefraction, 0};
 				geometry.pbr = m.pbr;
+				geometry.emissiveOcclusion = m.emissiveOcclusion;
+				geometry.extraMaps = {m.emissiveTexture.index, m.emissiveSampler.index, m.occlusionTexture.index, m.occlusionSampler.index};
 				geometry.maps = {m.normalTexture.index, m.normalSampler.index, m.metallicRoughnessTexture.index, m.metallicRoughnessSampler.index};
 				std::copy(m.optics.absorption.begin(), m.optics.absorption.end(), geometry.absorption.begin()); geometries_.push_back(geometry);
 			}
@@ -242,11 +255,11 @@ namespace NexusEngine {
 		for(uint32_t i = 0; i < geometries_.size(); ++i) {
 			auto* record = static_cast<uint8_t*>(mapped) + static_cast<size_t>(i) * 64;
 			std::memset(record, 0, 64); std::memcpy(record, hitIdentifier_.data(), hitIdentifier_.size());
-			std::memcpy(record + 32, &i, sizeof(i)); // local b1: flat geometry/material record index
+			std::memcpy(record + 32, &i, sizeof(i)); // ローカルb1へ形状・材質レコードの番号を格納する
 		}
 		hitTable->Unmap(0, nullptr);
-		// Retire attribute views only when absent from every in-flight Frame snapshot.
-		// This bounds generation churn without a Queue-idle stall on ordinary updates.
+		// 実行中の全フレームから参照されなくなった属性viewだけを回収する。
+		// 通常更新時にQueueを停止せず、形状の世代交代による使用量を制限する。
 		for(auto it = views_.begin(); it != views_.end();) {
 			const bool retained = std::any_of(activeGenerations_.begin(), activeGenerations_.end(), [&](const auto& frame) {
 				return std::find(frame.begin(), frame.end(), it->first) != frame.end();
@@ -254,38 +267,64 @@ namespace NexusEngine {
 			if(!retained) { ReleaseViews(it->second); it = views_.erase(it); } else ++it;
 		}
 		bindless_->CollectGarbage(queue_->GetCompletedFenceValue());
-		Constants constants; constants.inverseViewProjection = *inverse;
+		Constants constants; constants.environment = environment; constants.inverseViewProjection = *inverse;
 		constants.lightDirection = {light.direction[0], light.direction[1], light.direction[2], light.intensity};
 		constants.lightColor = {light.color[0], light.color[1], light.color[2], 0};
-		constants.indices = {outputUav_.index, static_cast<uint32_t>(instanceBytes), settings.maxBounces, 0};
+		constants.indices = {outputUav_.index, static_cast<uint32_t>(instanceBytes), settings.maxBounces, settings.enabled ? 1U : 0U};
+		constants.giOptions = {gi.enabled ? 1U : 0U, gi.samplesPerPixel, gi.maxBounces, giUav_.index};
+		constants.giParameters[0] = gi.intensity;
+		constants.bakedLighting = baked;
 		constants.rays = {settings.rayBias, settings.rayDistance, 0, 0};
 		std::copy(ambientIrradiance.begin(), ambientIrradiance.end(), constants.ambient.begin());
-		auto written = constants_.Write(context.GetFrameIndex(), {reinterpret_cast<const uint8_t*>(&constants), sizeof(constants)});
-		if(!written) return std::unexpected(std::move(written.error()));
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> commands;
 		const auto queried = static_cast<ID3D12GraphicsCommandList*>(nativeCommands)->QueryInterface(IID_PPV_ARGS(&commands));
 		if(FAILED(queried)) return std::unexpected(MakeDirectXError(70, queried, "Optical CommandList4 unavailable."));
-		// All fallible allocation precedes AS/Dispatch. The completion callback restores CPU
-		// state if this list is discarded; submitted resources are retained through Frame fences.
+		// AS構築・描画より前に失敗し得る割り当てを済ませる。記録が破棄された場合は
+		// 完了callbackでCPU状態を復元し、提出した資源はフレームFenceまで保持する。
 		initialState_ = state_; recording_ = true;
 		auto update = scene_.Update(commands.Get(), context.GetFrameIndex(), accelerationDraws_, hitGroupOffsets_);
 		if(!update) return std::unexpected(std::move(update.error()));
-		OutputBarrier(commands.Get(), output_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); state_ = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		const auto base = shaderTable_->GetGPUVirtualAddress();
+		D3D12_DISPATCH_RAYS_DESC probeDispatch {};
+		probeDispatch.MissShaderTable={base+64,64,64};probeDispatch.HitGroupTable={hitTable->GetGPUVirtualAddress(),hitTableBytes,64};
+		if(ddgi.enabled && ddgi_.NeedsUpdate()) {
+			ddgi_.Begin(commands.Get());
+			constants.ddgi=ddgi_.GetDrawData();
+			constants.probeTrace={ddgi_.RayUav(),ddgi_.Phase(),ddgi.feedback?1U:0U,0};
+			auto write=probeConstants_.Write(context.GetFrameIndex(),{reinterpret_cast<const uint8_t*>(&constants),sizeof(constants)});
+			if(!write) return std::unexpected(std::move(write.error()));
+			commands->SetComputeRootSignature(root_.Get());commands->SetPipelineState1(pipeline_.Get());
+			commands->SetComputeRootConstantBufferView(0,probeConstants_.GetGpuAddress(context.GetFrameIndex()));
+			commands->SetComputeRootShaderResourceView(1,scene_.GetTlasAddress(context.GetFrameIndex()));
+			commands->SetComputeRootShaderResourceView(2,data->GetGPUVirtualAddress());
+			probeDispatch.RayGenerationShaderRecord={base+192,64};
+			probeDispatch.Width=ddgi.raysPerProbe;probeDispatch.Height=ddgi.counts[0]*ddgi.counts[1]*ddgi.counts[2];probeDispatch.Depth=1;
+			commands->DispatchRays(&probeDispatch);
+			auto blended=ddgi_.Update(commands.Get(),context.GetFrameIndex());if(!blended) return std::unexpected(std::move(blended.error()));
+		}
+		if(!screenPass) return ShaderResourceRef {};
+		constants.ddgi=ddgi.enabled?ddgi_.GetDrawData(ddgi.intensity):DDGIDrawData{};
+		auto written=constants_.Write(context.GetFrameIndex(),{reinterpret_cast<const uint8_t*>(&constants),sizeof(constants)});
+		if(!written) return std::unexpected(std::move(written.error()));
+		OutputBarrier(commands.Get(), output_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		OutputBarrier(commands.Get(), giOutput_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); state_ = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		commands->SetComputeRootSignature(root_.Get()); commands->SetPipelineState1(pipeline_.Get());
 		commands->SetComputeRootConstantBufferView(0, constants_.GetGpuAddress(context.GetFrameIndex()));
 		commands->SetComputeRootShaderResourceView(1, scene_.GetTlasAddress(context.GetFrameIndex()));
 		commands->SetComputeRootShaderResourceView(2, data->GetGPUVirtualAddress());
-		const auto base = shaderTable_->GetGPUVirtualAddress(); D3D12_DISPATCH_RAYS_DESC dispatch {};
+		D3D12_DISPATCH_RAYS_DESC dispatch {};
 		dispatch.RayGenerationShaderRecord = {base, 64}; dispatch.MissShaderTable = {base + 64, 64, 64};
 		dispatch.HitGroupTable = {hitTable->GetGPUVirtualAddress(), hitTableBytes, 64};
 		dispatch.Width = context.GetRenderWidth(); dispatch.Height = context.GetRenderHeight(); dispatch.Depth = 1;
 		commands->DispatchRays(&dispatch);
-		// UAV->SRV transition orders radiance writes before Forward optical pixels sample it.
-		OutputBarrier(commands.Get(), output_.Get(), state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		// UAVからSRVへ遷移し、Rasterが光学出力・GIを読む前に書き込みを完了させる。
+		OutputBarrier(commands.Get(), output_.Get(), state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		OutputBarrier(commands.Get(), giOutput_.Get(), state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 		return outputSrv_;
 	}
 	void OpticalBackend::CompleteRecording(void* owner, bool submitted, uint32_t frame) noexcept {
 		auto& backend = *static_cast<OpticalBackend*>(owner);
+		backend.ddgi_.CompleteRecording(submitted);
 		if(backend.recording_ && !submitted) { backend.scene_.InvalidateRecording(frame); backend.state_ = backend.initialState_; }
 		backend.recording_ = false;
 	}
@@ -300,6 +339,7 @@ namespace NexusEngine {
 			ReleaseOutput(); for(auto& [generation, views] : views_) { (void)generation; ReleaseViews(views); }
 			bindless_->CollectGarbage(queue_->GetCompletedFenceValue());
 		}
+		ddgi_.Shutdown();probeConstants_.Shutdown();
 		views_.clear(); metadata_.clear(); hitTables_.clear(); activeGenerations_.clear(); scene_.Shutdown(); constants_.Shutdown();
 		shaderTable_.Reset(); pipeline_.Reset(); root_.Reset(); device_.Reset(); queue_ = nullptr; bindless_ = nullptr;
 		pipelineReady_ = false;

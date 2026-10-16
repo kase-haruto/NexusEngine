@@ -122,3 +122,9 @@ chore: ビルド設定を更新
 ## ライセンス
 
 ライセンスは現在未設定です。
+
+## レンダリング
+
+Metallic/Roughness PBR、HDR、Compute IBL（Diffuse Irradiance / GGX Prefilter / BRDF LUT）、DDGI（動的照度フィールド）、ベイクGI＋ライトプローブ（比較用）、拡散RTGI（比較用）、Emissive / AO、RT Shadow、鏡・ガラス、Mesh Shaderに対応しています。
+
+通常描画のGIは[DDGI](Project/Docs/DDGI.md)、事前計算方式は[ベイクGI＋ライトプローブ](Project/Docs/BakedLighting.md)を参照してください。RTGIの設定・検証・制約は[拡散GI設計](Project/Docs/GlobalIllumination.md)を参照してください。環境HDRの設定、責務分離、リソース寿命、テストと制約は[IBL設計資料](Project/Docs/IBL.md)、既存の描画基盤は[Graphics設計](Project/Docs/GraphicsREADME.md)を参照してください。

@@ -2,6 +2,7 @@
 
 #include "EditorSession.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 
 namespace NexusEngine {
 
@@ -30,6 +31,11 @@ namespace NexusEngine {
 	inline void DrawTransformInspector(EditorSession& session) {
 		if(ImGui::Begin("Inspector")) {
 			auto entity = session.GetSelectedEntity();
+			if(auto* primitive=entity.GetComponent<PrimitiveRenderComponent>()) {
+				bool enabled=primitive->staticLighting;
+				if(ImGui::Checkbox("Static Lighting (rebake required)",&enabled))
+					static_cast<void>(session.SetStaticLighting(session.GetSelection(),enabled));
+			}
 			if(auto* name = entity.GetComponent<NameComponent>()) ImGui::TextUnformatted(name->name.c_str());
 			if(auto* transform = entity.GetComponent<TransformComponent>()) {
 				Vector3 translation = transform->translation;

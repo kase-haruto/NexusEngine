@@ -9,6 +9,7 @@
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/Scene.h"
 
@@ -68,6 +69,12 @@ namespace NexusEngine {
 			[&](Entity entity, TransformComponent& transform, PrimitiveRenderComponent& primitive) {
 				if(primitive.enabled) {
 					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint, primitive.nodeIndex });
+					auto& item = result.primitives.back();
+					item.staticLighting = primitive.staticLighting;
+					if(const auto* id = entity.GetComponent<PersistentIdComponent>()) {
+						// ECSの世代番号に依存せず、Levelの永続IDから照合キーを作る。
+						item.lightingId = id->value.high ^ (id->value.low * 1099511628211ull);
+					}
 				}
 			});
 

@@ -27,7 +27,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 3;
+		constexpr uint32_t kFormatVersion = 4;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -133,7 +133,7 @@ namespace NexusEngine {
 				}
 				if(const auto* primitive = entity.GetComponent<PrimitiveRenderComponent>()) {
 					output << "PRIMITIVE 1 " << primitive->tint[0] << ' ' << primitive->tint[1] << ' '
-					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << '\n';
+					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << ' ' << primitive->staticLighting << '\n';
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
@@ -231,6 +231,7 @@ namespace NexusEngine {
 				PrimitiveRenderComponent primitive;
 				if(!(input >> primitive.tint[0] >> primitive.tint[1] >> primitive.tint[2] >> primitive.tint[3] >> primitive.enabled) ||
 				   (version >= 2 && !(input >> primitive.nodeIndex)) ||
+				   (version >= 4 && !(input >> primitive.staticLighting)) ||
 				   !IsValid(primitive) ||
 				   entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));
