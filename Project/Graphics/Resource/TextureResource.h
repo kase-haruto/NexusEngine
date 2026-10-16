@@ -18,12 +18,13 @@ namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
 	 * TextureDesc
 	 * - 2D Textureの論理寸法とpixel formatを保持するBackend非依存記述
-	 * - 1 mip、1 array sliceのRGBA pixelを対象とする
+	 * - 1 array sliceのRGBA pixelを受け取り、既定で完全なmip chainを生成する
 	 *---------------------------------------------------------------------------------------*/
 	struct TextureDesc {
 		uint32_t width = 0;
 		uint32_t height = 0;
 		TextureFormat format = TextureFormat::Rgba8Unorm;
+		bool generateMipmaps = true; // Generate a complete chain down to 1x1 on upload.
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -46,6 +47,7 @@ namespace NexusEngine {
 		[[nodiscard]] bool IsInitialized() const noexcept;
 		[[nodiscard]] uint32_t GetWidth() const noexcept;
 		[[nodiscard]] uint32_t GetHeight() const noexcept;
+		[[nodiscard]] uint32_t GetMipCount() const noexcept;
 		[[nodiscard]] TextureFormat GetFormat() const noexcept;
 
 	private:

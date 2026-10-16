@@ -28,6 +28,9 @@ namespace NexusEngine {
 	bool TextureResource::IsInitialized() const noexcept { return impl_ != nullptr; }
 	uint32_t TextureResource::GetWidth() const noexcept { return impl_ ? impl_->desc.width : 0; }
 	uint32_t TextureResource::GetHeight() const noexcept { return impl_ ? impl_->desc.height : 0; }
+	uint32_t TextureResource::GetMipCount() const noexcept {
+		return impl_ ? impl_->resource->GetDesc().MipLevels : 0;
+	}
 	TextureFormat TextureResource::GetFormat() const noexcept {
 		return impl_ ? impl_->desc.format : TextureFormat::Rgba8Unorm;
 	}

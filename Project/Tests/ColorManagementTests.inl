@@ -3,6 +3,7 @@
 #include "Graphics/Resource/TextureResource.h"
 #include "Graphics/Resource/ConstantBuffer.h"
 #include <limits>
+#include <bit>
 
 namespace {
 void ColorManagementIntegration() {
@@ -73,7 +74,8 @@ void ColorManagementIntegration() {
     ConstantBuffer selection; Check(test.factory.CreateConstantBuffer(selection, 16));
     TransientDescriptorArena transient; Check(transient.Initialize(test.device.GetDevice(), &test.descriptors.Resources(), 2, 16));
 
-    auto render = [&](std::array<float, 4> linear, PostProcessSettings settings, uint32_t texture = 0) {
+    auto render = [&](std::array<float, 4> linear, PostProcessSettings settings, uint32_t texture = 0,
+        uint32_t sampler = 0, float lod = 0, uint32_t sampleMode = 0) {
         Check(test.queue.WaitForIdle()); Native(test.allocator->Reset()); Native(test.commands->Reset(test.allocator.Get(), nullptr));
         post.BeginScene(test.commands.Get(), dsv, linear.data());
         if(texture != 0) {
@@ -82,7 +84,7 @@ void ColorManagementIntegration() {
             GraphicsBackendTestAccess::Targets(context, post.GetSceneRtv().ptr, dsv.ptr, &transient);
             context.RestoreMainRenderTargets(); context.SetGraphicsPipeline(samplePipeline);
             context.SetPrimitiveTopology(PrimitiveTopology::TriangleList);
-            std::array<uint32_t, 4> indices {texture, 0, 0, 0};
+            std::array<uint32_t, 4> indices {texture, sampler, std::bit_cast<uint32_t>(lod), sampleMode};
             Check(selection.Write(0, {reinterpret_cast<const uint8_t*>(indices.data()), sizeof(indices)}));
             Check(context.SetGraphicsConstantBufferTable(samplePipeline, selection)); context.Draw(3);
         }
@@ -105,6 +107,46 @@ void ColorManagementIntegration() {
     auto withinByteTolerance = [](uint8_t actual, int expected) { return std::abs(int(actual) - expected) <= 1; };
     PostProcessSettings settings; settings.bloomEnabled = false; settings.antiAliasingEnabled = false;
     settings.toneMapper = ToneMapper::LinearClamp;
+    // A minified black/white weave must converge to its linear-light average.
+    std::vector<uint8_t> checker(64 * 64 * 4);
+    for(size_t y = 0; y < 64; ++y) for(size_t x = 0; x < 64; ++x) {
+        const size_t offset = (y * 64 + x) * 4;
+        checker[offset] = checker[offset + 1] = checker[offset + 2] = ((x + y) & 1) ? 255 : 0;
+        checker[offset + 3] = 255;
+    }
+    SamplerDesc samplerDesc; samplerDesc.maxAnisotropy = 1;
+    auto mipSampler = test.factory.CreatePersistentSampler(samplerDesc); Check(mipSampler);
+    auto anisotropicSampler = test.factory.CreatePersistentSampler({}); Check(anisotropicSampler);
+    auto invalidSampler = samplerDesc; invalidSampler.maxAnisotropy = 17;
+    Require(!test.factory.CreatePersistentSampler(invalidSampler), "Invalid anisotropy accepted.");
+    std::vector<ShaderResourceRef> mipRefs;
+    std::vector<std::unique_ptr<TextureResource>> mipTextures;
+    auto uploadMip = [&](TextureDesc description, std::span<const uint8_t> pixels, uint32_t expectedMips) {
+        auto image = std::make_unique<TextureResource>();
+        Check(test.factory.CreateTexture2D(*image, description, pixels));
+        Require(image->GetMipCount() == expectedMips, "Incorrect texture mip count.");
+        auto ref = test.factory.CreatePersistentTextureShaderResource(*image); Check(ref);
+        mipRefs.push_back(*ref); mipTextures.push_back(std::move(image)); return ref->index;
+    };
+    for(auto format : {TextureFormat::Rgba8Unorm, TextureFormat::Rgba8UnormSrgb}) {
+        const auto ref = uploadMip({64, 64, format}, checker, 7);
+        for(float lod : {1.0f, 2.5f, 6.0f})
+            Require(withinByteTolerance(render({}, settings, ref, mipSampler->index, lod, 1)[0], 188), "Mip chain filtering or sRGB average is incorrect.");
+        for(uint32_t sampler : {mipSampler->index, anisotropicSampler->index})
+            Require(withinByteTolerance(render({}, settings, ref, sampler, 0, 2)[0], 188), "Implicit LOD failed to suppress minification aliasing.");
+    }
+    std::vector<uint8_t> odd(3 * 5 * 4, 0);
+    for(size_t y = 0; y < 5; ++y) for(size_t c = 0; c < 4; ++c) odd[(y * 3 + 2) * 4 + c] = 255;
+    auto oddRef = uploadMip({3, 5, TextureFormat::Rgba8UnormSrgb}, odd, 3);
+    auto oddPixel = render({}, settings, oddRef, mipSampler->index, 2, 1);
+    Require(withinByteTolerance(oddPixel[0], 156), "Odd-sized mip lost edge pixels.");
+    Require(withinByteTolerance(render({}, settings, oddRef, mipSampler->index, 2, 3)[0], 156), "Mip filtering gamma-corrected alpha.");
+    std::array<float, 28> hdrTail {};
+    for(size_t c = 0; c < 4; ++c) hdrTail[24 + c] = 3.5f;
+    auto hdrRef = uploadMip({1, 7, TextureFormat::Rgba32Float},
+        {reinterpret_cast<const uint8_t*>(hdrTail.data()), sizeof(hdrTail)}, 3);
+    Require(withinByteTolerance(render({}, settings, hdrRef, mipSampler->index, 2, 1)[0], 188), "HDR/1D mip average is incorrect.");
+    uploadMip({64, 64, TextureFormat::Rgba8Unorm, false}, checker, 1);
     Require(withinByteTolerance(render({0.21404114f, 0.21404114f, 0.21404114f, 1}, settings)[0], 128), "SDR output has incorrect or duplicate sRGB encoding.");
     Require(withinByteTolerance(render({}, settings, colourRef->index)[0], 128), "Colour texture was not decoded as sRGB.");
     Require(withinByteTolerance(render({}, settings, dataRef->index)[0], 188), "Data texture incorrectly received sRGB decoding.");
@@ -137,8 +179,11 @@ void ColorManagementIntegration() {
     Require(withinByteTolerance(render({0.18f, 0.18f, 0.18f, 1}, settings)[0], 118), "Resize broke colour processing.");
     post.Shutdown(); samplePipeline.Shutdown(); transient.Shutdown();
     Check(test.factory.RetirePersistentShaderResource(*colourRef)); Check(test.factory.RetirePersistentShaderResource(*dataRef));
+    for(auto ref : mipRefs) Check(test.factory.RetirePersistentShaderResource(ref));
+    Check(test.factory.RetirePersistentShaderResource(*mipSampler));
+    Check(test.factory.RetirePersistentShaderResource(*anisotropicSampler));
     test.shadows.ReleaseTexture(depth); Check(test.descriptors.RenderTargets().Free(*outputSlot));
     test.Validate();
-    std::cout << "Colour space, GPU texture decoding, tone mapping, exposure, FXAA and resize passed.\n";
+    std::cout << "Mip chains, implicit LOD, anisotropy, sRGB/HDR/odd-size filtering, colour space, tone mapping, exposure, FXAA and resize passed.\n";
 }
 }

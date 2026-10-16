@@ -61,6 +61,11 @@ SurfaceDataはbaseColor、metallic、roughness、world normal、AO、emissiveの
 テクスチャ、UV、光源、影、パイプラインを知らないため、将来別の材質入力やGI評価を追加してもBRDFを書き換えない。
 Material.hlsliはglTFのG=roughness/B=metallic、AOのRとstrength、normal scaleの規則を共有する。
 Rasterは暗黙微分によるSample、DXRはSampleLevel(0)を使う。接線がなければRasterは微分、DXRは三角形の辺から基底を求める。
+通常の2Dテクスチャはupload時に1×1までのmip chainをCPU生成し、SRVから全段を公開する。
+RasterのLODは画面上のUV微分から自動選択する。sRGBのRGBは線形化して面積平均し、alphaとdata/HDRは線形で平均する。
+SamplerDescの線形filterは既定で16倍の異方性filterを使い、maxAnisotropy=1でtrilinearになる。Nearestはpointのまま。
+minLod=0、maxLod=最大float、mipLodBias=0が既定。TextureDesc::generateMipmaps=falseで単一mipにできる。
+DXRの二次rayは引き続き明示LOD 0であり、ray cone/differentialによるLOD推定は未対応。
 stage制約が異なるため、この基底生成まで無理に同一関数へ押し込まない。従来どおりMikkTSpace生成は未対応。
 
 BRDF.hlsliのGGX D、Smith visibility、Schlick F、Lambert、SpecularBRDFはいずれも光量や遮蔽を含まない。

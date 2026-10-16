@@ -384,7 +384,7 @@ namespace NexusEngine {
 		desc.ViewDimension					 = D3D12_SRV_DIMENSION_TEXTURE2D;
 		desc.Shader4ComponentMapping		 = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		desc.Texture2D.MostDetailedMip		 = 0;
-		desc.Texture2D.MipLevels			 = 1;
+		desc.Texture2D.MipLevels			 = texture.GetMipCount();
 		return bindlessDescriptors_->CreateShaderResourceView(
 			static_cast<ID3D12Resource*>(texture.GetNativeResource()), desc);
 	}
@@ -392,7 +392,8 @@ namespace NexusEngine {
 	Result<ShaderResourceRef> GraphicsResourceFactory::CreatePersistentSampler(const SamplerDesc& desc) const {
 		if(bindlessDescriptors_ == nullptr || !std::isfinite(desc.mipLodBias) ||
 		   !std::isfinite(desc.minLod) || !std::isfinite(desc.maxLod) ||
-		   desc.minLod < 0.0f || desc.maxLod < desc.minLod) {
+		   desc.minLod < 0.0f || desc.maxLod < desc.minLod ||
+		   desc.maxAnisotropy < 1 || desc.maxAnisotropy > 16) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Sampler description or backend state is invalid."));
 		}
 
@@ -411,14 +412,14 @@ namespace NexusEngine {
 		D3D12_SAMPLER_DESC nativeDesc = {};
 		nativeDesc.Filter			  = desc.filter == TextureFilter::Nearest
 											? D3D12_FILTER_MIN_MAG_MIP_POINT
-											: D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+											: desc.maxAnisotropy > 1 ? D3D12_FILTER_ANISOTROPIC : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		nativeDesc.AddressU			  = toNativeAddressMode(desc.addressU);
 		nativeDesc.AddressV			  = toNativeAddressMode(desc.addressV);
 		nativeDesc.AddressW			  = toNativeAddressMode(desc.addressW);
 		nativeDesc.MipLODBias		  = desc.mipLodBias;
 		nativeDesc.MinLOD			  = desc.minLod;
 		nativeDesc.MaxLOD			  = desc.maxLod;
-		nativeDesc.MaxAnisotropy	  = 1;
+		nativeDesc.MaxAnisotropy	  = desc.maxAnisotropy;
 		return bindlessDescriptors_->CreateSampler(nativeDesc);
 	}
 

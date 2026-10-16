@@ -4,6 +4,10 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <vector>
 
 // directx
 #include <d3d12.h>
@@ -13,6 +17,7 @@
 #include "Graphics/Core/CommandQueue.h"
 #include "ImmediateUploadContext.h"
 #include "TextureFormatDx12.h"
+#include "Graphics/Color/ColorSpace.h"
 
 namespace NexusEngine {
 	namespace {
@@ -20,6 +25,41 @@ namespace NexusEngine {
 		constexpr int32_t  kTextureCreationFailed = 2;
 		constexpr int32_t  kUploadCreationFailed  = 3;
 		constexpr int32_t  kUploadMapFailed		  = 4;
+
+		// Area filtering includes the entire image, including odd-sized edges and 1D tails.
+		void GenerateMip(uint8_t* mapped, const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& source,
+			const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& target, TextureFormat format) {
+			const bool hdr = format == TextureFormat::Rgba32Float;
+			const bool srgb = format == TextureFormat::Rgba8UnormSrgb;
+			const size_t pixelBytes = hdr ? 16 : 4;
+			for(UINT y = 0; y < target.Footprint.Height; ++y) {
+				const double y0 = double(y) * source.Footprint.Height / target.Footprint.Height;
+				const double y1 = double(y + 1) * source.Footprint.Height / target.Footprint.Height;
+				for(UINT x = 0; x < target.Footprint.Width; ++x) {
+					const double x0 = double(x) * source.Footprint.Width / target.Footprint.Width;
+					const double x1 = double(x + 1) * source.Footprint.Width / target.Footprint.Width;
+					std::array<double, 4> sum {};
+					for(UINT sy = static_cast<UINT>(y0); sy < static_cast<UINT>(std::ceil(y1)); ++sy) {
+						for(UINT sx = static_cast<UINT>(x0); sx < static_cast<UINT>(std::ceil(x1)); ++sx) {
+							const double weight = ((std::min)(x1, double(sx + 1)) - (std::max)(x0, double(sx))) *
+								((std::min)(y1, double(sy + 1)) - (std::max)(y0, double(sy)));
+							const auto* pixel = mapped + source.Offset + size_t(sy) * source.Footprint.RowPitch + size_t(sx) * pixelBytes;
+							std::array<float, 4> value;
+							if(hdr) std::memcpy(value.data(), pixel, 16);
+							else for(size_t c = 0; c < 4; ++c) value[c] = float(pixel[c]) / 255.0f;
+							if(srgb) for(size_t c = 0; c < 3; ++c) value[c] = ColorSpace::SrgbToLinear(value[c]);
+							for(size_t c = 0; c < 4; ++c) sum[c] += value[c] * weight;
+						}
+					}
+					std::array<float, 4> value;
+					for(size_t c = 0; c < 4; ++c) value[c] = static_cast<float>(sum[c] / ((x1 - x0) * (y1 - y0)));
+					if(srgb) for(size_t c = 0; c < 3; ++c) value[c] = ColorSpace::LinearToSrgb(value[c]);
+					auto* pixel = mapped + target.Offset + size_t(y) * target.Footprint.RowPitch + size_t(x) * pixelBytes;
+					if(hdr) std::memcpy(pixel, value.data(), 16);
+					else for(size_t c = 0; c < 4; ++c) pixel[c] = static_cast<uint8_t>(std::clamp(value[c], 0.0f, 1.0f) * 255.0f + 0.5f);
+				}
+			}
+		}
 
 	} // namespace
 
@@ -52,6 +92,10 @@ namespace NexusEngine {
 		textureDesc.Height				= desc.height;
 		textureDesc.DepthOrArraySize	= 1;
 		textureDesc.MipLevels			= 1;
+		if(desc.generateMipmaps) {
+			for(uint32_t size = (std::max)(desc.width, desc.height); size > 1; size >>= 1)
+				++textureDesc.MipLevels;
+		}
 		textureDesc.Format				= ToNativeTextureFormat(desc.format);
 		textureDesc.SampleDesc.Count	= 1;
 		textureDesc.Layout				= D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -68,12 +112,13 @@ namespace NexusEngine {
 		}
 
 		// Driverが要求するrow pitchと配置alignmentを取得し、手計算によるGPU copy規約違反を避ける。
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint  = {};
-		UINT							   rowCount	  = 0;
-		UINT64							   rowSize	  = 0;
+		std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(textureDesc.MipLevels);
+		std::vector<UINT> rowCounts(textureDesc.MipLevels);
+		std::vector<UINT64> rowSizes(textureDesc.MipLevels);
 		UINT64							   uploadSize = 0;
-		device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &rowCount, &rowSize, &uploadSize);
-		if(uploadSize == 0 || uploadSize > (std::numeric_limits<size_t>::max)() || rowCount != desc.height || rowSize != sourceRowSize) {
+		device->GetCopyableFootprints(&textureDesc, 0, textureDesc.MipLevels, 0,
+			footprints.data(), rowCounts.data(), rowSizes.data(), &uploadSize);
+		if(uploadSize == 0 || uploadSize > (std::numeric_limits<size_t>::max)() || rowCounts[0] != desc.height || rowSizes[0] != sourceRowSize) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Texture copy footprint is invalid or unsupported."));
 		}
 
@@ -95,19 +140,24 @@ namespace NexusEngine {
 			return std::unexpected(MakeDirectXError(kUploadCreationFailed, result, "Failed to create texture upload staging resource."));
 		}
 
-		uint8_t*		  mapped = nullptr;
+		// Generate in ordinary CPU memory: upload heaps may be write-combined and slow to read.
+		std::vector<uint8_t> staging(static_cast<size_t>(uploadSize));
+		// Sourceは密配置、GPU footprintは256byte row pitchを持ち得るため、row単位でpaddingを飛ばしてコピーする。
+		for(uint32_t row = 0; row < desc.height; ++row) {
+			std::memcpy(
+				staging.data() + footprints[0].Offset + static_cast<size_t>(row) * footprints[0].Footprint.RowPitch,
+				pixels.data() + static_cast<size_t>(row) * sourceRowSize,
+				sourceRowSize);
+		}
+		for(size_t mip = 1; mip < footprints.size(); ++mip)
+			GenerateMip(staging.data(), footprints[mip - 1], footprints[mip], desc.format);
+		uint8_t* mapped = nullptr;
 		const D3D12_RANGE readRange{0, 0};
 		result = uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
 		if(FAILED(result)) {
 			return std::unexpected(MakeDirectXError(kUploadMapFailed, result, "Failed to map texture upload staging resource."));
 		}
-		// Sourceは密配置、GPU footprintは256byte row pitchを持ち得るため、row単位でpaddingを飛ばしてコピーする。
-		for(uint32_t row = 0; row < desc.height; ++row) {
-			std::memcpy(
-				mapped + footprint.Offset + static_cast<size_t>(row) * footprint.Footprint.RowPitch,
-				pixels.data() + static_cast<size_t>(row) * sourceRowSize,
-				sourceRowSize);
-		}
+		std::memcpy(mapped, staging.data(), staging.size());
 		uploadResource->Unmap(0, nullptr);
 
 		ImmediateUploadContext uploadContext;
@@ -121,8 +171,11 @@ namespace NexusEngine {
 		D3D12_TEXTURE_COPY_LOCATION sourceLocation		= {};
 		sourceLocation.pResource						= uploadResource.Get();
 		sourceLocation.Type								= D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		sourceLocation.PlacedFootprint					= footprint;
-		commandList->CopyTextureRegion(&destinationLocation, 0, 0, 0, &sourceLocation, nullptr);
+		for(UINT mip = 0; mip < textureDesc.MipLevels; ++mip) {
+			destinationLocation.SubresourceIndex = mip;
+			sourceLocation.PlacedFootprint = footprints[mip];
+			commandList->CopyTextureRegion(&destinationLocation, 0, 0, 0, &sourceLocation, nullptr);
+		}
 
 		// Upload完了後の標準利用状態へ遷移し、Renderer側にResource Barrier責務を漏らさない。
 		D3D12_RESOURCE_BARRIER barrier = {};

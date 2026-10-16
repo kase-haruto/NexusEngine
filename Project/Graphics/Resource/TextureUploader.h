@@ -16,6 +16,7 @@ namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
 	 * TextureUploader
 	 * - CPU pixel列をUpload staging経由でDefault Heap Textureへ転送する
+	 * - 既定で1x1までのmipを生成する。sRGBのRGBは線形化して平均し、alpha/dataは線形で扱う
 	 * - 一時Command資源とUpload ResourceをFence完了まで所有する
 	 * - File decode、Texture cache、Descriptor生成は担当しない
 	 *---------------------------------------------------------------------------------------*/
@@ -27,7 +28,7 @@ namespace NexusEngine {
 		 * \param commandQueue 転送Commandを実行しFence待機する非所有Direct Queue
 		 * \param texture 完成したDefault Heap Textureの所有先
 		 * \param desc Texture寸法とformat
-		 * \param pixels width * height * 4 byteのRGBA pixel列
+		 * \param pixels mip 0のRGBA pixel列（RGBA8は4、RGBA32Floatは16 byte/pixel）
 		 */
 		[[nodiscard]] Result<void> Upload(
 			ID3D12Device* device,
