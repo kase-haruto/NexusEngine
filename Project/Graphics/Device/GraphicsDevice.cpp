@@ -96,6 +96,38 @@ namespace NexusEngine {
 		}
 
 		// Info QueueはDeviceのインターフェースなので、Device生成成功後にのみ設定できる。
+		// OPTIONS5はDXR非対応環境では取得失敗もあり得る。オプション機能なので
+		// Device初期化を失敗させず、Unsupportedへ落として通常描画を継続する。
+		// Mesh Shader はオプション。問い合わせ失敗でも Device 初期化を継続する。
+		D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 {};
+		Microsoft::WRL::ComPtr<ID3D12Device2> meshDevice;
+		if(SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))) &&
+		   options7.MeshShaderTier >= D3D12_MESH_SHADER_TIER_1 && SUCCEEDED(device_.As(&meshDevice))) {
+			capabilities_.meshShader = MeshShaderSupport::Tier1;
+		}
+		NEXUS_LOG_INFO("Graphics", capabilities_.SupportsMeshShaders() ? "Mesh Shader: Tier 1 supported." : "Mesh Shader: unsupported.");
+		D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 {};
+		if(SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
+			if(options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1) {
+				capabilities_.rayTracing = RayTracingSupport::Tier1_1;
+			} else if(options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_0) {
+				capabilities_.rayTracing = RayTracingSupport::Tier1_0;
+			}
+		}
+		// TierだけでなくASを生成するDevice interfaceも確認する。所有はBackend内に限定する。
+		Microsoft::WRL::ComPtr<ID3D12Device5> rayTracingDevice;
+		if(capabilities_.SupportsRayTracing() && FAILED(device_.As(&rayTracingDevice))) {
+			capabilities_.rayTracing = RayTracingSupport::Unsupported;
+			NEXUS_LOG_WARNING("Graphics", "Ray tracing device interface is unavailable.");
+		}
+		switch(capabilities_.rayTracing) {
+		case RayTracingSupport::Tier1_1:
+			NEXUS_LOG_INFO("Graphics", "GPU Ray Tracing Support: supported; Raytracing Tier: 1.1 or higher."); break;
+		case RayTracingSupport::Tier1_0:
+			NEXUS_LOG_INFO("Graphics", "GPU Ray Tracing Support: supported; Raytracing Tier: 1.0."); break;
+		default:
+			NEXUS_LOG_INFO("Graphics", "GPU Ray Tracing Support: unsupported; Raytracing Tier: Unsupported."); break;
+		}
 		GraphicsDebugConfigurator::ConfigureInfoQueue(device_.Get());
 		NEXUS_LOG_INFO("Graphics", "D3D12 Device initialized.");
 		return {};
@@ -108,6 +140,7 @@ namespace NexusEngine {
 		// 将来のDevice依存オブジェクトはこの処理より前に破棄する。現段階ではDeviceから逆順に解放する。
 		// ComPtr::Resetを用いることで、部分初期化と複数回のShutdownの両方を安全に扱う。
 		device_.Reset();
+		capabilities_ = {};
 		adapter_.Reset();
 		factory_.Reset();
 	}

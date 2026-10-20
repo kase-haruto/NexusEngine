@@ -1,6 +1,7 @@
 #pragma once
 
 // c++
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,7 @@
 #include "Components/NameComponent.h"
 #include "Components/TransformComponent.h"
 #include "Entity.h"
+#include "ComponentStorage.h"
 
 namespace NexusEngine {
 
@@ -55,6 +57,12 @@ namespace NexusEngine {
 		}
 		[[nodiscard]] size_t GetEntityCount() const noexcept { return livingEntityCount_; }
 
+		/** \brief 型と要素数のmetadataを列挙する。Storageへの変更権限は公開しない */
+		template<typename Function>
+		void ForEachStorageInfo(Function&& function) const {
+			for(const auto& [type, storage] : componentStorages_) function(type, storage->GetSize());
+		}
+
 		template<typename Component, typename... Arguments>
 		[[nodiscard]] Component* AddComponent(EntityId id, Arguments&&... arguments);
 
@@ -82,82 +90,6 @@ namespace NexusEngine {
 		struct EntitySlot {
 			uint32_t generation = 1; //< 再利用時に古いEntity Handleを無効化する世代番号
 			bool alive = false;       //< 現在Entityとして公開されているか
-		};
-
-		class IComponentStorage {
-		public:
-			virtual ~IComponentStorage() = default;
-			virtual void Remove(uint32_t entityIndex) = 0;
-			[[nodiscard]] virtual size_t GetSize() const noexcept = 0;
-			[[nodiscard]] virtual uint32_t GetEntityIndexAt(size_t denseIndex) const noexcept = 0;
-		};
-
-		template<typename Component>
-		class ComponentStorage final : public IComponentStorage {
-		public:
-			static_assert(std::is_nothrow_move_constructible_v<Component>);
-			static_assert(std::is_nothrow_move_assignable_v<Component>);
-
-			template<typename... Arguments>
-			[[nodiscard]] Component* Add(const uint32_t entityIndex, Arguments&&... arguments) {
-				if(Contains(entityIndex)) {
-					return nullptr;
-				}
-				if(entityIndex >= sparseIndices_.size()) {
-					sparseIndices_.resize(static_cast<size_t>(entityIndex) + 1, kInvalidDenseIndex);
-				}
-
-				// 両dense配列の容量を先に確保し、Component構築成功後の状態変更をnoexceptにする。
-				const size_t requiredSize = denseComponents_.size() + 1;
-				denseEntities_.reserve(requiredSize);
-				denseComponents_.reserve(requiredSize);
-				denseComponents_.emplace_back(std::forward<Arguments>(arguments)...);
-				denseEntities_.push_back(entityIndex);
-				const size_t denseIndex = denseComponents_.size() - 1;
-				sparseIndices_[entityIndex] = denseIndex;
-				return &denseComponents_.back();
-			}
-
-			[[nodiscard]] Component* Get(const uint32_t entityIndex) noexcept {
-				return Contains(entityIndex) ? &denseComponents_[sparseIndices_[entityIndex]] : nullptr;
-			}
-
-			[[nodiscard]] const Component* Get(const uint32_t entityIndex) const noexcept {
-				return Contains(entityIndex) ? &denseComponents_[sparseIndices_[entityIndex]] : nullptr;
-			}
-
-			void Remove(const uint32_t entityIndex) override {
-				if(!Contains(entityIndex)) {
-					return;
-				}
-				const size_t removedDenseIndex = sparseIndices_[entityIndex];
-				const size_t lastDenseIndex = denseComponents_.size() - 1;
-				if(removedDenseIndex != lastDenseIndex) {
-					denseComponents_[removedDenseIndex] = std::move(denseComponents_[lastDenseIndex]);
-					const uint32_t movedEntityIndex = denseEntities_[lastDenseIndex];
-					denseEntities_[removedDenseIndex] = movedEntityIndex;
-					sparseIndices_[movedEntityIndex] = removedDenseIndex;
-				}
-				denseComponents_.pop_back();
-				denseEntities_.pop_back();
-				sparseIndices_[entityIndex] = kInvalidDenseIndex;
-			}
-
-			[[nodiscard]] size_t GetSize() const noexcept override { return denseComponents_.size(); }
-			[[nodiscard]] uint32_t GetEntityIndexAt(const size_t denseIndex) const noexcept override {
-				return denseEntities_[denseIndex];
-			}
-
-		private:
-			static constexpr size_t kInvalidDenseIndex = (std::numeric_limits<size_t>::max)();
-
-			[[nodiscard]] bool Contains(const uint32_t entityIndex) const noexcept {
-				return entityIndex < sparseIndices_.size() && sparseIndices_[entityIndex] != kInvalidDenseIndex;
-			}
-
-			std::vector<size_t> sparseIndices_; //< Entity indexからdense indexへの対応
-			std::vector<uint32_t> denseEntities_; //< denseComponents_と同じ順序のEntity index
-			std::vector<Component> denseComponents_; //< 反復対象を連続配置するComponent所有領域
 		};
 
 		class IterationGuard final {
@@ -253,8 +185,8 @@ namespace NexusEngine {
 		}
 
 		IterationGuard guard(iterationDepth_);
-		for(size_t denseIndex = 0; denseIndex < drivingStorage->GetSize(); ++denseIndex) {
-			const uint32_t entityIndex = drivingStorage->GetEntityIndexAt(denseIndex);
+		// 型消去の仮想呼出はQuery開始時の1回に限定し、Entity反復内では配列だけを走査する。
+		for(const uint32_t entityIndex : drivingStorage->GetEntityIndices()) {
 			const auto& slot = entitySlots_[entityIndex];
 			if(!slot.alive) {
 				continue;
@@ -276,7 +208,7 @@ namespace NexusEngine {
 	}
 
 	template<typename Component>
-	Scene::ComponentStorage<Component>* Scene::FindStorage() noexcept {
+	ComponentStorage<Component>* Scene::FindStorage() noexcept {
 		const auto iterator = componentStorages_.find(std::type_index(typeid(Component)));
 		return iterator != componentStorages_.end()
 			? static_cast<ComponentStorage<Component>*>(iterator->second.get())
@@ -284,7 +216,7 @@ namespace NexusEngine {
 	}
 
 	template<typename Component>
-	const Scene::ComponentStorage<Component>* Scene::FindStorage() const noexcept {
+	const ComponentStorage<Component>* Scene::FindStorage() const noexcept {
 		const auto iterator = componentStorages_.find(std::type_index(typeid(Component)));
 		return iterator != componentStorages_.end()
 			? static_cast<const ComponentStorage<Component>*>(iterator->second.get())
@@ -292,7 +224,7 @@ namespace NexusEngine {
 	}
 
 	template<typename Component>
-	Scene::ComponentStorage<Component>& Scene::GetOrCreateStorage() {
+	ComponentStorage<Component>& Scene::GetOrCreateStorage() {
 		const std::type_index componentType = typeid(Component);
 		auto iterator = componentStorages_.find(componentType);
 		if(iterator == componentStorages_.end()) {

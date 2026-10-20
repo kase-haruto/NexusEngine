@@ -7,7 +7,9 @@
 
 // engine
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/Scene.h"
 
@@ -25,15 +27,54 @@ namespace NexusEngine {
 	}
 
 	Result<RenderScene> RenderSceneExtractor::Extract(Scene& scene, const float aspectRatio) const {
+		RenderScene result;
+		auto status = ExtractInto(scene, aspectRatio, result);
+		if(!status) return std::unexpected(std::move(status.error()));
+		return result;
+	}
+
+	Result<void> RenderSceneExtractor::ExtractInto(Scene& scene, const float aspectRatio, RenderScene& result) const {
 		if(!std::isfinite(aspectRatio) || aspectRatio <= 0.0f) {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidViewport, "Render viewport aspect ratio must be positive and finite."));
 		}
 
-		RenderScene result;
+		// clearはcapacityを保持するので、安定したEntity数なら毎frameの再確保は発生しない。
+		result.primitives.clear();
+		result.camera.reset();
+		result.directionalLight = {};
+		result.directionalLight.intensity = 0;
+		bool lightFound = false;
+		std::optional<Error> lightError;
+		scene.ForEach<TransformComponent, DirectionalLightComponent>(
+			[&](Entity, TransformComponent& transform, DirectionalLightComponent& component) {
+				if(lightError || !component.enabled) return;
+				if(lightFound || !component.IsValid()) {
+					lightError = Error(ErrorCategory::Scene, 14, "Expected at most one enabled, valid directional light."); return;
+				}
+				lightFound = true;
+				result.directionalLight = component.light;
+				float lengthSquared = 0;
+				for(size_t c = 0; c < 3; ++c) {
+					float value = 0;
+					for(size_t r = 0; r < 3; ++r) value += component.light.direction[r] * transform.worldMatrix.At(r, c);
+					result.directionalLight.direction[c] = value; lengthSquared += value * value;
+				}
+				if(!std::isfinite(lengthSquared) || lengthSquared < 1e-12f) {
+					lightError = Error(ErrorCategory::Scene, 15, "Directional light world direction is invalid."); return;
+				}
+				for(float& value : result.directionalLight.direction) value /= std::sqrt(lengthSquared);
+			});
+		if(lightError) return std::unexpected(std::move(*lightError));
 		scene.ForEach<TransformComponent, PrimitiveRenderComponent>(
 			[&](Entity entity, TransformComponent& transform, PrimitiveRenderComponent& primitive) {
 				if(primitive.enabled) {
-					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint });
+					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint, primitive.nodeIndex });
+					auto& item = result.primitives.back();
+					item.staticLighting = primitive.staticLighting;
+					if(const auto* id = entity.GetComponent<PersistentIdComponent>()) {
+						// ECSの世代番号に依存せず、Levelの永続IDから照合キーを作る。
+						item.lightingId = id->value.high ^ (id->value.low * 1099511628211ull);
+					}
 				}
 			});
 
@@ -70,7 +111,7 @@ namespace NexusEngine {
 		if(cameraError.has_value()) {
 			return std::unexpected(std::move(*cameraError));
 		}
-		return result;
+		return {};
 	}
 
 } // namespace NexusEngine

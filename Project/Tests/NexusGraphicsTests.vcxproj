@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{ACAFEB7C-4C8B-4951-884A-9971E051A998}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup><OutDir>$(ProjectDir)..\..\Generated\Outputs\GraphicsTests\$(Configuration)\</OutDir><IntDir>$(ProjectDir)..\..\Generated\obj\GraphicsTests\$(Configuration)\</IntDir></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><LanguageStandard>stdcpp23</LanguageStandard><PreprocessorDefinitions>NEXUS_GRAPHICS_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions><MultiProcessorCompilation>true</MultiProcessorCompilation></ClCompile>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <PostBuildEvent><Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"</Command></PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="GraphicsShadowTests.cpp" />
+    <ClCompile Include="GraphicsPublicHeaderTests.cpp" />
+    <ClCompile Include="..\Foundation\Error\Error.cpp" />
+    <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\DebugOutputLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
+    <ClCompile Include="..\Foundation\Logging\LogTextFormatter.cpp" />
+    <ClCompile Include="..\Foundation\Utility\String\ConvertString.cpp" />
+    <ClCompile Include="..\Graphics\Core\CommandQueue.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\DescriptorAllocator.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\DescriptorManager.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\BindlessDescriptorTable.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\TransientDescriptorArena.cpp" />
+    <ClCompile Include="..\Graphics\Device\GraphicsAdapterSelector.cpp" />
+    <ClCompile Include="..\Graphics\Device\GraphicsDebugConfigurator.cpp" />
+    <ClCompile Include="..\Graphics\Device\GraphicsDevice.cpp" />
+    <ClCompile Include="..\Graphics\Shadow\ShadowSystem.cpp" />
+    <ClCompile Include="..\Graphics\RayTracing\OpticalSystem.cpp" />
+    <ClCompile Include="..\Graphics\Model\PrimitiveMeshBuilder.cpp" />
+    <ClCompile Include="..\Samples\OpticalDemoScene.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\RayTracing\OpticalBackend.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\RayTracing\RayTracingScene.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\ShadowBackend.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\ShadowMapTechnique.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\RayTracedShadowTechnique.cpp" />
+    <ClCompile Include="..\Graphics\Presentation\SwapChain.cpp" />
+    <ClCompile Include="..\Graphics\Pipeline\GraphicsPipeline.cpp" />
+    <ClCompile Include="..\Graphics\Pipeline\PipelineLayout.cpp" />
+    <ClCompile Include="..\Graphics\Pipeline\RootSignature.cpp" />
+    <ClCompile Include="..\Graphics\Resource\VertexBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\VertexBufferUploader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\IndexBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\IndexBufferUploader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\MeshResource.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelResource.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelLoader.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
+    <ClCompile Include="..\Graphics\Model\GltfModelLoader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\ImmediateUploadContext.cpp" />
+    <ClCompile Include="..\Graphics\Resource\ConstantBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\TextureResource.cpp" />
+    <ClCompile Include="..\Graphics\Resource\TextureUploader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\WicImageDecoder.cpp" />
+    <ClCompile Include="..\Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\GraphicsContext.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\GraphicsResourceFactory.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Meshlet\MeshletBuilder.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp" />
+    <ClCompile Include="..\Graphics\Shader\Shader.cpp" />
+    <ClCompile Include="..\Graphics\Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="..\Graphics\Shader\ShaderReflector.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Graphics\Environment\EnvironmentLighting.cpp" />
+    <ClCompile Include="..\Graphics\Resource\HdrImage.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <None Include="ColorManagementTests.inl" />
+    <None Include="ColorSpaceTest.hlsl" />
+  </ItemGroup>
+  <ItemGroup><None Include="EnvironmentLightingTests.inl" /><None Include="EnvironmentLightingTest.hlsl" /></ItemGroup>
+  <ItemGroup><None Include="GlobalIlluminationTests.inl" /></ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="..\Graphics\Lighting\BakedLighting.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\BakedLightingAsset.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\LightBaker.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\LightmapGeometry.cpp" />
+    <ClInclude Include="..\Graphics\Lighting\BakedLighting.h" />
+    <ClInclude Include="..\Graphics\Lighting\BakedLightingData.h" />
+    <ClInclude Include="..\Graphics\Lighting\LightBaker.h" />
+    <ClInclude Include="..\Graphics\Lighting\LightmapGeometry.h" />
+  </ItemGroup>
+  <ItemGroup><None Include="BakedLightingTests.inl" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Lighting\DDGIProcessor.cpp" />
+    <ClInclude Include="..\Graphics\Backend\DirectX12\Lighting\DDGIProcessor.h" />
+    <ClInclude Include="..\Graphics\Lighting\DDGISettings.h" />
+  </ItemGroup>
+  <ItemGroup><None Include="DDGITests.inl" /></ItemGroup>
+</Project>

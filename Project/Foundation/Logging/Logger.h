@@ -42,6 +42,8 @@ namespace NexusEngine {
 		 * \return 登録できた場合true
 		 */
 		[[nodiscard]] bool AddSink(std::unique_ptr<ILogSink> sink) noexcept;
+		/** \brief 同期配送の完了後に指定Sinkを解除する。Sink callback内から呼ばない */
+		bool RemoveSink(const ILogSink* sink) noexcept;
 
 		/**
 		 * \brief 全Sinkへログを同期配送する

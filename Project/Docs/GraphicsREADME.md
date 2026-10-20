@@ -1,5 +1,11 @@
 # NexusEngine Graphics Architecture
 
+既定の動的照明は[DDGI](DDGI.md)、選択可能な事前計算GIは[ベイクGI＋ライトプローブ](BakedLighting.md)、比較用の拡散RTGIは[Global Illumination](GlobalIllumination.md)を参照してください。PBRの責務分離・HDR環境・Compute IBL・Lifetime・使用方法は[PBR / IBL設計](IBL.md)を参照してください。
+
+Directional Shadowの追加構造・設定・寿命管理は[Ray Tracing System](RayTracing.md)、要件別の変更・検証結果は[実装報告](RayTracingReport.md)を参照してください。
+
+反射・屈折・ガラス透過と2つのSphereの比較シーンは[Ray Traced Optics](RayTracedOptics.md)を参照してください。
+
 ## 1. この文書の目的
 
 この文書は、NexusEngineにおけるDirectX 12 Graphics基盤の構造、描画フロー、リソースの所有権、依存方向、および現在の設計を採用した理由をまとめたものです。
@@ -17,7 +23,7 @@
 - Shader Model 6.6 Direct Heap Indexing
 - Bindless Descriptorの確保、参照、遅延解放
 
-Material、Texture Loader、Model Renderer、RenderGraphなどは、現在の責務境界を利用して今後追加する機能です。
+Material、Texture Loader、Model Renderer、PBR / IBLは現在の責務境界で実装されています。RenderGraphは今後の拡張です。
 
 ## 2. 設計原則
 

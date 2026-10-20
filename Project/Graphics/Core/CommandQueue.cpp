@@ -1,4 +1,5 @@
 #include "CommandQueue.h"
+#include <limits>
 
 namespace NexusEngine {
 	namespace {
@@ -8,6 +9,7 @@ namespace NexusEngine {
 		constexpr int32_t kEventCreationFailed = 4;
 		constexpr int32_t kSignalFailed = 5;
 		constexpr int32_t kWaitRegistrationFailed = 6;
+		constexpr int32_t kFenceWaitFailed = 7;
 	}
 
 	CommandQueue::~CommandQueue() noexcept { Shutdown(); }
@@ -92,7 +94,13 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> CommandQueue::Wait(const uint64_t fenceValue) {
 		// 未投入を表す0と既に完了した値ではKernel Eventを使わず即時復帰する。
-		if(fenceValue == 0 || fence_->GetCompletedValue() >= fenceValue) {
+		const uint64_t completed = fence_->GetCompletedValue();
+		// UINT64_MAX is the device-removal sentinel, not proof that pending GPU work completed.
+		// Returning it as successful synchronization could allow AS/Descriptor reuse after removal.
+		if(completed == (std::numeric_limits<uint64_t>::max)()) {
+			return std::unexpected(MakeDirectXError(kFenceWaitFailed, DXGI_ERROR_DEVICE_REMOVED, "Device removed while waiting for GPU fence."));
+		}
+		if(fenceValue == 0 || completed >= fenceValue) {
 			return {};
 		}
 		// GPU側Fenceが目標値へ到達した時だけEventがSignalされるよう登録する。
@@ -101,7 +109,14 @@ namespace NexusEngine {
 			return std::unexpected(MakeDirectXError(kWaitRegistrationFailed, result, "Failed to register fence completion event."));
 		}
 		// FrameContextのAllocatorを安全にResetするため、対象GPU処理の完了まで待機する。
-		WaitForSingleObject(fenceEvent_, INFINITE);
+		const DWORD waitResult = WaitForSingleObject(fenceEvent_, INFINITE);
+		if(waitResult != WAIT_OBJECT_0) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kFenceWaitFailed, "GPU Fence wait failed.",
+				static_cast<Error::NativeErrorCode>(GetLastError())));
+		}
+		if(fence_->GetCompletedValue() == (std::numeric_limits<uint64_t>::max)()) {
+			return std::unexpected(MakeDirectXError(kFenceWaitFailed, DXGI_ERROR_DEVICE_REMOVED, "Device removed during GPU fence wait."));
+		}
 		return {};
 	}
 

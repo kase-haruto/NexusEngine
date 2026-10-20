@@ -22,6 +22,8 @@ namespace NexusEngine {
 		 * \note 呼び出し前にTransformSystem::Updateを完了しておく必要がある
 		 */
 		[[nodiscard]] Result<RenderScene> Extract(Scene& scene, float aspectRatio) const;
+		/** \brief 呼出側のsnapshot容量を再利用して抽出する。失敗時は結果を描画しないこと */
+		[[nodiscard]] Result<void> ExtractInto(Scene& scene, float aspectRatio, RenderScene& output) const;
 	};
 
 } // namespace NexusEngine

@@ -8,8 +8,14 @@
 #include "Graphics/Descriptor/ShaderResourceRef.h"
 
 namespace NexusEngine {
+	class MeshShaderPipeline;
+	class MeshletResource;
+	struct MeshCullingView;
+	struct MeshletDebugSettings;
 	class GraphicsPipeline;
 	class VertexBuffer;
+	class IndexBuffer;
+	class MeshResource;
 	class ConstantBuffer;
 	class BindlessDescriptorTable;
 	class TransientDescriptorArena;
@@ -27,6 +33,15 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class GraphicsContext final {
 	public:
+		/**
+		 * \brief Submesh の Meshlet を AS Culling / MS 描画へ送る
+		 * \param constants 現 Frame に書き込んだ独立 PrimitiveDrawData Buffer
+		 * \return 未初期化・世代不一致・CommandList非対応ではfalse。呼び出し側は従来描画へ戻す
+		 */
+		[[nodiscard]] bool DispatchMeshlets(const MeshShaderPipeline& pipeline, const MeshletResource& meshlets,
+			const MeshResource& mesh, const ConstantBuffer& constants, const MeshCullingView& view,
+			uint32_t submesh, const MeshletDebugSettings& settings) noexcept;
+		~GraphicsContext() noexcept;
 		GraphicsContext(const GraphicsContext&) = delete;
 		GraphicsContext& operator=(const GraphicsContext&) = delete;
 
@@ -50,25 +65,73 @@ namespace NexusEngine {
 			const ConstantBuffer& constantBuffer);
 		/** \brief Input Assemblerのslot 0へVertex Bufferを設定する */
 		void SetVertexBuffer(const VertexBuffer& vertexBuffer) noexcept;
+		/** \brief Input AssemblerへIndex Bufferを設定する */
+		void SetIndexBuffer(const IndexBuffer& indexBuffer) noexcept;
+		/** \brief Meshが所有するVertex/Index BufferをInput Assemblerへ同時に設定する */
+		void SetMesh(const MeshResource& mesh) noexcept;
 		/** \brief 後続DrawのPrimitive topologyを設定する */
 		void SetPrimitiveTopology(PrimitiveTopology topology) noexcept;
 		/** \brief 非Index描画命令を現在のFrameへ記録する */
 		void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
 		          uint32_t firstVertex = 0, uint32_t firstInstance = 0) noexcept;
+		/**
+		 * \brief Index Bufferを使用したinstance描画命令を記録する
+		 * \param indexCount 参照するIndex数
+		 * \param instanceCount 描画するinstance数
+		 * \param firstIndex Index Buffer内の開始Index
+		 * \param vertexOffset Index値へ加算するVertex offset
+		 * \param firstInstance 開始instance番号
+		 */
+		void DrawIndexed(
+			uint32_t indexCount,
+			uint32_t instanceCount = 1,
+			uint32_t firstIndex = 0,
+			int32_t vertexOffset = 0,
+			uint32_t firstInstance = 0) noexcept;
 		/** \brief Frame-local Resource slice選択に使用する現在のFrameContext index */
 		[[nodiscard]] uint32_t GetFrameIndex() const noexcept { return frameIndex_; }
+		/** \brief 現在の描画先のpixel幅 */
+		[[nodiscard]] uint32_t GetRenderWidth() const noexcept { return renderWidth_; }
+		/** \brief 現在の描画先のpixel高さ */
+		[[nodiscard]] uint32_t GetRenderHeight() const noexcept { return renderHeight_; }
+		/** \brief Shadow等の独立Pass後にMain Color/Depth/Viewportを再設定する */
+		void RestoreMainRenderTargets() noexcept;
+		/**
+		 * \brief Native backendと直接接続するRender Extension用のCommand List参照
+		 * \note 通常のRendererはこの逃げ道を使用せず、GraphicsContextの意味ベースAPIを使用すること
+		 */
+		[[nodiscard]] void* GetNativeCommandList() const noexcept { return nativeCommandList_; }
 
 	private:
 		friend class GraphicsSystem;
+#if defined(NEXUS_GRAPHICS_TESTS)
+		friend class GraphicsBackendTestAccess;
+#endif
+		friend class ShadowSystem;
+		friend class OpticalSystem;
+		/** \brief 独立Passを最大4件まで記録終了へ接続する。同じOwnerは重複登録しない */
+		[[nodiscard]] Result<void> RegisterRecording(void*, void (*)(void*, bool, uint32_t));
+		/** \brief GPUへ投入されなかった記録を、所有Backendへ通知する */
+		void CompleteRecording(bool submitted) noexcept;
 		explicit GraphicsContext(
 			void* nativeCommandList,
 			BindlessDescriptorTable* bindlessDescriptors,
 			TransientDescriptorArena* transientDescriptors,
-			uint32_t frameIndex) noexcept;
+			uint32_t frameIndex,
+			uint32_t renderWidth,
+			uint32_t renderHeight) noexcept;
 
 		void* nativeCommandList_ = nullptr; //< GraphicsSystem所有Command ListのFrame中だけ有効な非所有参照
+		void* nativeMeshCommandList_ = nullptr; //< Backend 内だけで使用、Frame 中の QueryInterface 参照
+		bool meshInterfaceChecked_ = false; //< QueryInterface を Meshlet / Submesh ごとに繰り返さない
 		BindlessDescriptorTable* bindlessDescriptors_ = nullptr; //< Descriptor世代検証とGPU Handle解決先
 		TransientDescriptorArena* transientDescriptors_ = nullptr; //< Fence後に再利用する一時Descriptor生成先
 		uint32_t frameIndex_ = 0; //< 現在再利用可能になったFrameContext index
+		uint32_t renderWidth_ = 0; //< Viewportと同じ描画幅
+		uint32_t renderHeight_ = 0; //< Viewportと同じ描画高さ
+		uint64_t nativeRtv_ = 0; //< Backendだけが解釈するMain target handle
+		uint64_t nativeDsv_ = 0; //< Backendだけが解釈するMain depth handle
+		struct RecordingListener { void* owner = nullptr; void (*complete)(void*, bool, uint32_t) = nullptr; };
+		RecordingListener recordingListeners_[4] {}; //< Native型を公開しない独立Pass終了通知
 	};
 } // namespace NexusEngine

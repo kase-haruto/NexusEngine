@@ -4,8 +4,7 @@
 
 #include "Graphics/Descriptor/DescriptorHandle.h"
 #include "Graphics/Renderer/GraphicsRenderExtension.h"
-
-struct ImGui_ImplDX12_InitInfo;
+#include "Editor/Gui/Core/IGuiTextureProvider.h"
 
 namespace NexusEngine {
 	class DescriptorAllocator;
@@ -16,8 +15,11 @@ namespace NexusEngine {
 	 * - Device、Queue、Window、DescriptorAllocator本体は所有しない
 	 *---------------------------------------------------------------------------------------*/
 	class ImGuiRenderer final :
-		public IGraphicsRenderExtension {
+		public IGraphicsRenderExtension, public UI::ITextureProvider {
 	public:
+		static constexpr UI::TextureHandle SceneViewportTexture{1}; //< backend内だけで解決する安定token
+		/** \brief Graphics所有のViewport画像をImGuiの不透明画像参照へ変換する */
+		std::optional<UI::ResolvedTexture> Resolve(UI::TextureHandle texture) const noexcept override;
 		/**
 		 * \brief ImGui ContextとWin32/DX12 backendを初期化する
 		 */
@@ -29,7 +31,7 @@ namespace NexusEngine {
 		/**
 		 * \brief ImGui描画コマンドをCommandListへ記録する
 		 */
-		void Record(ID3D12GraphicsCommandList* commandList) override;
+		void Record(GraphicsContext& context) override;
 		/**
 		 * \brief ImGui backendを終了する
 		 */
@@ -45,16 +47,7 @@ namespace NexusEngine {
 		[[nodiscard]] bool HandleWindowMessage(void* window, uint32_t message, uintptr_t wParam, intptr_t lParam) noexcept;
 
 	private:
-		/**
-		 * \brief ImGui backendから呼ばれるDescriptor確保コールバック
-		 */
-		static void AllocateDescriptor(::ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* cpu, D3D12_GPU_DESCRIPTOR_HANDLE* gpu);
-		/**
-		 * \brief ImGui backendから呼ばれるDescriptor解放コールバック
-		 */
-		static void FreeDescriptor(::ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu);
-
-	private:
+		GraphicsSystem* graphicsSystem_ = nullptr; //< 画像解決先。資源を所有しない
 		DescriptorAllocator*		  descriptors_ = nullptr; //< GraphicsSystem所有の共有Resource allocator
 		std::vector<DescriptorHandle> allocations_;			  //< Backendへ貸し出したDescriptor
 		bool						  initialized_ = false;	  //< Contextと両Backendの初期化完了状態

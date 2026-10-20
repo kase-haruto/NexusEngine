@@ -84,14 +84,17 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
-	<PostBuildEvent>
-	  <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
-	</PostBuildEvent>
+    <PostBuildEvent>
+      <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"
+copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"
+xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"
+xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">
     <ClCompile>
@@ -109,14 +112,17 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
-	<PostBuildEvent>
-	  <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
-	</PostBuildEvent>
+    <PostBuildEvent>
+      <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"
+copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"
+xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"
+xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -136,16 +142,21 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
-	<PostBuildEvent>
-	  <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"&#xD;&#xA;xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
-	</PostBuildEvent>
+    <PostBuildEvent>
+      <Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"
+copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"
+xcopy /E /I /Y "$(ProjectDir)Shaders" "$(OutDir)Shaders"
+xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Editor\Gui\Panels\DetailsPanel.cpp" />
+    <ClCompile Include="Editor\Core\EditorSession.cpp" />
     <ClCompile Include="Foundation\Error\Error.cpp" />
     <ClCompile Include="Foundation\Logging\ConsoleLogSink.cpp" />
     <ClCompile Include="Foundation\Logging\DebugOutputLogSink.cpp" />
@@ -153,48 +164,99 @@
     <ClCompile Include="Foundation\Logging\LogTextFormatter.cpp" />
     <ClCompile Include="Foundation\Utility\String\ConvertString.cpp" />
     <ClCompile Include="Core\Framework\NexusFramework.cpp" />
-	<ClCompile Include="Graphics\Core\CommandQueue.cpp" />
-	<ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp" />
-	<ClCompile Include="Graphics\Descriptor\DescriptorManager.cpp" />
-	<ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp" />
-	<ClCompile Include="Graphics\Descriptor\TransientDescriptorArena.cpp" />
+    <ClCompile Include="Graphics\Core\CommandQueue.cpp" />
+    <ClCompile Include="Graphics\Descriptor\DescriptorAllocator.cpp" />
+    <ClCompile Include="Graphics\Descriptor\DescriptorManager.cpp" />
+    <ClCompile Include="Graphics\Descriptor\BindlessDescriptorTable.cpp" />
+    <ClCompile Include="Graphics\Descriptor\TransientDescriptorArena.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsAdapterSelector.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDebugConfigurator.cpp" />
     <ClCompile Include="Graphics\Device\GraphicsDevice.cpp" />
-	<ClCompile Include="Graphics\Presentation\SwapChain.cpp" />
-	<ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp" />
-	<ClCompile Include="Graphics\Pipeline\PipelineLayout.cpp" />
-	<ClCompile Include="Graphics\Pipeline\RootSignature.cpp" />
-	<ClCompile Include="Graphics\Resource\VertexBuffer.cpp" />
-	<ClCompile Include="Graphics\Resource\VertexBufferUploader.cpp" />
-	<ClCompile Include="Graphics\Resource\ImmediateUploadContext.cpp" />
-	<ClCompile Include="Graphics\Resource\ConstantBuffer.cpp" />
-	<ClCompile Include="Graphics\Resource\TextureResource.cpp" />
-	<ClCompile Include="Graphics\Resource\TextureUploader.cpp" />
-	<ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
-	<ClCompile Include="Graphics\Renderer\GraphicsContext.cpp" />
-	<ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp" />
-	<ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp" />
-	<ClCompile Include="Graphics\Shader\Shader.cpp" />
-	<ClCompile Include="Graphics\Shader\ShaderCompiler.cpp" />
-	<ClCompile Include="Graphics\Shader\ShaderReflector.cpp" />
+    <ClCompile Include="Graphics\Shadow\ShadowSystem.cpp" />
+    <ClCompile Include="Graphics\RayTracing\OpticalSystem.cpp" />
+    <ClCompile Include="Graphics\Model\PrimitiveMeshBuilder.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\OutlinerPanel.cpp" />
+    <ClCompile Include="Editor\Gui\Widgets\PropertyWidgets.cpp" />
+    <ClCompile Include="Runtime\Level\LevelDocument.cpp" />
+    <ClCompile Include="Samples\OpticalDemoScene.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Shadow\ShadowBackend.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Shadow\ShadowMapTechnique.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Shadow\RayTracedShadowTechnique.cpp" />
+    <ClCompile Include="Graphics\Presentation\SwapChain.cpp" />
+    <ClCompile Include="Graphics\Pipeline\GraphicsPipeline.cpp" />
+    <ClCompile Include="Graphics\Pipeline\PipelineLayout.cpp" />
+    <ClCompile Include="Graphics\Pipeline\RootSignature.cpp" />
+    <ClCompile Include="Graphics\Resource\VertexBuffer.cpp" />
+    <ClCompile Include="Graphics\Resource\VertexBufferUploader.cpp" />
+    <ClCompile Include="Graphics\Resource\IndexBuffer.cpp" />
+    <ClCompile Include="Graphics\Resource\IndexBufferUploader.cpp" />
+    <ClCompile Include="Graphics\Resource\MeshResource.cpp" />
+    <ClCompile Include="Graphics\Model\ModelResource.cpp" />
+    <ClCompile Include="Graphics\Model\ModelLoader.cpp" />
+    <ClCompile Include="Graphics\Model\ModelInstance.cpp" />
+    <ClCompile Include="Graphics\Model\GltfModelLoader.cpp" />
+    <ClCompile Include="Graphics\Resource\ImmediateUploadContext.cpp" />
+    <ClCompile Include="Graphics\Resource\ConstantBuffer.cpp" />
+    <ClCompile Include="Graphics\Resource\TextureResource.cpp" />
+    <ClCompile Include="Graphics\Resource\TextureUploader.cpp" />
+    <ClCompile Include="Graphics\Resource\WicImageDecoder.cpp" />
+    <ClCompile Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
+    <ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Viewport\ViewportTarget.cpp" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Viewport\ViewportTarget.h" />
+    <ClInclude Include="Graphics\Viewport\ViewportImage.h" />
+    <ClCompile Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
+    <ClCompile Include="Graphics\Renderer\GraphicsContext.cpp" />
+    <ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp" />
+    <ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="Graphics\Meshlet\MeshletBuilder.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp" />
+    <ClCompile Include="Graphics\Shader\Shader.cpp" />
+    <ClCompile Include="Graphics\Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="Graphics\Shader\ShaderReflector.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Platform\Window\ProjectWindow.cpp" />
-	<ClCompile Include="Runtime\Scene\Scene.cpp" />
-	<ClCompile Include="Runtime\Scene\TransformSystem.cpp" />
-	<ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp" />
-	<ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
-	<ClCompile Include="Editor\Core\EditorApplication.cpp" />
-	<ClCompile Include="Editor\Gui\Core\GuiContext.cpp" />
-	<ClCompile Include="ThirdParty\imgui\imgui.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
-	<ClCompile Include="ThirdParty\imgui\imgui_demo.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
-	<ClCompile Include="ThirdParty\imgui\imgui_draw.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
-	<ClCompile Include="ThirdParty\imgui\imgui_tables.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
-	<ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
-	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
-	<ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="Runtime\Scene\PersistentIdGenerator.cpp" />
+    <ClCompile Include="Runtime\Scene\SystemScheduler.cpp" />
+    <ClCompile Include="Runtime\Scene\TransformSystem.cpp" />
+    <ClCompile Include="Runtime\Scene\TransformUpdateSystem.cpp" />
+    <ClCompile Include="Runtime\Level\Level.cpp" />
+    <ClCompile Include="Runtime\Level\LevelSerializer.cpp" />
+    <ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp" />
+    <ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
+    <ClCompile Include="Editor\ImGui\ImGuiStyle.cpp" />
+    <ClInclude Include="Editor\ImGui\ImGuiStyle.h" />
+    <ClCompile Include="Editor\Core\EditorApplication.cpp" />
+    <ClCompile Include="Editor\Gui\Core\GuiContext.cpp" />
+    <ClCompile Include="Editor\Gui\Widgets\SearchBar.cpp" />
+    <ClCompile Include="ThirdParty\imgui\imgui.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_demo.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_draw.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_tables.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp">
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Editor\Gui\Panels\DetailsPanel.h" />
     <ClInclude Include="Foundation\Error\Error.h" />
     <ClInclude Include="Foundation\Error\Result.h" />
     <ClInclude Include="Foundation\Logging\ConsoleLogSink.h" />
@@ -203,81 +265,241 @@
     <ClInclude Include="Foundation\Logging\Logger.h" />
     <ClInclude Include="Foundation\Logging\LogRecord.h" />
     <ClInclude Include="Foundation\Logging\LogTextFormatter.h" />
-	<ClInclude Include="Foundation\Math\Matrix4x4.h" />
-	<ClInclude Include="Foundation\Math\Quaternion.h" />
-	<ClInclude Include="Foundation\Math\Vector3.h" />
-	<ClInclude Include="Foundation\Memory\Alignment.h" />
+    <ClInclude Include="Foundation\Math\Matrix4x4.h" />
+    <ClInclude Include="Foundation\Math\Quaternion.h" />
+    <ClInclude Include="Foundation\Math\Vector3.h" />
+    <ClInclude Include="Foundation\Memory\Alignment.h" />
     <ClInclude Include="Foundation\Utility\String\ConvertString.h" />
     <ClInclude Include="Core\Environment.h" />
     <ClInclude Include="Core\Framework\NexusFramework.h" />
-	<ClInclude Include="Graphics\Core\CommandQueue.h" />
-	<ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h" />
-	<ClInclude Include="Graphics\Descriptor\DescriptorHandle.h" />
-	<ClInclude Include="Graphics\Descriptor\DescriptorManager.h" />
-	<ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h" />
-	<ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h" />
-	<ClInclude Include="Graphics\Descriptor\TransientDescriptorArena.h" />
+    <ClInclude Include="Core\Framework\FrameworkUpdateClient.h" />
+    <ClInclude Include="Graphics\Core\CommandQueue.h" />
+    <ClInclude Include="Graphics\Descriptor\DescriptorAllocator.h" />
+    <ClInclude Include="Graphics\Descriptor\DescriptorHandle.h" />
+    <ClInclude Include="Graphics\Descriptor\DescriptorManager.h" />
+    <ClInclude Include="Graphics\Descriptor\BindlessDescriptorTable.h" />
+    <ClInclude Include="Graphics\Descriptor\ShaderResourceRef.h" />
+    <ClInclude Include="Graphics\Descriptor\TransientDescriptorArena.h" />
     <ClInclude Include="Graphics\Device\GraphicsAdapterSelector.h" />
     <ClInclude Include="Graphics\Device\GraphicsDebugConfigurator.h" />
     <ClInclude Include="Graphics\Device\GraphicsDevice.h" />
+    <ClInclude Include="Graphics\Device\GraphicsCapabilities.h" />
+    <ClInclude Include="Graphics\Shadow\ShadowTypes.h" />
+    <ClInclude Include="Graphics\Shadow\ShadowSystem.h" />
+    <ClInclude Include="Graphics\Material\OpticalMaterial.h" />
+    <ClInclude Include="Graphics\RayTracing\OpticalSystem.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\OpticalBackend.h" />
+    <ClInclude Include="Graphics\Model\PrimitiveMeshBuilder.h" />
+    <ClInclude Include="Editor\Gui\Panels\OutlinerPanel.h" />
+    <ClInclude Include="Editor\Gui\Widgets\PropertyWidgets.h" />
+    <ClInclude Include="Runtime\Level\LevelDocument.h" />
+    <ClInclude Include="Samples\OpticalDemoScene.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\RayTracing\RayTracingScene.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Shadow\ShadowBackend.h" />
     <ClInclude Include="Graphics\Device\GraphicsDeviceDesc.h" />
-	<ClInclude Include="Graphics\Presentation\SwapChain.h" />
-	<ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h" />
-	<ClInclude Include="Graphics\Material\MaterialDrawData.h" />
-	<ClInclude Include="Graphics\Pipeline\PipelineLayout.h" />
-	<ClInclude Include="Graphics\Pipeline\RootSignature.h" />
-	<ClInclude Include="Graphics\Resource\VertexBuffer.h" />
-	<ClInclude Include="Graphics\Resource\VertexBufferUploader.h" />
-	<ClInclude Include="Graphics\Resource\ImmediateUploadContext.h" />
-	<ClInclude Include="Graphics\Resource\ConstantBuffer.h" />
-	<ClInclude Include="Graphics\Resource\TextureResource.h" />
-	<ClInclude Include="Graphics\Resource\TextureUploader.h" />
-	<ClInclude Include="Graphics\Resource\TextureFormatDx12.h" />
-	<ClInclude Include="Graphics\Resource\SamplerDesc.h" />
-	<ClInclude Include="Graphics\Renderer\GraphicsSystem.h" />
-	<ClInclude Include="Graphics\Renderer\GraphicsContext.h" />
-	<ClInclude Include="Graphics\Renderer\GraphicsRenderer.h" />
-	<ClInclude Include="Graphics\Renderer\GraphicsResourceFactory.h" />
-	<ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h" />
-	<ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h" />
-	<ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h" />
-	<ClInclude Include="Graphics\Renderer\RenderScene.h" />
-	<ClInclude Include="Graphics\Shader\Shader.h" />
-	<ClInclude Include="Graphics\Shader\ShaderCompiler.h" />
-	<ClInclude Include="Graphics\Shader\ShaderReflector.h" />
-	<ClInclude Include="Graphics\Shader\ShaderTypes.h" />
+    <ClInclude Include="Graphics\Presentation\SwapChain.h" />
+    <ClInclude Include="Graphics\Pipeline\GraphicsPipeline.h" />
+    <ClInclude Include="Graphics\Material\MaterialDrawData.h" />
+    <ClInclude Include="Graphics\Material\PrimitiveDrawData.h" />
+    <ClInclude Include="Graphics\Model\ModelAssetData.h" />
+    <ClInclude Include="Graphics\Model\ModelResource.h" />
+    <ClInclude Include="Graphics\Model\ModelLoader.h" />
+    <ClInclude Include="Graphics\Model\ModelAnimation.h" />
+    <ClInclude Include="Graphics\Model\ModelInstance.h" />
+    <ClInclude Include="ThirdParty\cgltf\cgltf.h" />
+    <ClInclude Include="Graphics\Pipeline\PipelineLayout.h" />
+    <ClInclude Include="Graphics\Pipeline\RootSignature.h" />
+    <ClInclude Include="Graphics\Resource\VertexBuffer.h" />
+    <ClInclude Include="Graphics\Resource\VertexBufferUploader.h" />
+    <ClInclude Include="Graphics\Resource\IndexBuffer.h" />
+    <ClInclude Include="Graphics\Resource\IndexBufferUploader.h" />
+    <ClInclude Include="Graphics\Resource\MeshResource.h" />
+    <ClInclude Include="Graphics\Resource\ImmediateUploadContext.h" />
+    <ClInclude Include="Graphics\Resource\ConstantBuffer.h" />
+    <ClInclude Include="Graphics\Resource\TextureResource.h" />
+    <ClInclude Include="Graphics\Resource\TextureUploader.h" />
+    <ClInclude Include="Graphics\Resource\WicImageDecoder.h" />
+    <ClInclude Include="Graphics\Resource\TextureFormatDx12.h" />
+    <ClInclude Include="Graphics\Resource\SamplerDesc.h" />
+    <ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.h" />
+    <ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilTypes.h" />
+    <ClInclude Include="Graphics\Resource\Depthstencil\DepthstencilFormatDx12.h" />
+    <ClInclude Include="Graphics\Renderer\GraphicsSystem.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.h" />
+    <ClInclude Include="Graphics\PostProcess\PostProcessSettings.h" />
+    <ClInclude Include="Graphics\Color\ColorSpace.h" />
+    <ClInclude Include="Graphics\Fog\FogSettings.h" />
+    <ClInclude Include="Graphics\Renderer\GraphicsContext.h" />
+    <ClInclude Include="Graphics\Renderer\GraphicsRenderer.h" />
+    <ClInclude Include="Graphics\Renderer\GraphicsResourceFactory.h" />
+    <ClInclude Include="Graphics\Renderer\GraphicsSystemDesc.h" />
+    <ClInclude Include="Graphics\Renderer\GraphicsRenderExtension.h" />
+    <ClInclude Include="Graphics\Renderer\PrimitiveRenderer.h" />
+    <ClInclude Include="Graphics\Renderer\RenderScene.h" />
+    <ClInclude Include="Graphics\Shader\Shader.h" />
+    <ClInclude Include="Graphics\Shader\ShaderCompiler.h" />
+    <ClInclude Include="Graphics\Shader\ShaderReflector.h" />
+    <ClInclude Include="Graphics\Shader\ShaderTypes.h" />
     <ClInclude Include="Platform\Window\ProjectWindow.h" />
     <ClInclude Include="Platform\Window\WindowDetails.h" />
-	<ClInclude Include="Runtime\Scene\Components\NameComponent.h" />
-	<ClInclude Include="Runtime\Scene\Components\HierarchyComponent.h" />
-	<ClInclude Include="Runtime\Scene\Components\TransformComponent.h" />
-	<ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
-	<ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
-	<ClInclude Include="Runtime\Scene\Entity.h" />
-	<ClInclude Include="Runtime\Scene\EntityId.h" />
-	<ClInclude Include="Runtime\Scene\Scene.h" />
-	<ClInclude Include="Runtime\Scene\TransformSystem.h" />
-	<ClInclude Include="Runtime\Rendering\RenderSceneExtractor.h" />
-	<ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
-	<ClInclude Include="Editor\Core\EditorApplication.h" />
-	<ClInclude Include="Editor\Gui\Core\GuiContext.h" />
-	<ClInclude Include="Editor\Gui\Core\GuiItem.h" />
-	<ClInclude Include="Editor\Gui\Core\GuiTheme.h" />
-	<ClInclude Include="Editor\Gui\Core\GuiTypes.h" />
-	<ClInclude Include="Editor\Gui\Core\IGuiTextureProvider.h" />
+    <ClInclude Include="Runtime\Scene\Components\NameComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\HierarchyComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\TransformComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\DirectionalLightComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\PersistentIdComponent.h" />
+    <ClInclude Include="Runtime\Scene\Entity.h" />
+    <ClInclude Include="Runtime\Scene\EntityId.h" />
+    <ClInclude Include="Runtime\Scene\PersistentIdGenerator.h" />
+    <ClInclude Include="Runtime\Scene\Scene.h" />
+    <ClInclude Include="Runtime\Scene\ComponentStorage.h" />
+    <ClInclude Include="Runtime\Scene\SystemScheduler.h" />
+    <ClInclude Include="Runtime\Scene\TransformSystem.h" />
+    <ClInclude Include="Runtime\Scene\TransformUpdateSystem.h" />
+    <ClInclude Include="Runtime\Level\Level.h" />
+    <ClInclude Include="Runtime\Level\LevelSerializer.h" />
+    <ClInclude Include="Runtime\Rendering\RenderSceneExtractor.h" />
+    <ClInclude Include="Editor\ImGui\ImGuiRenderer.h" />
+    <ClInclude Include="Editor\Core\EditorApplication.h" />
+    <ClInclude Include="Editor\Core\EditorSession.h" />
+    <ClInclude Include="Editor\Core\ScenePanels.h" />
+    <ClInclude Include="Editor\Gui\Core\GuiContext.h" />
+    <ClInclude Include="Editor\Gui\Widgets\SearchBar.h" />
+    <ClInclude Include="Editor\Gui\Core\GuiItem.h" />
+    <ClInclude Include="Editor\Gui\Core\GuiTheme.h" />
+    <ClInclude Include="Editor\Gui\Core\GuiTypes.h" />
+    <ClInclude Include="Editor\Gui\Core\IGuiTextureProvider.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletConfig.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletData.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletBuilder.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletResource.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshShaderPipeline.h" />
+    <ClInclude Include="Graphics\Meshlet\MeshletDebugSettings.h" />
   </ItemGroup>
   <ItemGroup>
-	<None Include="Docs\GraphicsREADME.md" />
-	<None Include="Docs\SceneREADME.md" />
-	<None Include="Shaders\Primitive\Primitive.VS.hlsl" />
-	<None Include="Shaders\Primitive\Primitive.PS.hlsl" />
-	<None Include="Shaders\Common\Bindless.hlsli" />
+    <None Include="Docs\PostProcessing.md" />
+    <None Include="Shaders\PostProcess\PostProcess.hlsl" />
+    <None Include="Shaders\Common\PBR.hlsli" />
+    <None Include="Shaders\Common\ColorSpace.hlsli" />
+    <None Include="Shaders\Common\Fog.hlsli" />
+    <None Include="Docs\Lighting.md" />
+    <None Include="Docs\Fog.md" />
+    <None Include="Shaders\PostProcess\ACES-LICENSE.txt" />
+    <None Include="Docs\GraphicsREADME.md" />
+    <None Include="Docs\MeshShader.md" />
+    <None Include="Shaders\Mesh\MeshletConfig.h" />
+    <None Include="Shaders\Mesh\MeshletCommon.hlsli" />
+    <None Include="Shaders\Mesh\MeshletAS.hlsl" />
+    <None Include="Shaders\Mesh\MeshletMS.hlsl" />
+    <None Include="Shaders\Mesh\MeshletPS.hlsl" />
+    <None Include="Docs\RayTracing.md" />
+    <None Include="Shaders\RayTracing\Optical.hlsl" />
+    <None Include="Docs\RayTracingReport.md" />
+    <None Include="Docs\RayTracedOptics.md" />
+    <None Include="Shaders\Shadow\ShadowConstants.hlsli" />
+    <None Include="Shaders\Shadow\Depth.VS.hlsl" />
+    <None Include="Shaders\Shadow\Resolve.CS.hlsl" />
+    <None Include="Shaders\RayTracing\Shadow.hlsl" />
+    <None Include="Docs\SceneREADME.md" />
+    <None Include="Docs\ECSREADME.md" />
+    <None Include="Shaders\Primitive\Primitive.VS.hlsl" />
+    <None Include="Shaders\Primitive\Primitive.PS.hlsl" />
+    <None Include="Shaders\Primitive\PrimitiveDrawData.hlsli" />
+    <None Include="Shaders\Common\Bindless.hlsli" />
     <None Include="Agent\AGENT.md">
       <SubType>
       </SubType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Graphics\Environment\EnvironmentLighting.cpp" />
+    <ClCompile Include="Graphics\Resource\HdrImage.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
+    <ClCompile Include="Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="Editor\Gui\DockingLayout.cpp" />
+    <ClCompile Include="Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="Editor\Gui\MainMenuBar.cpp" />
+    <ClCompile Include="Editor\Services\PropertyEditService.cpp" />
+    <ClCompile Include="Editor\Services\LocalizationService.cpp" />
+    <ClCompile Include="Editor\Services\EditorSettings.cpp" />
+    <ClCompile Include="Editor\Gui\PropertyDrawerRegistry.cpp" />
+    <ClCompile Include="Editor\Core\EditorWorkspace.cpp" />
+    <ClCompile Include="Foundation\IPC\RuntimeProtocol.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\PanelRegistry.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\UtilityPanels.cpp" />
+    <ClCompile Include="Editor\Runtime\ViewportSession.cpp" />
+    <ClInclude Include="Runtime\Reflection\TypeRegistry.h" />
+    <ClInclude Include="Editor\Services\AssetCatalog.h" />
+    <ClInclude Include="Editor\Gui\DockingLayout.h" />
+    <ClInclude Include="Editor\Gui\MainMenuBar.h" />
+    <ClInclude Include="Editor\Services\SelectionService.h" />
+    <ClInclude Include="Graphics\Viewport\IViewportFrameTransport.h" />
+    <ClInclude Include="Editor\Services\PropertyEditService.h" />
+    <ClInclude Include="Editor\Services\LocalizationService.h" />
+    <ClInclude Include="Editor\Services\EditorSettings.h" />
+    <ClInclude Include="Editor\Services\EditorCommandRegistry.h" />
+    <ClInclude Include="Editor\Services\ConsoleService.h" />
+    <ClInclude Include="Editor\Gui\PropertyDrawerRegistry.h" />
+    <ClInclude Include="Editor\Core\EditorWorkspace.h" />
+    <ClInclude Include="Foundation\IPC\RuntimeProtocol.h" />
+    <ClInclude Include="Editor\Gui\Panels\IEditorPanel.h" />
+    <ClInclude Include="Editor\Gui\Panels\PanelRegistry.h" />
+    <ClInclude Include="Editor\Gui\Panels\UtilityPanels.h" />
+    <ClInclude Include="Editor\Runtime\ViewportSession.h" />
+    <ClInclude Include="Foundation\Logging\BufferedLogSink.h" />
+    <None Include="Resources\Editor\Localization\*.lang" />
+    <None Include="Config\*.settings" />
+  </ItemGroup>
+  <Target Name="CopyEditorConfig" AfterTargets="Build">
+    <ItemGroup><EditorConfig Include="$(ProjectDir)Config\*.settings" /></ItemGroup>
+    <Copy SourceFiles="@(EditorConfig)" DestinationFolder="$(OutDir)Config" SkipUnchangedFiles="true" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ItemGroup>
+    <ClInclude Include="Graphics\Environment\EnvironmentLighting.h" />
+    <ClInclude Include="Graphics\Environment\EnvironmentLightingData.h" />
+    <ClInclude Include="Graphics\Resource\HdrImage.h" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.h" />
+    <None Include="Shaders\Common\BRDF.hlsli" />
+    <None Include="Shaders\Common\SurfaceData.hlsli" />
+    <None Include="Shaders\Common\Material.hlsli" />
+    <None Include="Shaders\Common\DirectLighting.hlsli" />
+    <None Include="Shaders\Common\IndirectLighting.hlsli" />
+    <None Include="Shaders\Environment\EnvironmentMap.CS.hlsl" />
+    <None Include="Docs\IBL.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Graphics\Lighting\GlobalIlluminationSettings.h" />
+    <None Include="Shaders\RayTracing\GlobalIllumination.hlsli" />
+    <None Include="Docs\GlobalIllumination.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="Graphics\Lighting\BakedLighting.cpp" />
+    <ClCompile Include="Graphics\Lighting\BakedLightingAsset.cpp" />
+    <ClCompile Include="Graphics\Lighting\LightBaker.cpp" />
+    <ClCompile Include="Graphics\Lighting\LightmapGeometry.cpp" />
+    <ClInclude Include="Graphics\Lighting\BakedLighting.h" />
+    <ClInclude Include="Graphics\Lighting\BakedLightingData.h" />
+    <ClInclude Include="Graphics\Lighting\LightBaker.h" />
+    <ClInclude Include="Graphics\Lighting\LightmapGeometry.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\BakedLighting.md" />
+    <None Include="Shaders\Common\BakedLighting.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.cpp" />
+    <ClInclude Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.h" />
+    <ClInclude Include="Graphics\Lighting\DDGISettings.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\DDGI.md" />
+    <None Include="Shaders\Common\DDGI.hlsli" />
+    <None Include="Shaders\Lighting\DDGIUpdate.hlsl" />
+    <None Include="Shaders\RayTracing\DDGIProbe.hlsli" />
+  </ItemGroup>
 </Project>

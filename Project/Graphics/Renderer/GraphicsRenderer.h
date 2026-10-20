@@ -18,6 +18,7 @@ namespace NexusEngine {
 	struct GraphicsRendererInitializationContext {
 		GraphicsResourceFactory& resources;
 		const std::filesystem::path& shaderDirectory;
+		const std::filesystem::path& assetDirectory;
 	};
 
 	/*-----------------------------------------------------------------------------------------

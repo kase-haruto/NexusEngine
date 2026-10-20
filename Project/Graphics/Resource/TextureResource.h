@@ -11,18 +11,20 @@ namespace NexusEngine {
 	/** ShaderからsampleするTextureのpixel format。Graphics API固有formatはBackendで変換する。 */
 	enum class TextureFormat : uint8_t {
 		Rgba8Unorm,
-		Rgba8UnormSrgb
+		Rgba8UnormSrgb,
+		Rgba32Float //< 線形HDRのライトマップ・SH係数用
 	};
 
 	/*-----------------------------------------------------------------------------------------
 	 * TextureDesc
 	 * - 2D Textureの論理寸法とpixel formatを保持するBackend非依存記述
-	 * - 現段階では1 mip、1 array slice、4byte RGBA pixelを対象とする
+	 * - 1 array sliceのRGBA pixelを受け取り、既定で完全なmip chainを生成する
 	 *---------------------------------------------------------------------------------------*/
 	struct TextureDesc {
 		uint32_t width = 0;
 		uint32_t height = 0;
 		TextureFormat format = TextureFormat::Rgba8Unorm;
+		bool generateMipmaps = true; // Generate a complete chain down to 1x1 on upload.
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -45,6 +47,7 @@ namespace NexusEngine {
 		[[nodiscard]] bool IsInitialized() const noexcept;
 		[[nodiscard]] uint32_t GetWidth() const noexcept;
 		[[nodiscard]] uint32_t GetHeight() const noexcept;
+		[[nodiscard]] uint32_t GetMipCount() const noexcept;
 		[[nodiscard]] TextureFormat GetFormat() const noexcept;
 
 	private:

@@ -24,7 +24,9 @@ namespace NexusEngine {
 		D3D12_HEAP_PROPERTIES defaultHeap = {};
 		defaultHeap.Type				  = D3D12_HEAP_TYPE_DEFAULT;
 		Microsoft::WRL::ComPtr<ID3D12Resource> destination;
-		HRESULT								   result = device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&destination));
+		// Default BufferをCOMMONで生成し、最初のCopyBufferRegionでCOPY_DESTへ暗黙昇格する。
+		// 新しいD3D12 RuntimeがBufferの明示InitialStateを無視して警告する問題も避ける。
+		HRESULT								   result = device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&destination));
 		if(FAILED(result)) return std::unexpected(MakeDirectXError(kDestinationCreationFailed, result, "Failed to create default heap vertex buffer."));
 		D3D12_HEAP_PROPERTIES uploadHeap = {};
 		uploadHeap.Type					 = D3D12_HEAP_TYPE_UPLOAD;
@@ -47,7 +49,9 @@ namespace NexusEngine {
 		barrier.Transition.pResource   = destination.Get();
 		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+		// GeometryはRasterとAS Buildの両方から読む。読み取り状態の組合せをUpload完了時に
+		// 確定し、毎回BLAS Build前後に余計な状態遷移を発行しない。
+		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 		commandList->ResourceBarrier(1, &barrier);
 		// stagingと転送先はFence完了までscope内で保持し、GPU参照中の破棄を防ぐ。
 		auto executeResult = uploadContext.ExecuteAndWait(commandQueue);

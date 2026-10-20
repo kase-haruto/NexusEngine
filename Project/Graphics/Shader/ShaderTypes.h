@@ -6,14 +6,16 @@
 
 namespace NexusEngine {
 
-	enum class ShaderStage : uint8_t { Vertex = 1, Pixel = 2 };
+	enum class ShaderStage : uint8_t { Vertex = 1, Pixel = 2, Compute = 4, RayTracingLibrary = 8, Amplification = 16, Mesh = 32 };
 	enum class ShaderResourceType : uint8_t {
 		ConstantBuffer,
 		Texture,
 		StructuredBuffer,
 		RwTexture,
 		RwStructuredBuffer,
-		Sampler
+		Sampler,
+		AccelerationStructure,
+		ByteAddressBuffer
 	};
 
 	struct ShaderResourceBinding {

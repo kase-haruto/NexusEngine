@@ -1,10 +1,12 @@
 #pragma once
 
 // c++
+#include <chrono>
 #include <cstdint>
 
 // engine
 #include "Foundation/Error/Result.h"
+#include "FrameworkUpdateClient.h"
 #include "Graphics/Renderer/GraphicsSystem.h"
 #include "Platform/Window/ProjectWindow.h"
 
@@ -38,6 +40,7 @@ namespace NexusEngine {
 		GraphicsSystemDesc graphics;
 		IGraphicsRenderer* renderer = nullptr; //< Application所有の通常描画Renderer
 		IGraphicsRenderExtension* renderExtension = nullptr; //< Application所有の任意描画拡張
+		IFrameworkUpdateClient* updateClient = nullptr; //< Application所有のframe更新先
 		ProjectWindow::MessageHandler messageHandler = nullptr; //< 任意の上位Window message購読関数
 		void* messageHandlerUserData = nullptr; //< messageHandlerへ渡す非所有Context
 	};
@@ -71,12 +74,15 @@ namespace NexusEngine {
 		[[nodiscard]] bool IsRunning() const noexcept;
 		void BeginFrame() noexcept;
 		[[nodiscard]] Result<void> ProcessEvents();
-		void Update() noexcept;
+		[[nodiscard]] Result<void> Update();
 		[[nodiscard]] Result<void> Render();
 		void EndFrame() noexcept;
 
 		ProjectWindow  window_;						   //< Gameモードのイベントと終了要求を所有するWindow
 		GraphicsSystem graphicsSystem_;                 //< Graphicsのライフサイクルとフレーム描画の所有者
+		IFrameworkUpdateClient* updateClient_ = nullptr; //< Applicationが所有する非所有更新境界
+		std::chrono::steady_clock::time_point previousFrameTime_; //< delta time計算の直前frame時刻
+		float deltaTime_ = 0.0f;                        //< 現在frameの秒単位経過時間
 		FrameworkMode mode_  = FrameworkMode::Game;	   //< 現在実行中のFrameworkモード
 		FrameworkState state_ = FrameworkState::Uninitialized; //< 不正遷移と二重終了を防ぐ状態
 	};

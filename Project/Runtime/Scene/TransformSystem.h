@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 // engine
 #include "Foundation/Error/Result.h"
 #include "Runtime/Scene/Entity.h"
@@ -34,6 +37,9 @@ namespace NexusEngine {
 		 * \note 直接編集で循環したHierarchyを検出した場合はエラーを返す
 		 */
 		[[nodiscard]] Result<void> Update(Scene& scene) const;
+
+	private:
+		mutable std::vector<uint8_t> visitStates_; //< 高水位まで再利用する階層評価scratch（同時Update不可）
 	};
 
 } // namespace NexusEngine

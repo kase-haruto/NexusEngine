@@ -1,8 +1,14 @@
 #include "GraphicsResourceFactory.h"
+#include "Graphics/Color/ColorSpace.h"
+#include "Graphics/Meshlet/MeshShaderPipeline.h"
+#include "Graphics/Meshlet/MeshletResource.h"
 
 // c++
 #include <cmath>
+#include <algorithm>
+#include <cstring>
 #include <limits>
+#include <memory>
 #include <utility>
 
 // directx
@@ -12,40 +18,84 @@
 #include "Graphics/Core/CommandQueue.h"
 #include "Graphics/Descriptor/BindlessDescriptorTable.h"
 #include "Graphics/Resource/ConstantBuffer.h"
+#include "Graphics/Resource/IndexBuffer.h"
+#include "Graphics/Resource/IndexBufferUploader.h"
+#include "Graphics/Resource/MeshResource.h"
+#include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Model/ModelResource.h"
 #include "Graphics/Resource/SamplerDesc.h"
 #include "Graphics/Resource/TextureFormatDx12.h"
 #include "Graphics/Resource/TextureResource.h"
 #include "Graphics/Resource/TextureUploader.h"
 #include "Graphics/Resource/VertexBuffer.h"
 #include "Graphics/Resource/VertexBufferUploader.h"
+#include "Graphics/Resource/WicImageDecoder.h"
 #include "Graphics/Shader/Shader.h"
+#include "Graphics/Shadow/ShadowSystem.h"
 
 namespace NexusEngine {
+	Result<void> GraphicsResourceFactory::WaitForIdle() const {
+		if(!commandQueue_) return std::unexpected(Error(ErrorCategory::Graphics, 91, "Graphics queue not connected."));
+		return commandQueue_->WaitForIdle();
+	}
+	Result<void> GraphicsResourceFactory::CreateMeshShaderPipeline(MeshShaderPipeline& pipeline, const std::filesystem::path& shaders) const {
+		if(!capabilities_.SupportsMeshShaders()) return std::unexpected(Error(ErrorCategory::Graphics, 82, "Mesh shaders unsupported."));
+		return pipeline.Initialize(nativeDevice_, shaders);
+	}
+	Result<void> GraphicsResourceFactory::CreateMeshletResource(MeshletResource& resource, const MeshletData& data, const MeshResource& mesh) const {
+		if(!mesh.IsInitialized() || !capabilities_.SupportsMeshShaders()) return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet source unavailable."));
+		if(data.submeshes.size() != mesh.GetSubmeshes().size()) return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet submesh count mismatch."));
+		for(uint32_t index : data.vertices) if(index >= mesh.vertexBuffer_.GetVertexCount())
+			return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet original vertex index out of bounds."));
+		return resource.Initialize(nativeDevice_, commandQueue_, data, mesh.GetGeometryGeneration());
+	}
 	namespace {
 		constexpr int32_t kInvalidResourceArgument = 1;
+
+		template<typename Keyframe>
+		[[nodiscard]] bool HasValidKeyframeTimes(
+			const std::vector<Keyframe>& keyframes,
+			const float duration) noexcept {
+			float previousTime = -1.0f;
+			for(const Keyframe& keyframe : keyframes) {
+				if(!std::isfinite(keyframe.time) || keyframe.time < 0.0f ||
+				   keyframe.time > duration || keyframe.time <= previousTime) {
+					return false;
+				}
+				previousTime = keyframe.time;
+			}
+			return true;
+		}
 	}
 
 	void GraphicsResourceFactory::ConnectBackend(
 		void* const					   nativeDevice,
 		CommandQueue* const			   commandQueue,
 		BindlessDescriptorTable* const bindlessDescriptors,
-		const uint32_t				   framesInFlight) noexcept {
+		const uint32_t				   framesInFlight,
+		DescriptorManager* const descriptors,
+		const GraphicsCapabilities capabilities) noexcept {
 		// 接続と切断はGraphicsSystemだけが行い、FactoryがDevice寿命を越えて利用されることを防ぐ。
 		nativeDevice_		 = nativeDevice;
 		commandQueue_		 = commandQueue;
 		bindlessDescriptors_ = bindlessDescriptors;
 		framesInFlight_		 = framesInFlight;
+		descriptors_ = descriptors;
+		capabilities_ = capabilities;
+	}
+	Result<void> GraphicsResourceFactory::CreateShadowSystem(ShadowSystem& shadows, const std::filesystem::path& shaders) {
+		return shadows.Initialize(*this, shaders);
 	}
 
 	Result<void> GraphicsResourceFactory::CreateGraphicsPipeline(
 		GraphicsPipeline&					pipeline,
 		Shader								vertexShader,
 		Shader								pixelShader,
-		const std::vector<VertexAttribute>& vertexLayout) const {
+		const GraphicsPipelineDesc& pipelineDesc) const {
 		// Deviceを必要とする既存DX12実装はFactoryの背後へ留め、Rendererの初期化契約を安定させる。
 		return pipeline.Initialize(
 			static_cast<ID3D12Device*>(nativeDevice_),
-			std::move(vertexShader), std::move(pixelShader), vertexLayout);
+			std::move(vertexShader), std::move(pixelShader), pipelineDesc);
 	}
 
 	Result<void> GraphicsResourceFactory::CreateVertexBuffer(
@@ -56,6 +106,201 @@ namespace NexusEngine {
 		const VertexBufferUploader uploader;
 		return uploader.Upload(
 			static_cast<ID3D12Device*>(nativeDevice_), commandQueue_, vertexBuffer, data, stride);
+	}
+
+	Result<void> GraphicsResourceFactory::CreateIndexBuffer(
+		IndexBuffer& indexBuffer,
+		const std::span<const uint8_t> data,
+		const IndexFormat format) const {
+		// Vertex Bufferと同じImmediate Upload経路を使い、RendererからNative Deviceを隠蔽する。
+		const IndexBufferUploader uploader;
+		return uploader.Upload(
+			static_cast<ID3D12Device*>(nativeDevice_), commandQueue_, indexBuffer, data, format);
+	}
+
+	Result<void> GraphicsResourceFactory::CreateMeshResource(
+		MeshResource& mesh,
+		const std::span<const uint8_t> vertexData,
+		const uint32_t vertexStride,
+		const std::span<const uint8_t> indexData,
+		const IndexFormat indexFormat,
+		const std::vector<SubmeshRange>& submeshes) const {
+		const uint32_t indexStride = indexFormat == IndexFormat::UInt32 ? sizeof(uint32_t) : sizeof(uint16_t);
+		if(mesh.IsInitialized() || submeshes.empty() || vertexStride == 0 || vertexData.empty() ||
+			vertexData.size() % vertexStride != 0 || indexData.size() % indexStride != 0 ||
+			indexData.size() / indexStride > (std::numeric_limits<uint32_t>::max)()) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+				"Mesh resource state or submesh list is invalid."));
+		}
+
+		const uint32_t indexCount = static_cast<uint32_t>(
+			indexData.size() / (indexFormat == IndexFormat::UInt32 ? sizeof(uint32_t) : sizeof(uint16_t)));
+		for(const SubmeshRange& submesh : submeshes) {
+			const uint64_t rangeEnd = static_cast<uint64_t>(submesh.firstIndex) + submesh.indexCount;
+			if(submesh.indexCount == 0 || rangeEnd > indexCount) {
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+					"Submesh index range is outside the supplied index buffer."));
+			}
+			// Validate while CPU bytes are available, before either Raster or AS can fetch an
+			// out-of-range vertex on the GPU. memcpy avoids alignment assumptions on Asset byte arrays.
+			for(uint64_t index = submesh.firstIndex; index < rangeEnd; ++index) {
+				uint32_t value = 0;
+				if(indexFormat == IndexFormat::UInt32) std::memcpy(&value, indexData.data() + index * indexStride, sizeof(uint32_t));
+				else {
+					uint16_t narrow = 0; std::memcpy(&narrow, indexData.data() + index * indexStride, sizeof(narrow)); value = narrow;
+				}
+				const int64_t vertex = static_cast<int64_t>(value) + submesh.vertexOffset;
+				if(vertex < 0 || static_cast<uint64_t>(vertex) >= vertexData.size() / vertexStride) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Submesh index plus vertex offset is outside the vertex buffer."));
+				}
+			}
+		}
+
+		// Meshは両Bufferが揃ったときだけ有効。Index upload失敗時はVertex Resourceを即座破棄する。
+		auto result = CreateVertexBuffer(mesh.vertexBuffer_, vertexData, vertexStride);
+		if(!result) return result;
+		result = CreateIndexBuffer(mesh.indexBuffer_, indexData, indexFormat);
+		if(!result) {
+			mesh.vertexBuffer_.Shutdown();
+			return result;
+		}
+		mesh.submeshes_ = submeshes;
+		mesh.CommitGeometryGeneration();
+		return {};
+	}
+
+	Result<void> GraphicsResourceFactory::CreateModelResource(
+		ModelResource& model,
+		const ModelAssetData& assetData) const {
+		if(model.IsInitialized() || assetData.meshes.empty()) {
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+				"Model resource state or asset data is invalid."));
+		}
+		const uint32_t materialCount = assetData.materials.empty()
+			? 1U : static_cast<uint32_t>(assetData.materials.size());
+		for(const MeshAssetData& mesh : assetData.meshes) {
+			for(const SubmeshRange& submesh : mesh.submeshes) {
+				if(submesh.materialSlot >= materialCount) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Submesh references an invalid model material slot."));
+				}
+			}
+		}
+
+		// hierarchyが参照するMesh/Parent indexをGPU upload前に検証し、部分生成を避ける。
+		for(uint32_t nodeIndex = 0; nodeIndex < assetData.nodes.size(); ++nodeIndex) {
+			const ModelNodeAssetData& node = assetData.nodes[nodeIndex];
+			if(node.parentIndex != ModelNodeAssetData::kNoParent && node.parentIndex >= nodeIndex) {
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+					"Model node parent must precede its child in hierarchy order."));
+			}
+			for(const uint32_t meshIndex : node.meshIndices) {
+				if(meshIndex >= assetData.meshes.size()) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Model node references an invalid mesh index."));
+				}
+			}
+			if(!node.meshIndices.empty()) {
+				const uint32_t nodeSkin = assetData.meshes[node.meshIndices.front()].skinIndex;
+				for(const uint32_t meshIndex : node.meshIndices) {
+					if(assetData.meshes[meshIndex].skinIndex != nodeSkin) {
+						return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+							"All meshes referenced by one model node must use the same skin."));
+					}
+				}
+			}
+		}
+		for(const AnimationClip& clip : assetData.animations) {
+			if(!std::isfinite(clip.duration) || clip.duration < 0.0f) {
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+					"Model animation duration cannot be negative."));
+			}
+			for(const NodeAnimationChannel& channel : clip.channels) {
+				if(channel.nodeIndex >= assetData.nodes.size()) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Model animation channel references an invalid node."));
+				}
+				if(!HasValidKeyframeTimes(channel.translations, clip.duration) ||
+				   !HasValidKeyframeTimes(channel.rotations, clip.duration) ||
+				   !HasValidKeyframeTimes(channel.scales, clip.duration)) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Model animation keyframe times must be strictly increasing and inside the clip."));
+				}
+			}
+		}
+		for(const ModelSkin& skin : assetData.skins) {
+			if(skin.joints.empty() || skin.joints.size() > kMaxSkinJoints ||
+			   skin.joints.size() != skin.inverseBindMatrices.size()) {
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+					"Model skin joint and inverse bind matrix counts are invalid."));
+			}
+			for(const uint32_t nodeIndex : skin.joints) {
+				if(nodeIndex >= assetData.nodes.size()) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+						"Model skin references an invalid joint node."));
+				}
+			}
+		}
+		for(const MeshAssetData& mesh : assetData.meshes) {
+			if(mesh.skinIndex != MeshAssetData::kNoSkin && mesh.skinIndex >= assetData.skins.size()) {
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
+					"Model mesh references an invalid skin."));
+			}
+		}
+
+		std::vector<std::unique_ptr<MeshResource>> meshes;
+		for(const auto& material : assetData.materials) {
+			if(!std::isfinite(material.occlusionStrength) || material.occlusionStrength < 0 || material.occlusionStrength > 1 ||
+				std::any_of(material.emissiveFactor.begin(), material.emissiveFactor.end(), [](float value) { return !std::isfinite(value) || value < 0; }))
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Invalid emissive/occlusion material factors."));
+			if(!std::isfinite(material.metallicFactor) || material.metallicFactor < 0 || material.metallicFactor > 1 ||
+				!std::isfinite(material.roughnessFactor) || material.roughnessFactor < 0 || material.roughnessFactor > 1 ||
+				!std::isfinite(material.normalScale) || material.normalScale < 0)
+				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Invalid PBR material factors."));
+		}
+		meshes.reserve(assetData.meshes.size());
+		for(const MeshAssetData& source : assetData.meshes) {
+			auto mesh = std::make_unique<MeshResource>();
+			auto result = CreateMeshResource(
+				*mesh, source.vertexData, source.vertexStride,
+				source.indexData, source.indexFormat, source.submeshes);
+			if(!result) return result;
+			meshes.push_back(std::move(mesh));
+		}
+
+		std::vector<ModelNode> nodes;
+		nodes.reserve(assetData.nodes.size());
+		for(const ModelNodeAssetData& source : assetData.nodes) {
+			nodes.push_back({ source.name, source.parentIndex, source.localTransform,
+				MakeAffineMatrix(source.localTransform.scale, source.localTransform.rotation,
+					source.localTransform.translation), source.meshIndices });
+		}
+		// Nodeを持たない単一Mesh Assetも扱えるよう、暗黙のroot nodeを補う。
+		if(nodes.empty()) {
+			ModelNode root;
+			root.name = "Root";
+			root.meshIndices.reserve(meshes.size());
+			for(uint32_t index = 0; index < meshes.size(); ++index) root.meshIndices.push_back(index);
+			nodes.push_back(std::move(root));
+		}
+
+		model.meshes_ = std::move(meshes);
+		model.nodes_ = std::move(nodes);
+		model.animations_ = assetData.animations;
+		model.skins_ = assetData.skins;
+		model.meshSkinIndices_.reserve(assetData.meshes.size());
+		for(const MeshAssetData& mesh : assetData.meshes) model.meshSkinIndices_.push_back(mesh.skinIndex);
+		if(assetData.materials.empty()) {
+			model.materials_.push_back({ "Default" });
+		} else {
+			model.materials_.reserve(assetData.materials.size());
+			for(const ModelMaterialAssetData& material : assetData.materials) {
+				model.materials_.push_back({ material.name, material.baseColorFactor, material.sampler, material.optics,
+					material.metallicFactor, material.roughnessFactor, material.normalScale, material.emissiveFactor, material.occlusionStrength });
+			}
+		}
+		return {};
 	}
 
 	Result<void> GraphicsResourceFactory::CreateConstantBuffer(
@@ -102,6 +347,32 @@ namespace NexusEngine {
 			static_cast<ID3D12Device*>(nativeDevice_), commandQueue_, texture, desc, pixels);
 	}
 
+	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
+		TextureResource& texture,
+		const std::span<const uint8_t> encodedData) const {
+		return CreateTexture2DFromEncodedData(texture, encodedData, TextureColorSpace::Srgb);
+	}
+
+	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
+		TextureResource& texture, const std::span<const uint8_t> encodedData, TextureColorSpace colorSpace) const {
+		if(colorSpace != TextureColorSpace::Srgb && colorSpace != TextureColorSpace::Linear)
+			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Unsupported texture colour space."));
+		return CreateTexture2DFromEncodedData(texture, encodedData,
+			colorSpace == TextureColorSpace::Srgb ? TextureFormat::Rgba8UnormSrgb : TextureFormat::Rgba8Unorm);
+	}
+
+	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(
+		TextureResource& texture, const std::span<const uint8_t> encodedData, TextureFormat format) const {
+		if(format != TextureFormat::Rgba8Unorm && format != TextureFormat::Rgba8UnormSrgb)
+			return std::unexpected(Error(ErrorCategory::Resource,91,"Encoded images require an RGBA8 format."));
+		const WicImageDecoder decoder;
+		auto image = decoder.Decode(encodedData);
+		if(!image) return std::unexpected(std::move(image.error()));
+		return CreateTexture2D(texture,
+			TextureDesc { image->width, image->height, format },
+			image->rgbaPixels);
+	}
+
 	Result<ShaderResourceRef> GraphicsResourceFactory::CreatePersistentTextureShaderResource(
 		const TextureResource& texture) const {
 		if(bindlessDescriptors_ == nullptr || !texture.IsInitialized()) {
@@ -113,7 +384,7 @@ namespace NexusEngine {
 		desc.ViewDimension					 = D3D12_SRV_DIMENSION_TEXTURE2D;
 		desc.Shader4ComponentMapping		 = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		desc.Texture2D.MostDetailedMip		 = 0;
-		desc.Texture2D.MipLevels			 = 1;
+		desc.Texture2D.MipLevels			 = texture.GetMipCount();
 		return bindlessDescriptors_->CreateShaderResourceView(
 			static_cast<ID3D12Resource*>(texture.GetNativeResource()), desc);
 	}
@@ -121,7 +392,8 @@ namespace NexusEngine {
 	Result<ShaderResourceRef> GraphicsResourceFactory::CreatePersistentSampler(const SamplerDesc& desc) const {
 		if(bindlessDescriptors_ == nullptr || !std::isfinite(desc.mipLodBias) ||
 		   !std::isfinite(desc.minLod) || !std::isfinite(desc.maxLod) ||
-		   desc.minLod < 0.0f || desc.maxLod < desc.minLod) {
+		   desc.minLod < 0.0f || desc.maxLod < desc.minLod ||
+		   desc.maxAnisotropy < 1 || desc.maxAnisotropy > 16) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument, "Sampler description or backend state is invalid."));
 		}
 
@@ -140,14 +412,14 @@ namespace NexusEngine {
 		D3D12_SAMPLER_DESC nativeDesc = {};
 		nativeDesc.Filter			  = desc.filter == TextureFilter::Nearest
 											? D3D12_FILTER_MIN_MAG_MIP_POINT
-											: D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+											: desc.maxAnisotropy > 1 ? D3D12_FILTER_ANISOTROPIC : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		nativeDesc.AddressU			  = toNativeAddressMode(desc.addressU);
 		nativeDesc.AddressV			  = toNativeAddressMode(desc.addressV);
 		nativeDesc.AddressW			  = toNativeAddressMode(desc.addressW);
 		nativeDesc.MipLODBias		  = desc.mipLodBias;
 		nativeDesc.MinLOD			  = desc.minLod;
 		nativeDesc.MaxLOD			  = desc.maxLod;
-		nativeDesc.MaxAnisotropy	  = 1;
+		nativeDesc.MaxAnisotropy	  = desc.maxAnisotropy;
 		return bindlessDescriptors_->CreateSampler(nativeDesc);
 	}
 

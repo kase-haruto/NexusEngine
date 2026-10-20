@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include "Graphics/PostProcess/PostProcessSettings.h"
 
 namespace NexusEngine {
 
@@ -29,13 +30,15 @@ namespace NexusEngine {
 	 * - Graphicsサブシステムの初期設定を保持する
 	 *---------------------------------------------------------------------------------------*/
 	struct GraphicsSystemDesc {
+		PostProcessSettings postProcess;
 		bool enableDebugLayer = kDefaultGraphicsDiagnosticsEnabled;
 		bool enableGpuBasedValidation = false;
 		bool enableDred = kDefaultGraphicsDiagnosticsEnabled;
 		bool useWarpAdapter = false;
 		bool enableVSync = true;
-		std::array<float, 4> clearColor = { 0.08f, 0.12f, 0.20f, 1.0f };
+		std::array<float, 4> clearColor = { 0.08f, 0.12f, 0.20f, 1.0f }; // Linear Rec.709 RGB; alpha is linear.
 		std::filesystem::path shaderDirectory = L"Shaders";
+		std::filesystem::path assetDirectory = L"Resources/Assets";
 		uint32_t bindlessResourceCapacity = 4096; //< CBV/SRV/UAV永続Bindless slot数
 		uint32_t bindlessSamplerCapacity = 128;   //< Sampler永続Bindless slot数
 		uint32_t transientResourceDescriptorsPerFrame = 256; //< Draw中に生成しFence完了後に再利用するCBV/SRV/UAV数

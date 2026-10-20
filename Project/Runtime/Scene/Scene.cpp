@@ -50,7 +50,10 @@ namespace NexusEngine {
 		}
 
 		// free list拡張に失敗した場合はEntityとComponentを変更せず、呼び出し側へ例外を伝える。
-		freeEntityIndices_.push_back(entity.id_.index);
+		// 世代をwrapさせると最古のHandleが再び有効になる。最大世代slotは永久退役させる。
+		if(entitySlots_[entity.id_.index].generation != (std::numeric_limits<uint32_t>::max)()) {
+			freeEntityIndices_.push_back(entity.id_.index);
+		}
 		for(auto& [componentType, storage] : componentStorages_) {
 			static_cast<void>(componentType);
 			storage->Remove(entity.id_.index);
@@ -58,8 +61,7 @@ namespace NexusEngine {
 
 		auto& slot = entitySlots_[entity.id_.index];
 		slot.alive = false;
-		++slot.generation;
-		if(slot.generation == 0) {
+		if(slot.generation != (std::numeric_limits<uint32_t>::max)()) {
 			++slot.generation;
 		}
 		--livingEntityCount_;

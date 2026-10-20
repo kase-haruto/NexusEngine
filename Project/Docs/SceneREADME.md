@@ -1,5 +1,7 @@
 # NexusEngine Scene Architecture
 
+Level、System Scheduler、永続ID、Serialization、Benchmarkを追加した現在の設計は[ECS / Level Architecture](ECSREADME.md)を参照してください。Sceneは互換性のため名前を保持したECS Worldであり、型別Storageは独立したComponentStorage.hへ分離されています。
+
 ## 現在の責務
 
 Scene基盤はRuntime層に属し、Entity slotとComponentの所有を担当します。

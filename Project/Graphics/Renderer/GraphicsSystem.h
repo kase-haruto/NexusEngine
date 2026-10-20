@@ -8,6 +8,8 @@
 // engine
 #include "Foundation/Error/Result.h"
 #include "GraphicsSystemDesc.h"
+#include "Graphics/Device/GraphicsCapabilities.h"
+#include "Graphics/Viewport/ViewportImage.h"
 
 namespace NexusEngine {
 	class IGraphicsRenderer;
@@ -53,6 +55,9 @@ namespace NexusEngine {
 		 * \param color RGBA順のClear Color
 		 */
 		void SetClearColor(const std::array<float, 4>& color) noexcept;
+		/** Scene-linear grading, EV exposure and HDR bloom; applies on the next frame. */
+		[[nodiscard]] Result<void> SetPostProcessSettings(const PostProcessSettings& settings);
+		[[nodiscard]] PostProcessSettings GetPostProcessSettings() const noexcept;
 		/**
 		 * \brief Backend非依存Rendererを初期化してFrame記録経路へ接続する
 		 * \param renderer Applicationが所有し、GraphicsSystemより長く生存するRenderer
@@ -60,6 +65,16 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> AttachRenderer(IGraphicsRenderer* renderer);
 		/** \brief 上位描画拡張を初期化してPresent前の記録経路へ接続する */
 		[[nodiscard]] Result<void> AttachRenderExtension(IGraphicsRenderExtension* extension);
+		/** \brief 起動時GPU機能の値を返す。未初期化時は全機能が非対応 */
+		[[nodiscard]] GraphicsCapabilities GetCapabilities() const noexcept;
+		/** \brief Sceneの出力先をSwapChainから専用Viewport画像へ切り替える */
+		[[nodiscard]] Result<void> EnableSceneViewport();
+		/** \brief Panelサイズを次frameのリサイズ要求として保存する。記録中はGPU資源を変更しない */
+		bool RequestSceneViewportSize(uint32_t width, uint32_t height) noexcept;
+		/** \brief 描画snapshot抽出前にGPU idleを保証して未処理Resizeを適用する */
+		[[nodiscard]] Result<void> PrepareSceneViewport();
+		/** \brief UI backend専用の不透明画像参照。UIは資源を生成・解放しない */
+		[[nodiscard]] ViewportImage GetSceneViewportImage() const noexcept;
 
 	private:
 		class Impl;
