@@ -1,0 +1,3 @@
+name "NexusEngine"
+startupLevel "Resources/Assets/Levels/DemoLevel.json"
+assetPath "Resources/Assets"

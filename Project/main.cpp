@@ -4,6 +4,7 @@
 #include "Editor/Core/EditorApplication.h"
 #include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Foundation/Logging/Logger.h"
+#include "Foundation/Utility/String/ConvertString.h"
 
 /*-----------------------------------------------------------------------------------------
  * main
@@ -18,6 +19,9 @@ int main() {
 
 
 	NexusEngine::FrameworkDesc desc;
+	NexusEngine::EditorSettingsStore settings;
+	settings.Load(std::filesystem::current_path());
+	desc.graphics.assetDirectory = std::filesystem::path{NexusEngine::ConvertString(settings.project.assetPath)};
 	// CPU Sceneを先に構築し、Renderer初期化へ選択済みAssetと姿勢を接続する。
 	// GPU Resourceの所有はRenderer/Graphics側に残すため、SceneにはDeviceを渡さない。
 	auto sceneResult = editor.CreateScene(desc.graphics.assetDirectory);

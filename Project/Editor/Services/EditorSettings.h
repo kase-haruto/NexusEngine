@@ -1,0 +1,47 @@
+#pragma once
+#include <filesystem>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace NexusEngine {
+/*-----------------------------------------------------------------------------------------
+ * EditorSettingsStore
+ * - User / Editor / Project設定の保存先と永続化を管理する
+ * - UI、Runtime World、ImGuiの状態は所有しない
+ *---------------------------------------------------------------------------------------*/
+class EditorSettingsStore final {
+public:
+    struct User {
+        std::string language = "en"; //< 翻訳言語
+        std::string theme = "Dark"; //< UI配色
+        float fontSize = 18; //< 論理フォントサイズ
+        float uiScale = 1; //< UI倍率
+        bool autoSaveLayout = true; //< 終了時に配置を保存する
+        std::map<std::string, bool> panels; //< 安定Panel IDごとの表示状態
+        std::vector<std::string> recentLevels; //< 個人の最近使ったLevel、最大10件
+    } user;
+    struct Editor {
+        bool grid = true; //< Grid表示
+        bool gizmo = true; //< 将来のGizmo表示設定
+        bool viewport = true; //< Viewport初期表示
+    } editor;
+    struct Project {
+        std::string name = "NexusEngine"; //< Project名
+        std::string startupLevel = "Resources/Assets/Levels/DemoLevel.json"; //< 起動Level
+        std::string assetPath = "Resources/Assets"; //< Assetルート
+    } project;
+    /** \brief Project→Editor→Userの順で既定値へ上書きする */
+    void Load(const std::filesystem::path& projectRoot);
+    /** \brief 個人設定のみ保存する。失敗時は旧ファイルを保持する */
+    [[nodiscard]] bool SaveUser() const;
+    /** \brief プロジェクト共有設定を明示的に保存する */
+    [[nodiscard]] bool SaveProject() const;
+    /** \brief エディタ動作設定を明示的に保存する */
+    [[nodiscard]] bool SaveEditor() const;
+    [[nodiscard]] const std::filesystem::path& UserDirectory() const { return userDirectory_; }
+private:
+    std::filesystem::path userDirectory_; //< LOCALAPPDATA/NexusEngine/Editor
+    std::filesystem::path projectDirectory_; //< ProjectRoot/Config
+};
+}

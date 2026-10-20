@@ -1,15 +1,16 @@
 #pragma once
 
+#include "IEditorPanel.h"
 #include <string>
 
 namespace NexusEngine {
 
 	/*-----------------------------------------------------------------------------------------
-	 * Outliner
-	 * - シーン内のすべてのアクタが階層ツリー ビューで表示
-	 * - 表示されるアクタ情報をカスタマイズする
+	 * OutlinerPanel
+	 * - Level内のEntity階層を表示するEditor Panel
+	 * - Entityの所有やRuntimeの更新処理は担当しない
 	 *---------------------------------------------------------------------------------------*/
-	class OutlinerPanel {
+	class OutlinerPanel final : public IEditorPanel {
 	public:
 		//===================================================================*/
 		// 				public methods
@@ -18,13 +19,15 @@ namespace NexusEngine {
 		/**
 		* \brief Guiの表示
 		*/
-		void ShowGui();
+		std::string_view Id() const noexcept override { return "Outliner"; }
+		std::string_view TitleKey() const noexcept override { return "panel.outliner"; }
+		void Draw(const EditorContext& context) override;
 
 	private:
 		//===================================================================*/
 		// 				private methods
 		//==================================================================*/
-		std::string searchText_;
+		std::string searchText_; //< 共通SearchBarのUTF-8検索入力
 	};
 
 } // namespace NexusEngine

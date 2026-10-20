@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Gui/Panels/OutlinerPanel.h"
+#include "EditorWorkspace.h"
 #include "Core/Framework/FrameworkUpdateClient.h"
 #include "Editor/Gui/Core/GuiContext.h"
 #include "Editor/ImGui/ImGuiRenderer.h"
@@ -27,6 +27,8 @@ namespace NexusEngine {
 		[[nodiscard]] const ModelInstance&	GetModelPose() const noexcept { return modelPose_; }
 
 		void ShowGui();
+		/** \brief 既存Renderer診断画面を必要時だけ描く */
+		void ShowLegacyDiagnostics();
 		/** \brief Application所有Rendererの設定窓口を非所有接続する */
 		void SetShadowSystem(ShadowSystem* shadows) noexcept {
 			shadows_ = shadows;
@@ -84,8 +86,6 @@ namespace NexusEngine {
 		PrimitiveRenderer* materialRenderer_   = nullptr; //< 光学Materialの設定窓口、非所有
 		uint32_t		   mirrorMaterialSlot_ = 0;
 		uint32_t		   glassMaterialSlot_  = 0;
-		void			   DrawDockSpace();
-		void			   DrawMainMenuBar();
 
 		ImGuiRenderer imguiRenderer_;		   //< imgui描画
 		UI::Context	  guiContext_;			   //< gui
@@ -96,7 +96,8 @@ namespace NexusEngine {
 		RenderScene			 renderScene_; //< Rendererへの値snapshot。EditorApplicationと同寿命
 
 		// panels
-		std::unique_ptr<OutlinerPanel> outlinerPanel_; //< LevelDocumentのEntityを階層表示する
+		std::unique_ptr<EditorWorkspace> workspace_; //< PanelとEditorサービスの組立
+		bool showLegacyDiagnostics_ = false; //< 既存描画診断の表示要求
 
 		// demo用モデル描画
 		ModelAssetData modelAsset_;									  //< Sceneで選択したCPU Asset。modelPose_より長く生存する

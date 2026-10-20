@@ -1,5 +1,10 @@
 # SearchBar
 
+> Editor統合追記: Outliner / Output Log / Content BrowserがこのWidgetを使用する。
+> 共通Styleは`Editor/ImGui/ImGuiStyle.cpp`へ移動し、元の配色と寸法を維持する。
+> 寸法補正はWindow DPI × FontScaleMain（User UI Scale）に対応する。
+> 下記の過去のテスト実行記録とは別に、今回の変更はビルド・実行せず静的確認のみ実施した。
+
 虫眼鏡付きの検索入力Widget。`NexusEngine::UI` の自由関数として描画し、UTF-8の検索文字列はPanelが所有する。検索、ソート、キャッシュ、永続化、GPUリソース管理は行わない。
 
 ## 調査結果と配置

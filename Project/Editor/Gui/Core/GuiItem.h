@@ -13,7 +13,8 @@ namespace NexusEngine::UI {
 		Focused = 1 << 2,
 		Edited = 1 << 3,
 		Activated = 1 << 4,
-		Deactivated = 1 << 5
+		Deactivated = 1 << 5,
+		EditCompleted = 1 << 6 //< ドラッグ終了frameなど、値変更がないframeでも編集完了を通知する
 	};
 
 	[[nodiscard]] constexpr ItemStatus operator|(const ItemStatus left, const ItemStatus right) noexcept {
@@ -41,7 +42,8 @@ namespace NexusEngine::UI {
 			return HasStatus(status, ItemStatus::Edited);
 		}
 		[[nodiscard]] constexpr bool EditFinished() const noexcept {
-			return Changed() && HasStatus(status, ItemStatus::Deactivated);
+			return HasStatus(status, ItemStatus::EditCompleted) ||
+				(Changed() && HasStatus(status, ItemStatus::Deactivated));
 		}
 	};
 } // namespace NexusEngine::UI

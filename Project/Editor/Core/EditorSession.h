@@ -6,6 +6,7 @@
 
 // c++ standard
 #include <cmath>
+#include "Editor/Services/SelectionService.h"
 
 namespace NexusEngine {
 
@@ -25,7 +26,12 @@ namespace NexusEngine {
 		/** \brief 現在のWorldで解決できる永続IDだけを選択する */
 		void Select(PersistentId id);
 
-		[[nodiscard]] PersistentId	 GetSelection() const noexcept { return selected_; }
+		[[nodiscard]] PersistentId GetSelection() const noexcept { return selection_.Primary(); }
+		SelectionService& Selection() noexcept { return selection_; }
+		/** \brief サービス経由の編集を変更状態へ反映する */
+		void MarkDirty() noexcept { dirty_ = true; }
+		void MarkSaved() noexcept { dirty_ = false; }
+		size_t Generation() const noexcept { return generation_; }
 		[[nodiscard]] Entity		 GetSelectedEntity();
 		[[nodiscard]] LevelDocument* GetLevelDocument() const noexcept { return levelDocument_.get(); }
 		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
@@ -39,7 +45,8 @@ namespace NexusEngine {
 	private:
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
 
-		PersistentId selected_;		 //< EntityやComponentのアドレスを保持しない
+		SelectionService selection_; //< 全Panel共通の永続ID集合
+		size_t generation_ = 0; //< documentの再生成を履歴サービスへ通知する
 		bool		 dirty_ = false; //< 編集操作が適用されたか
 	};
 } // namespace NexusEngine

@@ -56,6 +56,7 @@ namespace NexusEngine {
 	}
 
 	inline void DrawLevelDemoGui(EditorSession& session) {
-		session.GetLevelDocument()->ShowGui();
+		// 互換用。LevelのUIはEditorWorkspaceのFile commandへ移動した。
+		static_cast<void>(session);
 	}
 }
