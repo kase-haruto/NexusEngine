@@ -13,6 +13,12 @@ float3 SampleEnvironment(float3 direction, EnvironmentData e) {
     return map.SampleLevel(sampleState, EnvironmentDirection(direction, e), 0).rgb * e.parameters.x;
 }
 struct IndirectLighting { float3 diffuse; float3 specular; };
+// Texture-free split-sum fit for the uniform fallback sky (E = pi * L).
+float2 FallbackEnvironmentBRDF(float nv, float roughness) {
+    float4 r = roughness * float4(-1, -.0275, -.572, .022) + float4(1, .0425, 1.04, -.04);
+    float a = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
+    return float2(-1.04, 1.04) * a + r.zw;
+}
 // E/πを持つ照明供給元で受光材質の適用を共有する。AO・Fresnel・強度は一度だけ掛ける。
 float4 ApplyDiffuseIrradiance(float4 irradiance,SurfaceData s,float3 v,EnvironmentData e,float intensity) {
     if(irradiance.a<.5) return 0;
@@ -30,7 +36,12 @@ IndirectLighting EvaluateIndirectLighting(SurfaceData s, float3 v, EnvironmentDa
     // 拡散IBL表示は比較のため置換前の結果を維持する。
     const bool useGI = tracedDiffuse.a > 0.5 && e.options.z != 3;
     if(e.options.y == 0) {
-        result.diffuse = useGI ? tracedDiffuse.rgb : fallback * (1 - s.metallic) * 0.96 * LambertDiffuse(s.baseColor) * s.ambientOcclusion;
+        float nv = saturate(dot(s.normal, v));
+        float2 ab = FallbackEnvironmentBRDF(nv, s.roughness);
+        float3 f = saturate(lerp(.04.xxx, s.baseColor, s.metallic) * ab.x + ab.y);
+        result.diffuse = useGI ? tracedDiffuse.rgb : fallback * (1 - s.metallic) * (1 - f) * LambertDiffuse(s.baseColor) * s.ambientOcclusion;
+        float specularAO = saturate(pow(nv + s.ambientOcclusion, exp2(-16 * s.roughness - 1)) - 1 + s.ambientOcclusion);
+        result.specular = fallback / NexusPi * f * specularAO * (useGI ? saturate(tracedDiffuse.a - 1) : 1);
         return result;
     }
     TextureCube<float4> irradiance = ResourceDescriptorHeap[e.textures.y];

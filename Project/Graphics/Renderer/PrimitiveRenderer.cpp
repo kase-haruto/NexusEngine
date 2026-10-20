@@ -325,7 +325,7 @@ namespace NexusEngine {
 				}
 			}
 		}
-		auto radiance = (renderScene_->environment.debugMode == LightingDebugMode::Final || realtimeGI.enabled || renderScene_->ddgi.enabled)
+		auto radiance = (renderScene_->environment.debugMode == LightingDebugMode::Final || renderScene_->environment.debugMode == LightingDebugMode::Indirect || realtimeGI.enabled || renderScene_->ddgi.enabled)
 			? optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_, renderScene_->ambientIrradiance, drawData_.environment, realtimeGI, bakedData, renderScene_->ddgi)
 			: Result<ShaderResourceRef>{ShaderResourceRef{}};
 		drawData_.diffuseGIIndex = radiance && realtimeGI.enabled ? optics_.GetDiffuseGlobalIllumination().index : 0;

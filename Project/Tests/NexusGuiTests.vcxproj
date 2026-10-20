@@ -14,6 +14,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="SearchBarTests.cpp" />
+    <ClCompile Include="LevelMenuTests.cpp" />
+    <ClCompile Include="..\Editor\Gui\MainMenuBar.cpp" />
+    <ClCompile Include="..\Editor\Services\LocalizationService.cpp" />
     <ClCompile Include="..\Editor\Gui\Widgets\SearchBar.cpp" />
     <ClCompile Include="..\Editor\Gui\Core\GuiContext.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />

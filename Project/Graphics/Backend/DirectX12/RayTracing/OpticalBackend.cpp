@@ -10,6 +10,7 @@
 #include "Graphics/Resource/MeshResource.h"
 #include "Graphics/Model/ModelAssetData.h"
 #include "Graphics/Shader/Shader.h"
+#include "Graphics/Shader/ShaderCompiler.h"
 #include "Foundation/Logging/Logger.h"
 
 namespace NexusEngine {
@@ -45,7 +46,40 @@ namespace NexusEngine {
 		if(!result) return result;
 		result=factory->CreateConstantBuffer(probeConstants_,sizeof(Constants));if(!result) return result;
 		result=ddgi_.Initialize(device_.Get(),queue_,bindless_,*factory,shaders_);if(!result) return result;
+		result=InitializeTimings(frames);if(!result) return result;
 		return scene_.Initialize(device_.Get(), frames);
+	}
+	Result<void> OpticalBackend::InitializeTimings(uint32_t frames) {
+		auto hr=queue_->GetNativeQueue()->GetTimestampFrequency(&timestampFrequency_);
+		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70,hr,"GPU timestamp frequency unavailable."));
+		D3D12_QUERY_HEAP_DESC query{};query.Type=D3D12_QUERY_HEAP_TYPE_TIMESTAMP;query.Count=frames*5;
+		hr=device_->CreateQueryHeap(&query,IID_PPV_ARGS(&timingQueries_));
+		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70,hr,"GPU timing query allocation failed."));
+		D3D12_HEAP_PROPERTIES heap{};heap.Type=D3D12_HEAP_TYPE_READBACK;
+		D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;desc.Width=frames*5*sizeof(uint64_t);
+		desc.Height=1;desc.DepthOrArraySize=1;desc.MipLevels=1;desc.SampleDesc.Count=1;desc.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		hr=device_->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&timingReadback_));
+		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70,hr,"GPU timing readback allocation failed."));
+		timingReady_.assign(frames,0);timingRecorded_.assign(frames,0);return {};
+	}
+	void OpticalBackend::BeginTimings(ID3D12GraphicsCommandList* commands,uint32_t frame) {
+		// The frame slot is already fence-complete, like metadata_[frame]. Never wait for profiling.
+		if(timingReady_[frame]) {
+			const SIZE_T begin=frame*5*sizeof(uint64_t);D3D12_RANGE range{begin,begin+5*sizeof(uint64_t)};
+			void* data=nullptr;
+			if(SUCCEEDED(timingReadback_->Map(0,&range,&data))) {
+				std::array<uint64_t,5> ticks{};std::memcpy(ticks.data(),static_cast<uint8_t*>(data)+begin,sizeof(ticks));
+				D3D12_RANGE written{0,0};timingReadback_->Unmap(0,&written);
+				for(size_t i=0;i<4;++i) timings_.milliseconds[i]=static_cast<float>(static_cast<double>(ticks[i+1]-ticks[i])*1000.0/static_cast<double>(timestampFrequency_));
+				timings_.valid=true;
+			}
+		}
+		timingReady_[frame]=0;timingRecorded_[frame]=0;
+		commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frame*5);
+	}
+	void OpticalBackend::ResolveTimings(ID3D12GraphicsCommandList* commands,uint32_t frame) {
+		commands->ResolveQueryData(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frame*5,5,timingReadback_.Get(),frame*5*sizeof(uint64_t));
+		timingRecorded_[frame]=1;
 	}
 	Result<void> OpticalBackend::CreatePipeline() {
 		Shader shader;
@@ -126,14 +160,33 @@ namespace NexusEngine {
 		}
 		shaderTable_->Unmap(0, nullptr); pipelineReady_ = true; return {};
 	}
+	Result<void> OpticalBackend::CreateReflectionFilter() {
+		if(filterPipeline_) return {};
+		D3D12_ROOT_PARAMETER parameter{};
+		parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		parameter.Constants = {0,0,6};
+		D3D12_ROOT_SIGNATURE_DESC desc{1,&parameter,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED};
+		Microsoft::WRL::ComPtr<ID3DBlob> blob,error;
+		auto hr = D3D12SerializeRootSignature(&desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&error);
+		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70,hr,"Reflection filter root serialization failed."));
+		hr = device_->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&filterRoot_));
+		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70,hr,"Reflection filter root creation failed."));
+		auto code = ShaderCompiler{}.Compile({shaders_/L"RayTracing/ReflectionFilter.CS.hlsl",L"main",L"cs_6_6"});
+		if(!code) return std::unexpected(std::move(code.error()));
+		D3D12_COMPUTE_PIPELINE_STATE_DESC pipeline{};
+		pipeline.pRootSignature=filterRoot_.Get(); pipeline.CS={code->data(),code->size()};
+		hr = device_->CreateComputePipelineState(&pipeline,IID_PPV_ARGS(&filterPipeline_));
+		if(FAILED(hr)) return std::unexpected(MakeDirectXError(70,hr,"Reflection filter PSO creation failed."));
+		return {};
+	}
 	void OpticalBackend::ReleaseOutput() noexcept {
-		for(auto& view : {&outputSrv_, &outputUav_, &giSrv_, &giUav_}) {
+		for(auto& view : {&outputSrv_, &outputUav_, &giSrv_, &giUav_, &reflectionSrv_, &reflectionUav_, &guideSrv_, &guideUav_}) {
 			if(view->IsValid()) { auto result = bindless_->Retire(*view, queue_->GetCompletedFenceValue()); if(!result) NEXUS_LOG_ERROR("Optics", result.error().GetMessageText()); *view = {}; }
 		}
-		bindless_->CollectGarbage(queue_->GetCompletedFenceValue()); output_.Reset(); giOutput_.Reset();
+		bindless_->CollectGarbage(queue_->GetCompletedFenceValue()); output_.Reset(); giOutput_.Reset(); reflection_.Reset(); reflectionGuide_.Reset();
 	}
 	Result<void> OpticalBackend::Resize(uint32_t width, uint32_t height) {
-		if(output_ && outputSrv_.IsValid() && outputUav_.IsValid() && giOutput_ && giSrv_.IsValid() && giUav_.IsValid() && output_->GetDesc().Width == width && output_->GetDesc().Height == height) return {};
+		if(output_ && outputSrv_.IsValid() && outputUav_.IsValid() && giOutput_ && giSrv_.IsValid() && giUav_.IsValid() && reflection_ && reflectionGuide_ && reflectionSrv_.IsValid() && reflectionUav_.IsValid() && guideSrv_.IsValid() && guideUav_.IsValid() && output_->GetDesc().Width == width && output_->GetDesc().Height == height) return {};
 		auto wait = queue_->WaitForIdle(); if(!wait) return wait;
 		ReleaseOutput();
 		D3D12_RESOURCE_DESC desc {}; desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -156,6 +209,17 @@ namespace NexusEngine {
 		if(FAILED(giCreated)) return std::unexpected(MakeDirectXError(70, giCreated, "Diffuse GI texture allocation failed."));
 		view = bindless_->CreateShaderResourceView(giOutput_.Get(), srv); if(!view) return std::unexpected(std::move(view.error())); giSrv_ = *view;
 		view = bindless_->CreateUnorderedAccessView(giOutput_.Get(), nullptr, uav); if(!view) return std::unexpected(std::move(view.error())); giUav_ = *view;
+		for(uint32_t index=0;index<2;++index) {
+			auto& resource=index==0?reflection_:reflectionGuide_;
+			desc.Format=index==0?DXGI_FORMAT_R16G16B16A16_FLOAT:DXGI_FORMAT_R32G32B32A32_FLOAT;
+			auto created=device_->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,nullptr,IID_PPV_ARGS(&resource));
+			if(FAILED(created)) return std::unexpected(MakeDirectXError(70,created,"Reflection filter texture allocation failed."));
+			srv.Format=desc.Format; uav.Format=desc.Format;
+			view=bindless_->CreateShaderResourceView(resource.Get(),srv);if(!view) return std::unexpected(std::move(view.error()));
+			(index==0?reflectionSrv_:guideSrv_)=*view;
+			view=bindless_->CreateUnorderedAccessView(resource.Get(),nullptr,uav);if(!view) return std::unexpected(std::move(view.error()));
+			(index==0?reflectionUav_:guideUav_)=*view;
+		}
 		return {};
 	}
 	Result<OpticalBackend::GeometryViews*> OpticalBackend::GetViews(const MeshResource& mesh) {
@@ -180,7 +244,19 @@ namespace NexusEngine {
 	Result<ShaderResourceRef> OpticalBackend::Render(GraphicsContext& context, void* nativeCommands, const Matrix4x4& vp,
 		const DirectionalLightData& light, std::span<const OpticalDrawItem> draws,
 		std::span<const OpticalSurfaceMaterial> materials, const OpticalSettings& settings, const std::array<float, 3>& ambientIrradiance, const EnvironmentDrawData& environment, const GlobalIlluminationSettings& gi, const BakedLightingDrawData& baked, const DDGISettings& ddgi) {
-		const bool optical = std::any_of(materials.begin(), materials.end(), [](const auto& m) {return m.optics.IsOptical();});
+		bool optical=false,localReflections=false;
+		// Unused materials in the shared asset must not enable a full-screen ray/filter pass.
+		for(const auto& draw:draws) {
+			if(!draw.geometry.mesh || !draw.geometry.mesh->IsInitialized())
+				return std::unexpected(Error(ErrorCategory::Graphics,70,"Optical mesh is invalid."));
+			for(const auto& sub:draw.geometry.mesh->GetSubmeshes()) {
+				if(sub.materialSlot>=materials.size()) return std::unexpected(Error(ErrorCategory::Graphics,70,"Optical material slot out of range."));
+				const auto& m=materials[sub.materialSlot];
+				localReflections|=settings.enabled && settings.metallicReflections && m.pbr[0]>0 && (m.pbr[1]<.5f || m.metallicRoughnessTexture.IsValid());
+				optical|=m.optics.IsOptical();
+			}
+		}
+		optical|=localReflections;
 		if(((!settings.enabled || !optical) && !gi.enabled && !ddgi.enabled) || draws.empty()) return ShaderResourceRef {};
 		if(!supported_) {
 			if(!warned_) { NEXUS_LOG_WARNING("Optics", "DXR GI/optical rendering unavailable; using raster/IBL fallback."); warned_ = true; }
@@ -201,6 +277,7 @@ namespace NexusEngine {
 		if(!inverse) return std::unexpected(Error(ErrorCategory::Graphics, 70, "Optical camera matrix is singular."));
 		if(!pipelineReady_) { auto result = CreatePipeline(); if(!result) return std::unexpected(std::move(result.error())); }
 		const bool screenPass=(settings.enabled && optical) || gi.enabled;
+		if(localReflections) {auto filter=CreateReflectionFilter();if(!filter) return std::unexpected(std::move(filter.error()));}
 		if(screenPass) {auto resized = Resize(context.GetRenderWidth(), context.GetRenderHeight()); if(!resized) return std::unexpected(std::move(resized.error()));}
 		if(ddgi.enabled) {auto prepared=ddgi_.Prepare(ddgi);if(!prepared) return std::unexpected(std::move(prepared.error()));}
 		instances_.clear(); geometries_.clear(); accelerationDraws_.clear(); hitGroupOffsets_.clear();
@@ -273,8 +350,9 @@ namespace NexusEngine {
 		constants.indices = {outputUav_.index, static_cast<uint32_t>(instanceBytes), settings.maxBounces, settings.enabled ? 1U : 0U};
 		constants.giOptions = {gi.enabled ? 1U : 0U, gi.samplesPerPixel, gi.maxBounces, giUav_.index};
 		constants.giParameters[0] = gi.intensity;
+		constants.reflectionTargets={reflectionUav_.index,guideUav_.index,localReflections?1U:0U,0};
 		constants.bakedLighting = baked;
-		constants.rays = {settings.rayBias, settings.rayDistance, 0, 0};
+		constants.rays = {settings.rayBias, settings.rayDistance, static_cast<float>(settings.reflectionSamples), settings.metallicReflections ? 1.f : 0.f};
 		std::copy(ambientIrradiance.begin(), ambientIrradiance.end(), constants.ambient.begin());
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> commands;
 		const auto queried = static_cast<ID3D12GraphicsCommandList*>(nativeCommands)->QueryInterface(IID_PPV_ARGS(&commands));
@@ -282,8 +360,11 @@ namespace NexusEngine {
 		// AS構築・描画より前に失敗し得る割り当てを済ませる。記録が破棄された場合は
 		// 完了callbackでCPU状態を復元し、提出した資源はフレームFenceまで保持する。
 		initialState_ = state_; recording_ = true;
+		const uint32_t timingBase=context.GetFrameIndex()*5;
+		BeginTimings(commands.Get(),context.GetFrameIndex());
 		auto update = scene_.Update(commands.Get(), context.GetFrameIndex(), accelerationDraws_, hitGroupOffsets_);
 		if(!update) return std::unexpected(std::move(update.error()));
+		commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+1);
 		const auto base = shaderTable_->GetGPUVirtualAddress();
 		D3D12_DISPATCH_RAYS_DESC probeDispatch {};
 		probeDispatch.MissShaderTable={base+64,64,64};probeDispatch.HitGroupTable={hitTable->GetGPUVirtualAddress(),hitTableBytes,64};
@@ -302,12 +383,19 @@ namespace NexusEngine {
 			commands->DispatchRays(&probeDispatch);
 			auto blended=ddgi_.Update(commands.Get(),context.GetFrameIndex());if(!blended) return std::unexpected(std::move(blended.error()));
 		}
-		if(!screenPass) return ShaderResourceRef {};
+		commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+2);
+		if(!screenPass) {
+			commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+3);
+			commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+4);
+			ResolveTimings(commands.Get(),context.GetFrameIndex());return ShaderResourceRef {};
+		}
 		constants.ddgi=ddgi.enabled?ddgi_.GetDrawData(ddgi.intensity):DDGIDrawData{};
 		auto written=constants_.Write(context.GetFrameIndex(),{reinterpret_cast<const uint8_t*>(&constants),sizeof(constants)});
 		if(!written) return std::unexpected(std::move(written.error()));
 		OutputBarrier(commands.Get(), output_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		OutputBarrier(commands.Get(), giOutput_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); state_ = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		OutputBarrier(commands.Get(), giOutput_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		OutputBarrier(commands.Get(), reflection_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		OutputBarrier(commands.Get(), reflectionGuide_.Get(), state_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); state_ = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		commands->SetComputeRootSignature(root_.Get()); commands->SetPipelineState1(pipeline_.Get());
 		commands->SetComputeRootConstantBufferView(0, constants_.GetGpuAddress(context.GetFrameIndex()));
 		commands->SetComputeRootShaderResourceView(1, scene_.GetTlasAddress(context.GetFrameIndex()));
@@ -317,6 +405,26 @@ namespace NexusEngine {
 		dispatch.HitGroupTable = {hitTable->GetGPUVirtualAddress(), hitTableBytes, 64};
 		dispatch.Width = context.GetRenderWidth(); dispatch.Height = context.GetRenderHeight(); dispatch.Depth = 1;
 		commands->DispatchRays(&dispatch);
+		commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+3);
+		if(localReflections) {
+		OutputBarrier(commands.Get(), reflection_.Get(), state_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		OutputBarrier(commands.Get(), reflectionGuide_.Get(), state_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		D3D12_RESOURCE_BARRIER ready{};ready.Type=D3D12_RESOURCE_BARRIER_TYPE_UAV;ready.UAV.pResource=output_.Get();
+		commands->ResourceBarrier(1,&ready);
+		const uint32_t filterConstants[]{reflectionSrv_.index,guideSrv_.index,outputUav_.index,dispatch.Width,dispatch.Height,settings.reflectionDenoising?1U:0U};
+		commands->SetComputeRootSignature(filterRoot_.Get());commands->SetPipelineState(filterPipeline_.Get());
+		commands->SetComputeRoot32BitConstants(0,6,filterConstants,0);
+		commands->Dispatch((dispatch.Width+7)/8,(dispatch.Height+7)/8,1);
+		commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+4);
+		ResolveTimings(commands.Get(),context.GetFrameIndex());
+		OutputBarrier(commands.Get(), reflection_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		OutputBarrier(commands.Get(), reflectionGuide_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		} else {
+			commands->EndQuery(timingQueries_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,timingBase+4);
+			ResolveTimings(commands.Get(),context.GetFrameIndex());
+			OutputBarrier(commands.Get(),reflection_.Get(),state_,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			OutputBarrier(commands.Get(),reflectionGuide_.Get(),state_,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		}
 		// UAVからSRVへ遷移し、Rasterが光学出力・GIを読む前に書き込みを完了させる。
 		OutputBarrier(commands.Get(), output_.Get(), state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		OutputBarrier(commands.Get(), giOutput_.Get(), state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -325,6 +433,8 @@ namespace NexusEngine {
 	void OpticalBackend::CompleteRecording(void* owner, bool submitted, uint32_t frame) noexcept {
 		auto& backend = *static_cast<OpticalBackend*>(owner);
 		backend.ddgi_.CompleteRecording(submitted);
+		if(backend.recording_ && frame<backend.timingReady_.size())
+			backend.timingReady_[frame]=submitted?backend.timingRecorded_[frame]:0;
 		if(backend.recording_ && !submitted) { backend.scene_.InvalidateRecording(frame); backend.state_ = backend.initialState_; }
 		backend.recording_ = false;
 	}
@@ -341,7 +451,8 @@ namespace NexusEngine {
 		}
 		ddgi_.Shutdown();probeConstants_.Shutdown();
 		views_.clear(); metadata_.clear(); hitTables_.clear(); activeGenerations_.clear(); scene_.Shutdown(); constants_.Shutdown();
-		shaderTable_.Reset(); pipeline_.Reset(); root_.Reset(); device_.Reset(); queue_ = nullptr; bindless_ = nullptr;
+		shaderTable_.Reset(); pipeline_.Reset(); root_.Reset(); filterPipeline_.Reset();filterRoot_.Reset();device_.Reset(); queue_ = nullptr; bindless_ = nullptr;
 		pipelineReady_ = false;
+		timingReadback_.Reset();timingQueries_.Reset();timingReady_.clear();timingRecorded_.clear();timings_={};
 	}
 }

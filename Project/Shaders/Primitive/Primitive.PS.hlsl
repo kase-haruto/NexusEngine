@@ -40,11 +40,11 @@ float3 SurfaceNormal(PSInput input) {
 
 float4 main(PSInput input) : SV_TARGET
 {
-    if (opticalRadianceIndex != 0 && environment.options.z == 0)
+    if (opticalRadianceIndex != 0 && (environment.options.z == 0 || environment.options.z == 2))
     {
         Texture2D<float4> radiance = ResourceDescriptorHeap[opticalRadianceIndex];
         const float4 optical = radiance.Load(int3(uint2(input.position.xy), 0));
-        if (optical.a > 0.5) return float4(clamp(ApplyDistanceFog(optical.rgb, input.worldPosition), 0, 65504), 1);
+        if (optical.a > 0.5) return float4(clamp(environment.options.z == 0 ? ApplyDistanceFog(optical.rgb, input.worldPosition) : optical.rgb, 0, 65504), 1);
     }
     Texture2D<float4> materialTexture = NexusGetTexture2D(textureIndex);
     SamplerState materialSampler = NexusGetSampler(samplerIndex);

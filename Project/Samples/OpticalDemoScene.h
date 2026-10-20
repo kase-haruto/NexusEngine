@@ -9,4 +9,6 @@ namespace NexusEngine {
 	struct OpticalSphereMaterialSlots { uint32_t mirror = 0, glass = 0; };
 	/** \brief 読み込み済みSponzaの既存Mesh/Nodeを保持し、独立Root Nodeの2つのSphereを追加する */
 	[[nodiscard]] Result<OpticalSphereMaterialSlots> AppendSponzaOpticalSpheres(ModelAssetData& model);
+	/** Independent roots for PBRTestLevel: floor, reference walls, 2x5 material spheres. */
+	[[nodiscard]] Result<void> AppendPBRTestScene(ModelAssetData& model);
 }

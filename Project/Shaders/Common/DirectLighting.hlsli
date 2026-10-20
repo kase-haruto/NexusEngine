@@ -9,6 +9,7 @@ float3 EvaluateDirectLighting(SurfaceData s, float3 v, float3 l, float3 radiance
     float3 f = FresnelSchlick(dot(v, h), lerp(0.04.xxx, s.baseColor, s.metallic));
     float dw = legacy ? pow(saturate(dot(s.normal, l) * 0.5 + 0.5), 2) : nl;
     float3 diffuse = (1 - f) * (1 - s.metallic) * LambertDiffuse(s.baseColor) * dw;
+    if(!legacy) diffuse *= BurleyDiffuseFactor(nl,nv,saturate(dot(l,h)),s.roughness);
     float3 specular = SpecularBRDF(saturate(dot(s.normal, h)), nv, nl, s.roughness, f) * nl;
     return (diffuse + specular) * radiance * saturate(visibility);
 }

@@ -35,6 +35,9 @@ namespace NexusEngine {
 	//	Win32ウィンドウを初期化する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> ProjectWindow::Initialize(const WindowDetail& detail) {
+		// 既にmanifest等で設定済みならACCESS_DENIEDになるため、その設定を尊重する。
+		if(!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) && GetLastError() != ERROR_ACCESS_DENIED)
+			NEXUS_LOG_WARNING("Window", "Per-monitor DPI awareness could not be enabled.");
 		// HWNDだけでなくクラス登録途中も初期化済みとみなし、二重登録を防止する。
 		if(window_ != nullptr || classRegistered_) {
 			return std::unexpected(Error(
@@ -225,6 +228,12 @@ namespace NexusEngine {
 			return 1;
 		}
 		switch(message) {
+		case WM_DPICHANGED: {
+			const auto* suggested = reinterpret_cast<const RECT*>(lParam);
+			if(suggested) SetWindowPos(window,nullptr,suggested->left,suggested->top,
+				suggested->right-suggested->left,suggested->bottom-suggested->top,SWP_NOZORDER | SWP_NOACTIVATE);
+			return 0;
+		}
 		case WM_SIZE:
 			// 最小化時の0サイズはSwapChainへ渡さず、復元後の有効サイズだけ通知する。
 			if(wParam != SIZE_MINIMIZED) {

@@ -4,6 +4,7 @@
 #include <climits>
 #include <cstring>
 #include <vector>
+#include "Foundation/Math/Quaternion.h"
 
 namespace NexusEngine::UI {
 namespace {
@@ -99,5 +100,21 @@ ItemResult PropertyEnum(const ItemOptions& options, int& value, std::span<const 
         ImGui::EndCombo();
     } else Tooltip(options);
     return result;
+}
+ItemResult PropertyRotation(const ItemOptions& options, std::array<float, 4>& value) {
+    const Quaternion q{value[0], value[1], value[2], value[3]};
+    constexpr float degrees = 57.29577951308232f;
+    std::array<float, 3> angles{
+        std::atan2(2*(q.w*q.x + q.y*q.z), 1 - 2*(q.x*q.x + q.y*q.y)) * degrees,
+        std::asin(std::clamp(2*(q.w*q.y - q.z*q.x), -1.0f, 1.0f)) * degrees,
+        std::atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z)) * degrees};
+    return DrawProperty(options, [&](const char* label) {
+        if(!ImGui::DragFloat3(label, angles.data(), 0.25f)) return false;
+        const auto rotation = Quaternion::FromEulerRadians({angles[0]/degrees, angles[1]/degrees, angles[2]/degrees});
+        value = {rotation.x, rotation.y, rotation.z, rotation.w}; return true;
+    });
+}
+ItemResult PropertyColor(const ItemOptions& options, std::array<float, 4>& value) {
+    return DrawProperty(options, [&](const char* label) { return ImGui::ColorEdit4(label, value.data()); });
 }
 }

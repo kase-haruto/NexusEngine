@@ -61,7 +61,7 @@ void EnvironmentLightingIntegration() {
     auto code=ShaderCompiler{}.Compile({L"Project/Tests/EnvironmentLightingTest.hlsl",L"main",L"cs_6_6"}); Check(code);
     D3D12_COMPUTE_PIPELINE_STATE_DESC pd {}; pd.pRootSignature=root.Get(); pd.CS={code->data(),code->size()};
     ComPtr<ID3D12PipelineState> pipeline; Native(test.device.GetDevice()->CreateComputePipelineState(&pd,IID_PPV_ARGS(&pipeline)));
-    D3D12_RESOURCE_DESC bd {}; bd.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER; bd.Width=32*16; bd.Height=1; bd.DepthOrArraySize=1; bd.MipLevels=1;
+    D3D12_RESOURCE_DESC bd {}; bd.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER; bd.Width=64*16; bd.Height=1; bd.DepthOrArraySize=1; bd.MipLevels=1;
     bd.SampleDesc.Count=1; bd.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR; bd.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     D3D12_HEAP_PROPERTIES hp {}; hp.Type=D3D12_HEAP_TYPE_DEFAULT;
     ComPtr<ID3D12Resource> output,readback; Native(test.device.GetDevice()->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&bd,D3D12_RESOURCE_STATE_COMMON,nullptr,IID_PPV_ARGS(&output)));
@@ -80,7 +80,7 @@ void EnvironmentLightingIntegration() {
         test.commands->ResourceBarrier(1,&b); test.commands->CopyResource(readback.Get(),output.Get());
         b.Transition.StateBefore=D3D12_RESOURCE_STATE_COPY_SOURCE; b.Transition.StateAfter=D3D12_RESOURCE_STATE_COMMON; test.commands->ResourceBarrier(1,&b);
         Native(test.commands->Close()); test.queue.Execute(test.commands.Get()); Check(test.queue.WaitForIdle());
-        std::array<std::array<float,4>,32> values; void* mapped=nullptr; Native(readback->Map(0,nullptr,&mapped));
+        std::array<std::array<float,4>,64> values; void* mapped=nullptr; Native(readback->Map(0,nullptr,&mapped));
         std::memcpy(values.data(),mapped,sizeof(values)); readback->Unmap(0,nullptr);
         for(auto value:values) for(float c:value) Require(std::isfinite(c),"Non-finite IBL/BRDF output.");
         return values;
@@ -95,6 +95,10 @@ void EnvironmentLightingIntegration() {
     Require(values[27]==values[28],"AO affected direct lighting.");
     Require(std::abs(values[29][0]-.2f)<1e-5f && std::abs(values[29][1]-.35f)<1e-5f && std::abs(values[30][0]-.6f)<1e-5f,"glTF MR/AO channel rules incorrect.");
     Require(values[31][0]==0,"Black metal received diffuse irradiance.");
+    Require(values[32][0]>.8f && values[32][0]>values[32][1] && values[32][1]>values[32][2] && values[32][3]==0,
+        "Fallback sky lost tinted metallic reflection or introduced metal diffuse.");
+    Require(values[33][0]<values[32][0] && values[33][0]>.3f,"Fallback sky ignored roughness.");
+    Require(values[34][0]==0 && values[35][0]==0,"Fallback reflection ignored AO or zero sky intensity.");
     settings.imagePath=directional; Check(lighting.Prepare(settings));
     auto next=lighting.GetDrawData(settings);
     Require(next.textures[3]==original.textures[3],"BRDF LUT was regenerated on reload.");

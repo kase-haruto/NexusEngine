@@ -23,6 +23,12 @@ public:
     PersistentId Primary() const { return ids_.empty() ? PersistentId{} : ids_.back(); }
     std::span<const PersistentId> All() const { return ids_; }
     void Clear() { ids_.clear(); }
+    /** \brief Undo復元や範囲選択のID集合を重複なく設定する */
+    void Replace(std::span<const PersistentId> ids) {
+        std::vector<PersistentId> replacement;
+        for(auto id : ids) if(id.IsValid() && std::ranges::find(replacement, id) == replacement.end()) replacement.push_back(id);
+        ids_ = std::move(replacement);
+    }
 private:
     std::vector<PersistentId> ids_; //< Worldをまたいで使わない永続ID集合
 };

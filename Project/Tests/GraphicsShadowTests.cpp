@@ -48,6 +48,7 @@ namespace NexusEngine {
 
 namespace {
 	using namespace NexusEngine;
+	bool performanceMeasurement=false;
 	using Microsoft::WRL::ComPtr;
 	void Require(bool condition, const char* message) { if(!condition) throw std::runtime_error(message); }
 	template<class T> void Check(const Result<T>& result) {
@@ -73,9 +74,9 @@ namespace {
 			// keeps its existing diagnostics policy; the native test fixture enables it explicitly.
 			ComPtr<ID3D12Debug1> debug;
 			Native(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
-			debug->EnableDebugLayer(); debug->SetEnableGPUBasedValidation(TRUE);
+			debug->EnableDebugLayer(); debug->SetEnableGPUBasedValidation(performanceMeasurement?FALSE:TRUE);
 			GraphicsDeviceDesc desc;
-			desc.useWarpAdapter = warp; desc.enableDebugLayer = true; desc.enableGpuBasedValidation = true;
+			desc.useWarpAdapter = warp; desc.enableDebugLayer = true; desc.enableGpuBasedValidation = !performanceMeasurement;
 			Check(device.Initialize(desc));
 			if(SUCCEEDED(device.GetDevice()->QueryInterface(IID_PPV_ARGS(&info)))) {
 				Native(info->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, FALSE));
@@ -230,9 +231,10 @@ namespace {
 	#include "GlobalIlluminationTests.inl"
 	#include "BakedLightingTests.inl"
 	#include "DDGITests.inl"
-	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0) {
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false) {
 		Fixture test(false, forceUnsupported, sponza);
-        const uint32_t width = sponza ? 384U : (opticalDemo ? 256U : 64U), height = sponza ? 216U : (opticalDemo ? 192U : 64U);
+        const uint32_t width = performanceMeasurement ? 1280U : (sponza || metalTest ? 384U : (opticalDemo ? 256U : 64U));
+        const uint32_t height = performanceMeasurement ? 720U : (sponza || metalTest ? 216U : (opticalDemo ? 192U : 64U));
         uint32_t glassSlot = kOpticalGlassMaterial;
         if(sponza) {
             auto asset = ModelLoader{}.LoadGltf(L"Project/Resources/Assets/Models/Sponza/Sponza.gltf"); Check(asset);
@@ -278,6 +280,7 @@ namespace {
 		}
 		TransientDescriptorArena transient;
 		Check(transient.Initialize(test.device.GetDevice(), &test.descriptors.Resources(), 2, sponza ? 512U : 16U));
+		if(metalTest) { test.asset = {}; Check(AppendPBRTestScene(test.asset)); }
 		ModelInstance pose; Check(pose.Initialize(test.asset));
 		RenderScene scene; scene.camera = RenderCamera {};
         if(opticalDemo) {
@@ -301,6 +304,18 @@ namespace {
             if(giVariant<4 || giVariant==5) { scene.directionalLight.intensity=0; scene.ambientIrradiance=giVariant==1 || giVariant==5?std::array<float,3>{1,1,1}:std::array<float,3>{0,0,0}; }
         }
         scene.primitives.push_back({ {1}, Matrix4x4::Identity(), {1,1,1,1} });
+		if(metalTest) {
+			scene.primitives.clear();
+			for(uint32_t node=0;node<test.asset.nodes.size();++node)
+				scene.primitives.push_back({{uint64_t(node)+1},Matrix4x4::Identity(),{1,1,1,1},node});
+			scene.camera->viewMatrix = *TryInverse(MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({.34906585f,0,0}),{0,5,-10}));
+			scene.camera->projectionMatrix = MakePerspectiveFovMatrix(1.04719755f,static_cast<float>(width)/height,.1f,100);
+			scene.camera->viewProjectionMatrix = Multiply(scene.camera->viewMatrix,scene.camera->projectionMatrix);
+			scene.directionalLight.direction = {-.4f,1,-.6f}; scene.directionalLight.intensity = 5;
+			scene.ambientIrradiance = {1.5f,1.8f,2.4f};
+			scene.environment.imagePath=L"Project/Resources/Assets/Environments/PBRStudio.hdr";
+			scene.directionalLight.intensity=2;
+		}
 		if(bakedVariant) {
 			scene.bakedLighting.cachePath=L"Generated/BakedGI"+std::to_wstring(bakedVariant)+L".nxgi";
 			scene.bakedLighting.samples=128;scene.bakedLighting.probeCounts={4,4,4};
@@ -409,6 +424,107 @@ namespace {
         }
 		if(bakedVariant) return ValidateBakedIntegration(bakedVariant,scene,renderer,render,test,depth,rtv,transient,width,height);
 		if(ddgiVariant) return ValidateDDGIIntegration(ddgiVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
+        if(shadeTest) {
+            scene.environment.debugMode=LightingDebugMode::Indirect;
+            scene.ddgi.enabled=true;scene.ddgi.hysteresis=.8f;
+            scene.ambientIrradiance={1.5f,1.8f,2.4f};
+            for(uint32_t n=0;n<16;++n) render(ShadowMode::Auto,false);
+            auto before=render(ShadowMode::Auto,false);
+            scene.ambientIrradiance={4,4.8f,6.4f};scene.ddgi.intensity=1.8f;scene.ddgi.raysPerProbe=64;
+            scene.ddgi.origin={-12,.25f,-5.5f};scene.ddgi.spacing={1.6f,2,1.5f};scene.ddgi.counts={16,6,8};
+            ++scene.ddgi.revision;
+            for(uint32_t n=0;n<16;++n) render(ShadowMode::Auto,false);
+            auto after=render(ShadowMode::Auto,false);
+            uint64_t oldLight=0,newLight=0;
+            for(size_t i=0;i<before.size();i+=4) for(size_t c=0;c<3;++c) {oldLight+=before[i+c];newLight+=after[i+c];}
+            Require(newLight>oldLight+oldLight/10,"Sponza indirect lighting did not brighten shaded geometry.");
+            Require(!renderer.IsGlobalIlluminationActive(),"Sponza dispatched pixel RTGI instead of probe GI.");
+            auto write=[&](const char* path,const auto& pixels) {
+                std::ofstream file(path,std::ios::binary);file << "P6\n" << width << ' ' << height << "\n255\n";
+                for(size_t i=0;i<pixels.size();i+=4) file.write(reinterpret_cast<const char*>(pixels.data()+i),3);
+            };
+            write("Generated/SponzaIndirectBefore.ppm",before);write("Generated/SponzaIndirectAfter.ppm",after);
+            Check(test.queue.WaitForIdle());renderer.Shutdown();test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv));transient.Shutdown();test.Validate();
+            std::cout << "Sponza indirect RGB sum: before=" << oldLight << " after=" << newLight << '\n';
+            return after;
+        }
+        if(metalTest) {
+            OpticalSettings settings; settings.enabled=false; Check(renderer.GetOptics().SetSettings(settings));
+            auto fallback=render(ShadowMode::Auto,false);
+            settings.enabled=true; Check(renderer.GetOptics().SetSettings(settings));
+            auto traced=render(ShadowMode::Auto,false);
+            for(uint32_t warm=0;warm<3;++warm) render(ShadowMode::Auto,false);
+            auto timing=renderer.GetOptics().GetGpuTimings();
+            if(!forceUnsupported) {
+                Require(timing.valid,"GPU pass timings were not resolved from a completed frame.");
+                for(float value:timing.milliseconds) Require(std::isfinite(value) && value>=0,"Invalid GPU timing.");
+                std::cout << "GPU default (ms): AS=" << timing.milliseconds[0] << " DDGI=" << timing.milliseconds[1]
+                    << " reflection=" << timing.milliseconds[2] << " filter=" << timing.milliseconds[3] << '\n';
+                settings.reflectionSamples=32;Check(renderer.GetOptics().SetSettings(settings));
+                for(uint32_t warm=0;warm<3;++warm) render(ShadowMode::Auto,false);
+                const auto high=renderer.GetOptics().GetGpuTimings();
+                std::cout << "GPU 32 samples (ms): reflection=" << high.milliseconds[2] << " filter=" << high.milliseconds[3] << '\n';
+                if(performanceMeasurement) {
+                    const auto measure=[&](uint32_t samples) {
+                        settings.reflectionSamples=samples;Check(renderer.GetOptics().SetSettings(settings));
+                        for(uint32_t warm=0;warm<8;++warm) render(ShadowMode::Auto,false);
+                        std::array<double,4> mean{};
+                        for(uint32_t frame=0;frame<24;++frame) {
+                            render(ShadowMode::Auto,false);
+                            const auto completed=renderer.GetOptics().GetGpuTimings();
+                            for(size_t p=0;p<4;++p) mean[p]+=completed.milliseconds[p]/24.0;
+                        }
+                        std::cout << "GPU mean 1280x720 samples=" << samples << " AS=" << mean[0]
+                            << " DDGI=" << mean[1] << " reflection=" << mean[2] << " filter=" << mean[3] << '\n';
+                    };
+                    measure(32);measure(4);measure(32);
+                }
+            }
+            settings.reflectionSamples=4;settings.reflectionDenoising=false;Check(renderer.GetOptics().SetSettings(settings));
+            const auto noisy=render(ShadowMode::Auto,false);
+            settings.reflectionDenoising=true;Check(renderer.GetOptics().SetSettings(settings));
+            const auto filtered=render(ShadowMode::Auto,false);
+            settings.reflectionSamples=64;settings.reflectionDenoising=false;Check(renderer.GetOptics().SetSettings(settings));
+            const auto reference=render(ShadowMode::Auto,false);
+            uint64_t rawError=0,filteredError=0;
+            for(size_t i=0;i<reference.size();i+=4) for(size_t c=0;c<3;++c) {
+                rawError+=static_cast<uint64_t>(std::abs(int(noisy[i+c])-int(reference[i+c])));
+                filteredError+=static_cast<uint64_t>(std::abs(int(filtered[i+c])-int(reference[i+c])));
+                Require(filtered[i+3]==noisy[i+3],"Reflection denoising changed geometry coverage.");
+            }
+            std::cout << "Reflection error: raw=" << rawError << " filtered=" << filteredError << '\n';
+            Require(forceUnsupported ? noisy==filtered : filteredError<rawError,"Reflection denoising did not reduce error against 64-sample reference.");
+            settings={};Check(renderer.GetOptics().SetSettings(settings));
+            size_t changed=0;
+            for(size_t i=0;i<traced.size();i+=4) if(std::abs(int(traced[i])-int(fallback[i]))>4 || std::abs(int(traced[i+2])-int(fallback[i+2]))>4) ++changed;
+            Require(forceUnsupported ? changed==0 : changed>100,"Metal reflection did not replace IBL with local geometry, or unsupported fallback changed.");
+            scene.primitives[1].tint = {.01f,1,.01f,1};
+            auto recolored=render(ShadowMode::Auto,false);
+            size_t reflectedColorChanges=0;
+            for(size_t i=0;i<traced.size();i+=4) {
+                bool metalPixel=std::abs(int(traced[i])-int(fallback[i]))>4 || std::abs(int(traced[i+2])-int(fallback[i+2]))>4;
+                if(metalPixel && std::abs(int(recolored[i])-int(traced[i]))>2) ++reflectedColorChanges;
+            }
+            Require(forceUnsupported ? reflectedColorChanges==0 : reflectedColorChanges>10,"Metal reflection did not respond to reference wall tint.");
+            auto write = [&](const char* path,const auto& pixels) {
+                std::ofstream file(path,std::ios::binary); file << "P6\n" << width << ' ' << height << "\n255\n";
+                for(size_t i=0;i<pixels.size();i+=4) file.write(reinterpret_cast<const char*>(pixels.data()+i),3);
+            };
+            if(!forceUnsupported) {write("Generated/PBRTestFallback.ppm",fallback);write("Generated/PBRTestReflections.ppm",traced);}
+            if(!forceUnsupported) {write("Generated/ReflectionNoisy.ppm",noisy);write("Generated/ReflectionDenoised.ppm",filtered);write("Generated/ReflectionReference.ppm",reference);}
+            scene.ddgi.enabled=true; scene.ddgi.origin={-6,0,-2}; scene.ddgi.counts={7,4,6};
+            for(uint32_t frame=0;frame<3;++frame) render(ShadowMode::Auto,false);
+            Require(renderer.GetOptics().IsDDGIActive()!=forceUnsupported,"Metal reflections lost DDGI or exposed unsupported history.");
+            if(!forceUnsupported) {
+                ++scene.ddgi.revision; render(ShadowMode::Auto,false);
+                Require(renderer.GetOptics().GetDDGIFrameCount()==1,"Level history reset retained previous DDGI lighting.");
+            }
+            Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
+            std::cout << "Metal reflection changed pixels=" << changed << " unsupported=" << forceUnsupported << '\n';
+            return traced;
+        }
         if(iblTest) {
             auto visible = [](const auto& pixels) { size_t count=0; for(size_t i=0;i<pixels.size();i+=4) if(pixels[i]+pixels[i+1]+pixels[i+2]>3) ++count; return count; };
             auto writeImage = [&](const std::filesystem::path& path,const auto& pixels) {
@@ -699,6 +815,25 @@ int main(int argc, char** argv) {
 			ForwardIntegration(false,false,false,0,false,false,5);
 			ForwardIntegration(true,false,false,0,false,false,1);
 			ForwardIntegration(false,true,false,0,false,false,4);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--sponza-shade") == 0) {
+			ForwardIntegration(false,true,true,0,false,false,0,0,4,0,false,true);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--ddgi-smoke") == 0) {
+			ForwardIntegration(false,false,false,0,false,false,0,0,4,2);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--pbr-performance") == 0) {
+			performanceMeasurement=true;
+			ForwardIntegration(false,false,false,0,false,false,0,0,4,0,true);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--metal") == 0) {
+			EnvironmentLightingIntegration();
+			ForwardIntegration(false,false,false,0,false,false,0,0,4,0,true);
+			ForwardIntegration(true,false,false,0,false,false,0,0,4,0,true);
 			return 0;
 		}
 		if(argc == 2 && std::strcmp(argv[1], "--ibl") == 0) {

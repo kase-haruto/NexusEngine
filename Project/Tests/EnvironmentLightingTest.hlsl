@@ -1,7 +1,7 @@
 #include "../Shaders/Common/PBR.hlsli"
 cbuffer TestConstants : register(b0) { EnvironmentData environment; };
 RWStructuredBuffer<float4> results : register(u0);
-[numthreads(32,1,1)]
+[numthreads(64,1,1)]
 void main(uint id : SV_DispatchThreadID) {
     float3 axes[6] = {float3(1,0,0),float3(-1,0,0),float3(0,1,0),float3(0,-1,0),float3(0,0,1),float3(0,0,-1)};
     float3 value = 0;
@@ -37,4 +37,16 @@ void main(uint id : SV_DispatchThreadID) {
         if(id==31) { s.baseColor=0; s.metallic=1; IndirectLighting indirect=EvaluateIndirectLighting(s,v,environment,0); value=indirect.diffuse; }
     }
     results[id]=float4(value,1);
+    if(id >= 32) {
+        EnvironmentData e = (EnvironmentData)0;
+        SurfaceData s = MakeSurface(float3(1,.71,.29),1,.05,float3(0,0,1),1,0);
+        if(id == 33) s.roughness = .95;
+        if(id == 34) s.ambientOcclusion = 0;
+        IndirectLighting indirect = EvaluateIndirectLighting(s,float3(0,0,1),e,NexusPi.xxx);
+        results[id] = float4(indirect.specular,indirect.diffuse.r);
+        if(id == 35) {
+            indirect = EvaluateIndirectLighting(s,float3(0,0,1),e,0);
+            results[id] = float4(indirect.specular,0);
+        }
+    }
 }

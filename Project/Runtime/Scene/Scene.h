@@ -37,6 +37,9 @@ namespace NexusEngine {
 		Scene(Scene&&) = delete;
 		Scene& operator=(Scene&&) = delete;
 
+		/** \brief 全ComponentとEntity配置を複製する。複製不可の型があれば元を変更せず空を返す */
+		[[nodiscard]] std::unique_ptr<Scene> Clone() const;
+
 		/**
 		 * \brief NameとTransformを持つEntityを生成する
 		 * \param name Entityの初期表示名

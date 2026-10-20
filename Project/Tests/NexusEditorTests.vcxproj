@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{20AF24E5-0D55-4574-824D-C3BC565128A1}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup><OutDir>$(ProjectDir)..\..\Generated\Outputs\EditorTests\</OutDir><IntDir>$(ProjectDir)..\..\Generated\obj\EditorTests\</IntDir></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><LanguageStandard>stdcpp23</LanguageStandard><PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>imm32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="EditorServicesTests.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
+    <ClCompile Include="..\Foundation\Error\Error.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />
+    <ClCompile Include="..\Runtime\Scene\SystemScheduler.cpp" />
+    <ClCompile Include="..\Runtime\Scene\TransformSystem.cpp" />
+    <ClCompile Include="..\Runtime\Scene\TransformUpdateSystem.cpp" />
+    <ClCompile Include="..\Runtime\Level\Level.cpp" />
+    <ClCompile Include="..\Runtime\Level\LevelSerializer.cpp" />
+    <ClCompile Include="..\Runtime\Rendering\RenderSceneExtractor.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <ClCompile Include="..\Editor\Core\EditorSession.cpp" />
+    <ClCompile Include="..\Editor\Services\PropertyEditService.cpp" />
+    <ClCompile Include="..\Editor\Services\SceneEditService.cpp" />
+    <ClCompile Include="..\Editor\Services\EditorDocumentService.cpp" />
+    <ClCompile Include="..\Runtime\Level\LevelDocument.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\PanelRegistry.cpp" />
+    <ClCompile Include="..\Editor\Services\LocalizationService.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui_widgets.cpp" />
+  </ItemGroup>
+  <ItemGroup><ClCompile Include="..\Editor\Gui\ViewportTools.cpp" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Editor\Core\EditorWorkspace.cpp" />
+    <ClCompile Include="..\Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="..\Editor\Services\EditorSettings.cpp" />
+    <ClCompile Include="..\Editor\Gui\MainMenuBar.cpp" />
+    <ClCompile Include="..\Editor\Gui\DockingLayout.cpp" />
+    <ClCompile Include="..\Editor\Gui\EditorChrome.cpp" />
+    <ClCompile Include="..\Editor\Gui\PropertyDrawerRegistry.cpp" />
+    <ClCompile Include="..\Editor\Gui\Widgets\PropertyWidgets.cpp" />
+    <ClCompile Include="..\Editor\Gui\Widgets\SearchBar.cpp" />
+    <ClCompile Include="..\Editor\Gui\Core\GuiContext.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\OutlinerPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\DetailsPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\UtilityPanels.cpp" />
+    <ClCompile Include="..\Editor\ImGui\ImGuiStyle.cpp" />
+    <ClCompile Include="..\Editor\Runtime\ViewportSession.cpp" />
+    <ClCompile Include="..\Foundation\IPC\RuntimeProtocol.cpp" />
+    <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
+    <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\DebugOutputLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\LogTextFormatter.cpp" />
+    <ClCompile Include="..\Foundation\Utility\String\ConvertString.cpp" />
+  </ItemGroup>
+</Project>

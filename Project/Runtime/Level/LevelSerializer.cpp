@@ -27,7 +27,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 4;
+		constexpr uint32_t kFormatVersion = 6;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -61,6 +61,8 @@ namespace NexusEngine {
 	}
 
 	Result<void> LevelSerializer::Save(const std::filesystem::path& path, Level& level) {
+		if(level.Lighting() && !level.Lighting()->IsValid())
+			return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Level lighting is invalid."));
 		Scene* scene = level.GetScene();
 		if(scene == nullptr) {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Cannot serialize an unloaded level."));
@@ -105,6 +107,20 @@ namespace NexusEngine {
 		output << "NEXUS_LEVEL " << kFormatVersion << '\n';
 		output << "LEVEL " << std::quoted(level.GetName()) << '\n';
 		output << std::setprecision(9);
+		output << "LIGHTING " << level.Lighting().has_value();
+		if(const auto& lighting=level.Lighting()) {
+			for(float value:lighting->skyIrradiance) output << ' ' << value;
+			output << ' ' << lighting->probes.intensity;
+			for(float value:lighting->probes.origin) output << ' ' << value;
+			for(float value:lighting->probes.spacing) output << ' ' << value;
+			for(uint32_t value:lighting->probes.counts) output << ' ' << value;
+			output << ' ' << lighting->probes.raysPerProbe;
+		}
+		output << '\n';
+		const auto environment=level.Lighting()?level.Lighting()->environment:EnvironmentLightingData{};
+		const auto utf8=environment.imagePath.u8string();
+		output << "ENVIRONMENT " << std::quoted(std::string(reinterpret_cast<const char*>(utf8.data()),utf8.size()))
+			<< ' ' << environment.intensity << ' ' << environment.rotation << '\n';
 
 		// EntityIdは実行ごとに変わるため一切書かず、PersistentIdを参照の唯一の鍵にする。
 		scene->ForEach<PersistentIdComponent, NameComponent, TransformComponent>(
@@ -167,6 +183,33 @@ namespace NexusEngine {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Level header or version is invalid."));
 		}
 
+		std::optional<LevelLightingSettings> lighting;
+		if(version>=5) {
+			bool present=false;
+			if(!(input >> token >> present) || token!="LIGHTING")
+				return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Level lighting record is missing."));
+			if(present) {
+				lighting.emplace();
+				for(float& value:lighting->skyIrradiance) input >> value;
+				input >> lighting->probes.intensity;
+				for(float& value:lighting->probes.origin) input >> value;
+				for(float& value:lighting->probes.spacing) input >> value;
+				for(uint32_t& value:lighting->probes.counts) input >> value;
+				input >> lighting->probes.raysPerProbe;
+				if(!input || !lighting->IsValid()) return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Level lighting values are invalid."));
+			}
+		}
+		if(version>=6) {
+			std::string imagePath;float intensity=1,rotation=0;
+			if(!(input >> token >> std::quoted(imagePath) >> intensity >> rotation) || token!="ENVIRONMENT" ||
+				!std::isfinite(intensity) || intensity<0 || !std::isfinite(rotation))
+				return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Invalid Level environment."));
+			if(!imagePath.empty()) {
+				if(!lighting) lighting.emplace();
+				lighting->environment.imagePath=std::filesystem::path{std::u8string(reinterpret_cast<const char8_t*>(imagePath.data()),imagePath.size())};
+				lighting->environment.intensity=intensity;lighting->environment.rotation=rotation;
+			}
+		}
 		auto loadedScene = std::make_unique<Scene>();
 		std::map<PersistentKey, EntityId> loadedEntities;
 		std::vector<PendingParent> pendingParents;
@@ -281,6 +324,7 @@ namespace NexusEngine {
 		// 完全に検証できたWorldだけを公開するため、失敗時は既存Levelを変更しない。
 		level.scene_ = std::move(loadedScene);
 		level.name_ = std::move(loadedName);
+		level.lighting_ = std::move(lighting);
 		level.state_ = LevelState::Loaded;
 		return {};
 	}

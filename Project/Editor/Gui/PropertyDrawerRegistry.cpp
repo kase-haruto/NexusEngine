@@ -11,6 +11,14 @@ UI::ItemResult PropertyDrawerRegistry::Draw(const UI::ItemOptions& options, Prop
     return {};
 }
 void PropertyDrawerRegistry::RegisterDefaults() {
+    Register(PropertyKind::Rotation, [](const auto& options, auto& value, const auto&, const auto&) {
+        auto* typed = std::get_if<std::array<float, 4>>(&value);
+        return typed ? UI::PropertyRotation(options, *typed) : UI::ItemResult{};
+    });
+    Register(PropertyKind::Color, [](const auto& options, auto& value, const auto&, const auto&) {
+        auto* typed = std::get_if<std::array<float, 4>>(&value);
+        return typed ? UI::PropertyColor(options, *typed) : UI::ItemResult{};
+    });
     // ReflectionとWidget間の値変換だけを担当し、入力UIはWidgetsへ集約する。
     Register(PropertyKind::Bool, [](const auto& options, auto& value, const auto&, const auto&) {
         auto* typed = std::get_if<bool>(&value);

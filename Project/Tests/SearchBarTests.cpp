@@ -6,6 +6,7 @@
 #include <string>
 
 // GPU/Windowを使わず入力イベントを送り、外部状態とImGui登録の契約を検証する。
+void RunLevelMenuTests();
 int main() {
     ImGui::CreateContext();
     auto& io = ImGui::GetIO();
@@ -87,5 +88,6 @@ int main() {
     frame();
     assert(changed && first.size() == 9);
     ImGui::DestroyContext();
+    RunLevelMenuTests();
     std::cout << "SearchBar headless tests passed\n";
 }

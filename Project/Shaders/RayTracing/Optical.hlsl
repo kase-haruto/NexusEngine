@@ -24,6 +24,7 @@ cbuffer OpticalConstants : register(b0)
     BakedLightingData bakedLighting;
     DDGIData ddgi;
     uint4 probeTrace;
+    uint4 reflectionTargets;
 };
 
 struct Surface
@@ -49,6 +50,36 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
 {
     const uint instance = InstanceID() * 80;
     const uint geometry = geometryByteOffset + geometryRecordIndex * 144;
+    // A primary visibility ray needs no full material evaluation on an ordinary non-metal.
+    // Secondary reflections and GI probes still collect all shading attributes.
+    if(payload.padding == 0xffffffffu) {
+        float2 optics = asfloat(surfaceData.Load2(geometry+48));
+        if(all(optics == 0)) {
+            float2 mr = asfloat(surfaceData.Load2(geometry+80));
+            bool reject = mr.x == 0 || rayParameters.w == 0 || reflectionTargets.z == 0;
+            if(!reject) {
+                uint4 streams=surfaceData.Load4(geometry), range=surfaceData.Load4(geometry+16);
+                ByteAddressBuffer vb=ResourceDescriptorHeap[NonUniformResourceIndex(streams.x)];
+                ByteAddressBuffer ib=ResourceDescriptorHeap[NonUniformResourceIndex(streams.y)];
+                uint start=range.x+PrimitiveIndex()*3;
+                uint3 indices=uint3(ReadIndex(ib,start,streams.w),ReadIndex(ib,start+1,streams.w),ReadIndex(ib,start+2,streams.w))+range.y;
+                float3 bary=float3(1-attr.barycentrics.x-attr.barycentrics.y,attr.barycentrics);
+                float2 uv=asfloat(vb.Load2(indices.x*streams.z+24))*bary.x +
+                    asfloat(vb.Load2(indices.y*streams.z+24))*bary.y + asfloat(vb.Load2(indices.z*streams.z+24))*bary.z;
+                uint4 maps=surfaceData.Load4(geometry+96);
+                float4 texel=1;
+                if(maps.z!=0) {
+                    Texture2D<float4> map=ResourceDescriptorHeap[NonUniformResourceIndex(maps.z)];
+                    SamplerState state=SamplerDescriptorHeap[NonUniformResourceIndex(maps.w)];
+                    texel=map.SampleLevel(state,uv,0);
+                }
+                mr=MaterialMetallicRoughness(mr,texel);
+                reject=mr.x==0 || mr.y>=.5;
+            }
+            if(reject) {payload=(Surface)0;payload.hit=1;payload.distance=RayTCurrent();return;}
+        }
+    }
+    payload.padding = geometryRecordIndex + 1;
     const uint4 buffers = surfaceData.Load4(geometry);
     const uint4 draw = surfaceData.Load4(geometry + 16);
     ByteAddressBuffer vertices = ResourceDescriptorHeap[NonUniformResourceIndex(buffers.x)];
@@ -143,9 +174,10 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
 [shader("miss")]
 void OpticalMiss(inout Surface payload) { payload.hit = 0; }
 
-Surface Intersect(float3 origin, float3 direction)
+Surface Intersect(float3 origin, float3 direction, bool primaryVisibility = false)
 {
     Surface surface = (Surface)0;
+    if(primaryVisibility && giOptions.x == 0) surface.padding=0xffffffffu;
     RayDesc ray; ray.Origin = origin; ray.Direction = direction;
     ray.TMin = rayParameters.x; ray.TMax = rayParameters.y;
     TraceRay(opticalScene, RAY_FLAG_FORCE_OPAQUE, 255, 0, 1, 0, ray, surface);
@@ -155,7 +187,7 @@ Surface Intersect(float3 origin, float3 direction)
 float3 Environment(float3 direction)
 {
     if(environment.options.y != 0) return SampleEnvironment(direction, environment);
-    return lerp(float3(0.08, 0.11, 0.16), float3(0.45, 0.65, 0.95), saturate(direction.y * 0.5 + 0.5));
+    return ambientIrradiance.rgb / NexusPi;
 }
 float3 Offset(float3 position, float3 normal, float3 direction)
 {
@@ -171,6 +203,48 @@ struct Path
     float medium; uint depth;
 };
 
+float3 MetalReflectedRadiance(Surface receiver, float3 position, float3 v, uint2 pixel) {
+    float3 n = receiver.normal, sum = 0;
+    float nv = saturate(dot(n, v));
+    float3 f0 = lerp(.04.xxx, receiver.color, receiver.metallic);
+    float3 t = normalize(cross(abs(n.z) < .999 ? float3(0,0,1) : float3(1,0,0), n));
+    // Deterministic spatial samples; a separate edge-aware pass filters specular radiance.
+    const uint samples = receiver.roughness < .08 ? 1u : clamp(uint(rayParameters.z),1u,64u);
+    float shift = GIHash(pixel.x + pixel.y * DispatchRaysDimensions().x) * 2.3283064365386963e-10;
+    for(uint i = 0; i < samples; ++i) {
+        float2 xi = float2((i + .5) / samples, frac(reversebits(i) * 2.3283064365386963e-10 + shift));
+        float a = receiver.roughness * receiver.roughness;
+        float ct = sqrt((1 - xi.x) / (1 + (a * a - 1) * xi.x));
+        float st = sqrt(saturate(1 - ct * ct)), phi = 2 * NexusPi * xi.y;
+        float3 h = t * (st * cos(phi)) + cross(n,t) * (st * sin(phi)) + n * ct;
+        if(receiver.roughness < .08) h=n; // Stable polished reflection; avoid per-pixel random sparkle.
+        float3 l = reflect(-v,h);
+        float nl = saturate(dot(n,l)), nh = saturate(dot(n,h)), vh = saturate(dot(v,h));
+        if(nl <= 0 || dot(receiver.geometricNormal,l) <= 0 || vh <= 0) continue;
+        float3 origin = Offset(position,receiver.geometricNormal,l);
+        Surface hit = Intersect(origin,l);
+        float3 incoming = Environment(l);
+        if(hit.hit != 0) {
+            float3 p = origin + l * hit.distance;
+            float3 normal = hit.front != 0 ? hit.normal : -hit.normal;
+            SurfaceData s = MakeSurface(hit.color,hit.metallic,hit.roughness,normal,hit.ao,hit.emissive);
+            float3 light = SafeNormalize(lightDirectionIntensity.xyz,float3(0,1,0));
+            float visible = !Occluded(Offset(p,hit.geometricNormal,light),light);
+            float4 gi = EvaluateBakedLighting(s,-l,p,0,bakedLighting,environment);
+            float4 dynamicGI = EvaluateDDGILighting(s,-l,p,ddgi,environment);
+            if(dynamicGI.a > .5) gi = dynamicGI;
+            EnvironmentData secondaryEnvironment = environment;
+            secondaryEnvironment.options.z = 0; // Primary diagnostics must not change reflected incident radiance.
+            incoming = EvaluatePBRLighting(s,-l,light,lightColor.rgb * max(lightDirectionIntensity.w,0),visible,
+                secondaryEnvironment,ambientIrradiance.rgb,gi);
+        }
+        // GGX BRDF * NdotL / (D * NdotH / (4 * VdotH)).
+        float weight = 4 * VisibilitySmith(nv,nl,receiver.roughness) * nl * vh / max(nh,1e-6);
+        sum += incoming * FresnelSchlick(vh,f0) * weight;
+    }
+    return sum / samples * receiver.ao;
+}
+
 [shader("raygeneration")]
 void OpticalRaygen()
 {
@@ -183,7 +257,13 @@ void OpticalRaygen()
     const float3 direction = normalize(farH.xyz / farH.w - nearPosition);
     RWTexture2D<float4> output = ResourceDescriptorHeap[outputIndex];
     RWTexture2D<float4> diffuseOutput = ResourceDescriptorHeap[giOptions.w];
-    const Surface primary = Intersect(nearPosition, direction);
+    RWTexture2D<float4> reflectionOutput = ResourceDescriptorHeap[reflectionTargets.x];
+    RWTexture2D<float4> guideOutput = ResourceDescriptorHeap[reflectionTargets.y];
+    if(reflectionTargets.z != 0) {
+        reflectionOutput[pixel] = 0;
+        guideOutput[pixel] = 0;
+    }
+    const Surface primary = Intersect(nearPosition, direction,true);
     float4 primaryGI = 0;
     const bool evaluateGI = giOptions.x != 0 && (environment.options.z == 0 || environment.options.z == 2 || environment.options.z == 11);
     if(primary.hit != 0 && evaluateGI) {
@@ -191,6 +271,27 @@ void OpticalRaygen()
         primaryGI = pureOptical ? float4(0,0,0,1) : EvaluateGI(primary, nearPosition + direction * primary.distance, -direction, pixel);
     }
     if(giOptions.x != 0) diffuseOutput[pixel] = float4(clamp(primaryGI.rgb, 0, 65504), primaryGI.a);
+    if(primary.hit != 0 && opticalEnabled != 0 && reflectionTargets.z != 0 && rayParameters.w != 0 && (environment.options.z == 0 || environment.options.z == 2) && primary.metallic > 0 && primary.roughness < .5 &&
+       primary.reflectivity == 0 && primary.transmission == 0 && primary.front != 0) {
+        float3 p = nearPosition + direction * primary.distance;
+        SurfaceData s = MakeSurface(primary.color,primary.metallic,primary.roughness,primary.normal,primary.ao,primary.emissive);
+        float3 light = SafeNormalize(lightDirectionIntensity.xyz,float3(0,1,0));
+        float visible = !Occluded(Offset(p,primary.geometricNormal,light),light);
+        float4 gi = EvaluateBakedLighting(s,-direction,p,0,bakedLighting,environment);
+        float4 dynamicGI = EvaluateDDGILighting(s,-direction,p,ddgi,environment);
+        if(dynamicGI.a > .5) gi = dynamicGI;
+        if(evaluateGI) gi = primaryGI;
+        IndirectLighting indirect = EvaluateIndirectLighting(s,-direction,environment,ambientIrradiance.rgb,gi);
+        float localWeight = 1 - smoothstep(.2,.5,primary.roughness);
+        float3 reflected = MetalReflectedRadiance(primary,p,-direction,pixel) * localWeight;
+        reflectionOutput[pixel] = float4(clamp(reflected,0,65504),primary.distance);
+        guideOutput[pixel] = float4(DDGIOctEncode(primary.normal),primary.roughness,float(primary.padding));
+        float3 radiance = indirect.diffuse + indirect.specular * (1-localWeight);
+        if(environment.options.z == 0) radiance += s.emissive +
+            EvaluateDirectLighting(s,-direction,light,lightColor.rgb * max(lightDirectionIntensity.w,0),visible,environment.options.w != 0);
+        output[pixel] = float4(clamp(radiance,0,65504),1);
+        return;
+    }
     if (primary.hit == 0 || opticalEnabled == 0 || environment.options.z != 0 || (primary.reflectivity == 0 && primary.transmission == 0))
     {
         output[pixel] = 0; // 通常pixelの最終合成はRasterの照明処理が担当する。

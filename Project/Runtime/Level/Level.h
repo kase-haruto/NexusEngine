@@ -4,6 +4,9 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <optional>
+#include "Graphics/Lighting/DDGISettings.h"
+#include "Graphics/Environment/EnvironmentLightingData.h"
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -12,6 +15,15 @@
 #include "Runtime/Scene/SystemScheduler.h"
 
 namespace NexusEngine {
+	struct LevelLightingSettings {
+		std::array<float,3> skyIrradiance{1.5f,1.8f,2.4f};
+		DDGISettings probes;
+		EnvironmentLightingData environment;
+		bool IsValid() const noexcept {
+			for(float value:skyIrradiance) if(!std::isfinite(value) || value<0 || value>1000) return false;
+			return probes.IsValid() && std::isfinite(environment.intensity) && environment.intensity>=0 && std::isfinite(environment.rotation);
+		}
+	};
 
 	enum class LevelState : uint8_t {
 		Unloaded,
@@ -47,6 +59,13 @@ namespace NexusEngine {
 		bool DestroyEntity(Entity entity);
 		/** \brief 保存IDを現在WorldのHandleへ解決する。Editor用cold path、O(Entity数) */
 		[[nodiscard]] Entity FindEntity(PersistentId id);
+		/** \brief 完成済みWorldへ交換する。古いWorldを返し、呼出側が寿命を管理する */
+		std::unique_ptr<Scene> ExchangeScene(std::unique_ptr<Scene> scene) noexcept {
+			if(!scene) return {};
+			scene_.swap(scene);
+			state_ = LevelState::Loaded;
+			return scene;
+		}
 		/** \brief 登録済みSystemを1 frame更新する */
 		[[nodiscard]] Result<void> Update(float deltaTime);
 
@@ -57,9 +76,12 @@ namespace NexusEngine {
 		[[nodiscard]] SystemScheduler&	 GetSystemScheduler() noexcept { return scheduler_; }
 
 		void SetName(const std::string& name) noexcept { name_ = name; }
+		std::optional<LevelLightingSettings>& Lighting() noexcept { return lighting_; }
+		const std::optional<LevelLightingSettings>& Lighting() const noexcept { return lighting_; }
 
 	private:
 		friend class LevelSerializer;
+		std::optional<LevelLightingSettings> lighting_;
 
 		std::string			   name_;						  //< Editorと診断に使うLevel名
 		std::unique_ptr<Scene> scene_;						  //< EntityとComponentを所有するECS World

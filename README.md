@@ -108,7 +108,12 @@ chore: ビルド設定を更新
 
 ## ドキュメント
 
-設計方針や各機能の仕様は、`Documents`ディレクトリに記録します。
+エディタの起動、編集操作、拡張方法、検証と制限は[Editor利用ガイド](Project/Docs/EditorUserGuide.md)を参照してください。
+
+設計方針や各機能の仕様は、`Project/Docs`ディレクトリに記録します。
+
+エディタの構成、問題点、改善優先順位、設計案、実装ロードマップは
+[Editor現状調査・設計レビュー](Project/Docs/EditorArchitectureReview.md)を参照してください。
 
 機能を追加する際は、可能な範囲で以下の内容を残します。
 

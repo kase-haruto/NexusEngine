@@ -21,6 +21,7 @@ namespace NexusEngine {
 	}
 
 	Result<void> Level::LoadEmpty() {
+		lighting_.reset();
 		scene_ = std::make_unique<Scene>();
 		state_ = LevelState::Loaded;
 		return {};
@@ -38,6 +39,7 @@ namespace NexusEngine {
 	}
 
 	void Level::Unload() noexcept {
+		lighting_.reset();
 		// World単位でStorageを解放すると、Entityごとの仮想Remove走査を避けてLevel破棄を線形解放にできる。
 		scene_.reset();
 		state_ = LevelState::Unloaded;

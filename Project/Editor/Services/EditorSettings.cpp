@@ -60,6 +60,8 @@ void EditorSettingsStore::Load(const std::filesystem::path& root) {
     if(e.contains("viewport")) editor.viewport = e.at("viewport") == "true";
     const auto u = Read(userDirectory_ / "User.settings");
     String(u, "language", user.language); String(u, "theme", user.theme);
+    String(u, "workspace", user.workspace);
+    if(user.workspace != "Lighting" && user.workspace != "Animation") user.workspace = "General";
     if(user.language != "ja") user.language = "en";
     if(user.theme != "Light") user.theme = "Dark";
     user.fontSize = Number(u, "fontSize", 18, 10, 40);
@@ -73,7 +75,7 @@ void EditorSettingsStore::Load(const std::filesystem::path& root) {
     }
 }
 bool EditorSettingsStore::SaveUser() const {
-    Values values {{"language", user.language}, {"theme", user.theme}, {"fontSize", std::to_string(user.fontSize)},
+    Values values {{"language", user.language}, {"theme", user.theme}, {"workspace", user.workspace}, {"fontSize", std::to_string(user.fontSize)},
         {"uiScale", std::to_string(user.uiScale)}, {"autoSaveLayout", user.autoSaveLayout ? "true" : "false"}};
     for(const auto& [key, open] : user.panels) values["panel." + key] = open ? "true" : "false";
     for(size_t i = 0; i < std::min<size_t>(user.recentLevels.size(), 10); ++i) values["recent." + std::to_string(i)] = user.recentLevels[i];

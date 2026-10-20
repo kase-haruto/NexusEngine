@@ -5,6 +5,19 @@
 #include <stdexcept>
 
 namespace NexusEngine {
+	std::unique_ptr<Scene> Scene::Clone() const {
+		if(iterationDepth_ != 0) return {};
+		auto copy = std::make_unique<Scene>();
+		copy->entitySlots_ = entitySlots_;
+		copy->freeEntityIndices_ = freeEntityIndices_;
+		copy->livingEntityCount_ = livingEntityCount_;
+		for(const auto& [type, storage] : componentStorages_) {
+			auto values = storage->Clone();
+			if(!values) return {};
+			copy->componentStorages_.emplace(type, std::move(values));
+		}
+		return copy;
+	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// NameとTransformを持つEntityを生成する

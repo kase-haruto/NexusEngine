@@ -13,6 +13,10 @@
 
 namespace NexusEngine {
 	class GraphicsContext;
+	struct OpticalGpuTimings {
+		std::array<float,4> milliseconds{}; //< AS, DDGI, screen reflections/optics, filter
+		bool valid=false;
+	};
 	class GraphicsResourceFactory;
 	struct OpticalSurfaceMaterial {
 		std::array<float, 4> color {1, 1, 1, 1};
@@ -32,6 +36,9 @@ namespace NexusEngine {
 		uint32_t maxBounces = 6; //< 入射/出射/内部反射を含む最大交差回数、1〜12
 		float rayBias = 0.001f;
 		float rayDistance = 1000;
+		bool metallicReflections = true; //< One-bounce GGX local reflections for ordinary metallic PBR.
+		uint32_t reflectionSamples = 4; //< Local reflection budget, 1-64. Rough lobes blend into prefiltered IBL.
+		bool reflectionDenoising = true; //< Depth/normal/material-aware spatial filter; no temporal trails.
 	};
 	/*-----------------------------------------------------------------------------------------
 	 * OpticalSystem
@@ -47,6 +54,7 @@ namespace NexusEngine {
 		/** \brief 有限値/範囲を検証して品質設定を変更する */
 		[[nodiscard]] Result<void> SetSettings(const OpticalSettings&);
 		[[nodiscard]] const OpticalSettings& GetSettings() const noexcept { return settings_; }
+		[[nodiscard]] OpticalGpuTimings GetGpuTimings() const noexcept;
 		/** \brief Camera rayから光学Materialの最終色を評価。alpha=1のpixelだけForwardへ合成する */
 		[[nodiscard]] Result<ShaderResourceRef> Render(GraphicsContext&, const Matrix4x4& viewProjection,
 			const DirectionalLightData&, std::span<const OpticalDrawItem>, std::span<const OpticalSurfaceMaterial>,

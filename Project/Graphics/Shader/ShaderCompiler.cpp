@@ -61,10 +61,8 @@ namespace NexusEngine {
 #if defined(_DEBUG) || defined(NEXUS_DEVELOP)
 		arguments.push_back(L"-Zi");
 		arguments.push_back(L"-Qembed_debug");
-		arguments.push_back(L"-Od");
-#else
-		arguments.push_back(L"-O3");
 #endif
+		arguments.push_back(desc.optimize ? L"-O3" : L"-Od");
 
 		// 標準Include HandlerによりShaderファイルからの相対#includeをDXCへ解決させる。
 		ComPtr<IDxcIncludeHandler> includeHandler;

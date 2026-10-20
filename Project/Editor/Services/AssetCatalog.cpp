@@ -28,7 +28,7 @@ std::vector<AssetEntry> AssetCatalog::List(const std::filesystem::path& path) co
     auto resolved = std::filesystem::weakly_canonical(path, error);
     if(error || !Contains(resolved)) return result;
     std::filesystem::directory_iterator iterator(resolved, std::filesystem::directory_options::skip_permission_denied, error), end;
-    for(; !error && iterator != end && result.size() < 4096; iterator.increment(error)) {
+    for(; !error && iterator != end; iterator.increment(error)) {
         auto canonical = std::filesystem::weakly_canonical(iterator->path(), error);
         if(error || !Contains(canonical)) { error.clear(); continue; }
         bool directory = iterator->is_directory(error);
@@ -43,5 +43,16 @@ std::vector<AssetEntry> AssetCatalog::List(const std::filesystem::path& path) co
     }
     std::ranges::sort(result, [](const auto& a, const auto& b) { return a.directory != b.directory ? a.directory : a.name < b.name; });
     return result;
+}
+std::shared_ptr<const std::vector<AssetEntry>> AssetCatalog::Snapshot(const std::filesystem::path& path) const {
+    const auto key = path.lexically_normal();
+    const auto now = std::chrono::steady_clock::now();
+    if(auto entry = cache_.find(key); entry != cache_.end() && entry->second.expires > now) return entry->second.entries;
+    auto entries = std::make_shared<const std::vector<AssetEntry>>(List(path));
+    if(cache_.size() == 128 && !cache_.contains(key)) {
+        auto oldest = std::min_element(cache_.begin(),cache_.end(),[](const auto& a, const auto& b) { return a.second.expires < b.second.expires; });
+        cache_.erase(oldest);
+    }
+    cache_[key] = {entries, now+std::chrono::seconds(2)}; return entries;
 }
 }

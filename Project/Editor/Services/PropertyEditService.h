@@ -1,7 +1,8 @@
 #pragma once
 #include "Runtime/Reflection/TypeRegistry.h"
 #include "Runtime/Level/Level.h"
-#include <deque>
+#include "EditorHistory.h"
+#include <span>
 
 namespace NexusEngine {
 struct PropertyHandle {
@@ -11,36 +12,43 @@ struct PropertyHandle {
 };
 /*-----------------------------------------------------------------------------------------
  * PropertyEditService
- * - Reflection経由で値を編集し、操作単位のUndo/Redoを提供する
- * - Level切替前にResetする。履歴内にはIDと値のみを保存する
+ * - Reflection経由の検証・複数対象編集・取消を共通履歴へ接続する
+ * - Levelより先にResetし、履歴には永続IDと値を保存する
  *---------------------------------------------------------------------------------------*/
 class PropertyEditService final {
 public:
     explicit PropertyEditService(const TypeRegistry& registry) : registry_(registry) {}
-    /** \brief World切替時に未確定編集と履歴を破棄する */
-    void Reset(Level* level) { level_ = level; undo_.clear(); redo_.clear(); pending_.reset(); }
-    /** \brief 現在Worldからプロパティを再解決して値を取得する */
+    /** \brief Document切替時に未確定操作と履歴を破棄する */
+    void Reset(Level* level) { pending_.clear(); history_.Reset(); level_ = level; }
     std::optional<PropertyValue> Read(const PropertyHandle& handle) const;
-    /** \brief Slider/Text操作の開始値を記録する */
-    void Begin(const PropertyHandle& handle);
-    /** \brief 検証付きの値更新をプレビューする */
-    bool Preview(const PropertyHandle& handle, const PropertyValue& value);
-    /** \brief 操作全体を1件の履歴へ確定する */
+    /** \brief 単一または複数のpropertyを一つの操作として開始する */
+    void Begin(const PropertyHandle& handle) { Begin(std::span(&handle, 1)); }
+    void Begin(std::span<const PropertyHandle> handles);
+    bool Preview(const PropertyHandle& handle, const PropertyValue& value) { return Preview(std::span(&handle, 1), value); }
+    /** \brief 全対象を検証し、失敗時はそのPreviewの前の値へ戻す */
+    bool Preview(std::span<const PropertyHandle> handles, const PropertyValue& value);
+    /** \brief 異なる型・値の複数propertyを同じtransactionとして更新する */
+    bool PreviewValues(std::span<const PropertyHandle> handles, std::span<const PropertyValue> values);
     void Commit();
-    bool Undo();
-    bool Redo();
-    bool CanUndo() const { return !pending_ && !undo_.empty(); }
-    bool CanRedo() const { return !pending_ && !redo_.empty(); }
-    size_t Revision() const { return revision_; }
-    bool HasPendingChanges() const { return pending_ && pending_->before != pending_->after; }
+    /** \brief 操作開始時の値へ戻す。失敗時は未確定状態を保持する */
+    bool Cancel();
+    bool Undo() { Commit(); return history_.Undo(); }
+    bool Redo() { Commit(); return history_.Redo(); }
+    bool CanUndo() const { return history_.CanUndo() || HasPendingChanges(); }
+    bool CanRedo() const { return pending_.empty() && history_.CanRedo(); }
+    size_t Revision() const { return history_.Revision(); }
+    bool HasPendingChanges() const;
+    bool IsDirty() const { return history_.IsDirty() || HasPendingChanges(); }
+    void MarkSaved() { Commit(); history_.MarkSaved(); }
+    EditorHistory& History() { return history_; }
 private:
     struct Edit { PropertyHandle handle; PropertyValue before, after; };
     const PropertyDescriptor* Resolve(const PropertyHandle& handle) const;
     bool Apply(const PropertyHandle& handle, const PropertyValue& value);
-    const TypeRegistry& registry_; //< 起動時登録した型情報
-    Level* level_ = nullptr; //< EditorSession所有、Resetで寿命同期
-    std::deque<Edit> undo_, redo_; //< 各最大256操作
-    std::optional<Edit> pending_; //< 編集中の開始値
-    size_t revision_ = 0; //< 保存後変更判定用
+    bool ApplyEdits(const std::vector<Edit>& edits, bool before);
+    const TypeRegistry& registry_; //< Workspace所有
+    Level* level_ = nullptr; //< Session所有。Worldのポインタをcacheしない
+    EditorHistory history_; //< 構造編集と共有する履歴
+    std::vector<Edit> pending_; //< 複数propertyの開始値と最新値
 };
 }

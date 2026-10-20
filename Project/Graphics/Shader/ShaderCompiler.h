@@ -12,6 +12,7 @@ namespace NexusEngine {
 		std::filesystem::path sourcePath; //< Compile対象HLSLのパス
 		std::wstring entryPoint;          //< Shader entry point名
 		std::wstring targetProfile;       //< 例: vs_6_0、ps_6_0
+		bool optimize = true; //< Shader debugging can opt out; CPU Debug need not disable GPU optimization.
 	};
 
 	/*-----------------------------------------------------------------------------------------

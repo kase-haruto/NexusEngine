@@ -502,4 +502,18 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <None Include="Shaders\Lighting\DDGIUpdate.hlsl" />
     <None Include="Shaders\RayTracing\DDGIProbe.hlsli" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Editor\Services\SceneEditService.cpp" />
+    <ClCompile Include="Editor\Services\EditorDocumentService.cpp" />
+    <ClCompile Include="Editor\Gui\EditorChrome.cpp" />
+    <ClInclude Include="Editor\Services\SceneEditService.h" />
+    <ClInclude Include="Editor\Services\EditorDocumentService.h" />
+    <ClInclude Include="Editor\Services\EditorHistory.h" />
+    <ClInclude Include="Editor\Services\NotificationService.h" />
+    <ClInclude Include="Editor\Gui\EditorChrome.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Editor\Gui\ViewportTools.cpp" />
+    <ClInclude Include="Editor\Gui\ViewportTools.h" />
+  </ItemGroup>
 </Project>

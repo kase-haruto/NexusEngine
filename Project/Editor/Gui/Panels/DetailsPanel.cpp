@@ -12,7 +12,7 @@ void DetailsPanel::Draw(const EditorContext& context) {
     auto id = context.selection.Primary();
     auto entity = level ? level->FindEntity(id) : Entity{};
     if(!entity.IsAlive()) { ImGui::TextUnformatted(context.text.Text("selection.empty").c_str()); return; }
-    if(context.selection.All().size() > 1) ImGui::TextUnformatted(context.text.Text("selection.primary").c_str());
+    if(context.selection.All().size() > 1) ImGui::TextUnformatted(context.text.Text("selection.multiple").c_str());
     // 別Entityの同じPropertyへ入力中のImGui状態を引き継がない。
     const auto entityId = std::to_string(id.high) + ":" + std::to_string(id.low);
     ImGui::PushID(entityId.c_str());
@@ -23,6 +23,15 @@ void DetailsPanel::Draw(const EditorContext& context) {
             for(const auto& descriptor : type.properties) {
                 PropertyHandle handle{id, typeId, descriptor.id};
                 if(auto value = context.properties.Read(handle)) {
+                    std::vector<PropertyHandle> handles;
+                    bool common = true, mixed = false;
+                    for(auto selected : context.selection.All()) {
+                        PropertyHandle target{selected, typeId, descriptor.id};
+                        auto other = context.properties.Read(target);
+                        if(!other) { common = false; break; }
+                        mixed |= *other != *value; handles.push_back(std::move(target));
+                    }
+                    if(!common) continue;
                     ImGui::PushID(descriptor.id.c_str());
                     const auto label = context.text.Text(descriptor.labelKey);
                     UI::ItemOptions options;
@@ -30,8 +39,9 @@ void DetailsPanel::Draw(const EditorContext& context) {
                     options.label = label;
                     options.enabled = static_cast<bool>(descriptor.set);
                     const auto result = context.drawers.Draw(options, *value, descriptor, context.text);
-                    if(UI::HasStatus(result.status, UI::ItemStatus::Activated)) context.properties.Begin(handle);
-                    if(result.Changed() && !context.properties.Preview(handle, *value))
+                    if(mixed) { ImGui::SameLine(); ImGui::TextDisabled("%s", context.text.Text("property.mixed").c_str()); }
+                    if(UI::HasStatus(result.status, UI::ItemStatus::Activated)) context.properties.Begin(handles);
+                    if(result.Changed() && !context.properties.Preview(handles, *value))
                         NEXUS_LOG_WARNING("Details", "Property validation rejected an edit.");
                     if(result.EditFinished()) context.properties.Commit();
                     ImGui::PopID();
