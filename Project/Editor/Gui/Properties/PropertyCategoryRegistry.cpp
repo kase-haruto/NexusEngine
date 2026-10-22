@@ -17,4 +17,9 @@ std::vector<const PropertyCategory*> PropertyCategoryRegistry::Available(const E
     for(const auto& category : categories_) if(category.isAvailable(context)) result.push_back(&category);
     return result;
 }
+bool PropertyCategoryRegistry::HasCategoryFor(std::string_view type, const EditorContext& context) const {
+    return std::ranges::any_of(categories_, [&](const auto& category) {
+        return std::ranges::find(category.componentTypes, type) != category.componentTypes.end() && category.isAvailable(context);
+    });
+}
 }

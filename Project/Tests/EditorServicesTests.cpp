@@ -17,7 +17,6 @@
 #include "Editor/Core/EditorWorkspace.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
-#include "Editor/Gui/Panels/PropertiesPanel.h"
 #include "Editor/Gui/Properties/MaterialPage.h"
 #include "Runtime/Level/LevelSerializer.h"
 #include "Editor/ImGui/ImGuiStyle.h"
@@ -543,6 +542,10 @@ void CacheAndWorkspaceIntegration() {
     // 個人設定はテスト専用ディレクトリへ隔離する。実利用者の設定は変更しない。
     wchar_t* previous = nullptr; size_t length = 0; _wdupenv_s(&previous,&length,L"LOCALAPPDATA");
     const auto user = std::filesystem::absolute("Generated/EditorTests/User").wstring(); _wputenv_s(L"LOCALAPPDATA",user.c_str());
+    // 旧Propertiesだけを表示していた設定を、Sceneや他の個人設定を変えずDetailsへ移行する。
+    EditorSettingsStore legacySettings; legacySettings.Load(std::filesystem::absolute("Project"));
+    legacySettings.user.panels["Details"] = false; legacySettings.user.panels["Properties"] = true;
+    assert(legacySettings.SaveUser());
     Fixture f;
     for(int i = 0; i < 10000; ++i) static_cast<void>(f.session.GetLevel()->CreateEntity("Entity " + std::to_string(i)));
     ImGui::CreateContext(); auto& io = ImGui::GetIO(); io.DisplaySize = {1600,1000}; io.IniFilename = nullptr;
@@ -561,9 +564,10 @@ void CacheAndWorkspaceIntegration() {
         assert(workspace.Commands().Execute("window.reset"));
         for(int i = 0; i < 4; ++i) frame();
         auto* detailsWindow = ImGui::FindWindowByName("###Details");
-        auto* propertiesWindow = ImGui::FindWindowByName("###Properties");
-        assert(detailsWindow && propertiesWindow && detailsWindow->DockNode && propertiesWindow->DockNode);
-        assert(detailsWindow->DockNode != propertiesWindow->DockNode);
+        assert(detailsWindow && detailsWindow->DockNode);
+        assert(!ImGui::FindWindowByName("###Properties"));
+        for(const auto& entry : workspace.Panels().Entries()) assert(entry.Id() != "Properties");
+        assert(detailsWindow->Active);
         auto* outlinerWindow = ImGui::FindWindowByName("###Outliner"); assert(outlinerWindow && outlinerWindow->Active);
         OutlinerPanel* outliner = nullptr;
         for(auto& entry : workspace.Panels().Entries()) if(entry.Id() == "Outliner") outliner = dynamic_cast<OutlinerPanel*>(entry.panel.get());
@@ -594,23 +598,25 @@ void CacheAndWorkspaceIntegration() {
         assert(workspace.Commands().Execute("workspace.Lighting")); frame();
         assert(workspace.Commands().Execute("workspace.General")); frame();
         workspace.Shutdown();
+        EditorSettingsStore migrated; migrated.Load(std::filesystem::absolute("Project"));
+        assert(!migrated.user.panels.contains("Properties") && migrated.user.panels.at("Details"));
     }
     ImGui::DestroyContext();
     _wputenv_s(L"LOCALAPPDATA",previous ? previous : L""); std::free(previous);
 }
 }
-#include "PropertiesPanelTests.inl"
+#include "DetailsCategoryTests.inl"
 int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     ComponentAndAssetEditing();
-    PropertiesPanelIntegration();
+    DetailsCategoryIntegration();
     AssetDropInteraction();
     GizmoWorldTransactions(); ImGuizmoInteraction();
     OffsetMeshGizmoInteraction();
     PropertyTransactions(); StructuralHistory(); DocumentsAndPlay(); HistoryBoundsAndCommands(); LazyPanelLifecycle();
     ViewportPickingAndValidation();
     CacheAndWorkspaceIntegration();
-    std::cout << "PASS: Properties/Details shared editing, category navigation/extensions, material source/undo/save, selection lifetime, offset-mesh pivot/rotation/scale, gizmo click capture over background, ImGuizmo mouse interaction, parent/multi-selection transforms, gizmo undo/cancel, component addition, asset round-trip/undo, model/texture variants, thumbnails, property transactions, rollback, structural undo, save protection, play isolation, history bounds, shortcuts, lazy panels, viewport picking, rotation/camera/light validation\n";
+    std::cout << "PASS: unified Details categories/header, component fallback/extensions, material source/undo/save, selection lifetime, offset-mesh pivot/rotation/scale, gizmo click capture over background, ImGuizmo mouse interaction, parent/multi-selection transforms, gizmo undo/cancel, component addition, asset round-trip/undo, model/texture variants, thumbnails, property transactions, rollback, structural undo, save protection, play isolation, history bounds, shortcuts, lazy panels, viewport picking, rotation/camera/light validation\n";
 }

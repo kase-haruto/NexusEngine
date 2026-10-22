@@ -160,12 +160,14 @@ glTF / GLB / OBJのMesh選択とBase Color画像の差替えに対応してい�
 Clipboard操作、Component削除、配列/構造体の汎用Drawer、Profilerと専門Asset Editorも今後の範囲です。
 これらを実装済みとしてUI上で有効化したり、Remote接続済みとして表示したりしません。
 
-## Propertiesウィンドウ
+## Detailsのカテゴリ編集
 
-WindowメニューのPropertiesから開けます。Detailsと別のDocking Windowで、Layout Reset時にはDetailsの下に配置されます。左の縦アイコンでObject・Material・Cameraを切り替え、アイコンにカーソルを置くと説明が表示されます。対象に対応するカテゴリだけが表示されます。
+編集窓口をDetailsへ統合しました。上部の名前欄とComponent追加はどのカテゴリでも表示されます。左の縦アイコンで「全般」「描画」「マテリアル」「カメラ」「ライト」「その他」を切り替えます。アイコンには説明Tooltipがあり、選択Entityに対応するカテゴリだけが表示されます。専用カテゴリのないComponentは「その他」へ自動表示されます。
+
+メッシュ・Node・描画の有効化・静的ライティングは「描画」、Transformは「全般」、PBR・Base Color画像・Tintは「マテリアル」で編集します。各ページのスクロール位置はカテゴリ別に保持します。Detailsは引き続き独立してDockできます。旧PropertiesウィンドウはWindowメニューから削除し、旧Propertiesだけを開いていた設定もDetailsへ移行します。保存済みDock配置はリセットしません。
 
 Materialでは主選択のEntityのSlotを選び、「元の材質からOverrideを作成」で編集を始めます。Base Color、Metallic、Roughness、Normal Scale、発光色、遮蔽強度を編集できます。共有モデルや他のEntityの材質は変わりません。変更はUndo/RedoとLevel保存に対応します。
 
 現在はEntityあたり1 SlotをOverrideします。Slotを変えると前のSlotのOverrideを置き換えます。Base Color画像とTintは従来どおりEntity全体に適用され、画像欄にはContent BrowserからDropできます。ほかの埋込画像はモデルから継承します。静的な間接光の変更には再ベイクが必要です。
 
-実装の依存関係、制約、新しい専門カテゴリの追加方法は[PropertiesPanel開発ノート](PropertiesPanel.md)を参照してください。
+実装の依存関係、制約、新しいカテゴリの追加方法は[Detailsカテゴリ編集の開発ノート](PropertiesPanel.md)を参照してください。

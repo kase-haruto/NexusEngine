@@ -1,4 +1,4 @@
-#include "PropertiesPanel.h"
+#include "PropertyCategoryView.h"
 #include "Editor/Services/PropertyEditService.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Core/EditorSession.h"
@@ -8,7 +8,7 @@ namespace NexusEngine {
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Entityの生ポインタを保存せず、毎frameカテゴリの可用性と主選択IDを解決する。
 ////////////////////////////////////////////////////////////////////////////////////////////
-void PropertiesPanel::Draw(const EditorContext& context) {
+void PropertyCategoryView::Draw(const EditorContext& context) {
     const auto available = registry_.Available(context);
     if(available.empty()) {
         activeCategoryId_.clear();

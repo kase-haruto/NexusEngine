@@ -81,6 +81,6 @@
     <ClCompile Include="..\Editor\Gui\Properties\PropertyCategoryRegistry.cpp" />
     <ClCompile Include="..\Editor\Gui\Properties\PropertyPages.cpp" />
     <ClCompile Include="..\Editor\Gui\Properties\MaterialPage.cpp" />
-    <ClCompile Include="..\Editor\Gui\Panels\PropertiesPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\Properties\PropertyCategoryView.cpp" />
 </ItemGroup>
 </Project>

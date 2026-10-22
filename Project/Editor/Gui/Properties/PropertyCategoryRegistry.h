@@ -12,6 +12,7 @@ struct PropertyCategory {
     std::function<bool(const EditorContext&)> isAvailable; //< 毎frame選択から判定する
     std::function<void(const EditorContext&)> drawPage; //< ページが必要な状態はcallback側で所有する
     std::function<void(ImDrawList&, ImVec2, float, ImU32)> drawIcon; //< 公開DrawList APIによる小アイコン
+    std::vector<std::string> componentTypes; //< 専用ページを持つ型ID。「その他」の自動分類に使用する
 };
 /*-----------------------------------------------------------------------------------------
  * PropertyCategoryRegistry
@@ -24,9 +25,11 @@ public:
     bool Register(PropertyCategory category);
     /** \brief 現在の選択に利用可能なカテゴリを登録順で返す。ポインタは次の登録まで有効 */
     std::vector<const PropertyCategory*> Available(const EditorContext& context) const;
+    /** \brief 指定Componentに専用カテゴリが登録されているかを調べる */
+    bool HasCategoryFor(std::string_view type, const EditorContext& context) const;
 private:
     std::vector<PropertyCategory> categories_; //< Workspace寿命内の登録情報
 };
-/** \brief Object / Material / Cameraページを登録する。Panel自身に具体型を持ち込まない */
+/** \brief 組み込みカテゴリと未分類Component用ページを登録する */
 void RegisterPropertyPages(PropertyCategoryRegistry& registry);
 }

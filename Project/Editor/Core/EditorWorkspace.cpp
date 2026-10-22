@@ -3,7 +3,6 @@
 #include "Editor/Gui/EditorChrome.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
-#include "Editor/Gui/Panels/PropertiesPanel.h"
 #include "Editor/Gui/Panels/UtilityPanels.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -23,6 +22,13 @@ EditorWorkspace::~EditorWorkspace() noexcept {
 }
 void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions) {
     settings_.Load(root); recent_ = settings_.user.recentLevels;
+    // 旧Propertiesだけを開いていた利用者も、統合先のDetailsへ移行する。
+    if(auto legacy = settings_.user.panels.find("Properties"); legacy != settings_.user.panels.end()) {
+        const auto details = settings_.user.panels.find("Details");
+        const bool detailsWasOpen = details == settings_.user.panels.end() || details->second;
+        settings_.user.panels["Details"] = detailsWasOpen || legacy->second;
+        settings_.user.panels.erase(legacy);
+    }
     if(!text_.Load(root / "Resources/Editor/Localization")) NEXUS_LOG_WARNING("Editor", "Localization dictionary unavailable.");
     text_.SetLanguage(settings_.user.language);
     RegisterSceneTypes(types_); drawers_.RegisterDefaults();
@@ -33,8 +39,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     auto sink = std::make_unique<BufferedLogSink>(logs_); logSink_ = sink.get();
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
     panels_.RegisterFactory("Outliner", "panel.outliner", [] { return std::make_unique<OutlinerPanel>(); });
-    panels_.RegisterFactory("Details", "panel.details", [] { return std::make_unique<DetailsPanel>(); });
-    panels_.RegisterFactory("Properties", "panel.properties", [this] { return std::make_unique<PropertiesPanel>(categories_); });
+    panels_.RegisterFactory("Details", "panel.details", [this] { return std::make_unique<DetailsPanel>(categories_); });
     panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_); }, settings_.editor.viewport);
     panels_.RegisterFactory("OutputLog", "panel.log", [this] { return std::make_unique<OutputLogPanel>(logs_); });
     panels_.RegisterFactory("Terminal", "panel.terminal", [this] { return std::make_unique<TerminalPanel>(console_); });
