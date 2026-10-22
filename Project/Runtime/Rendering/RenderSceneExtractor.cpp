@@ -71,6 +71,9 @@ namespace NexusEngine {
 					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint, primitive.nodeIndex });
 					auto& item = result.primitives.back();
 					item.staticLighting = primitive.staticLighting;
+                    item.meshAsset = primitive.meshAsset;
+                    item.baseColorTexture = primitive.baseColorTexture;
+                    item.material = primitive.material;
 					if(const auto* id = entity.GetComponent<PersistentIdComponent>()) {
 						// ECSの世代番号に依存せず、Levelの永続IDから照合キーを作る。
 						item.lightingId = id->value.high ^ (id->value.low * 1099511628211ull);

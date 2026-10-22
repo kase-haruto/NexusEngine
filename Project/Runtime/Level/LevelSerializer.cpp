@@ -27,7 +27,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 6;
+		constexpr uint32_t kFormatVersion = 8;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -51,8 +51,21 @@ namespace NexusEngine {
 
 		bool IsValid(const PrimitiveRenderComponent& primitive) {
 			for(float value : primitive.tint) if(!std::isfinite(value)) return false;
-			return true;
+            const auto valid = [](const std::string& path) {
+                return path.size() <= 4096 && path.find('\0') == path.npos && path.find('\n') == path.npos && path.find('\r') == path.npos;
+            };
+            return valid(primitive.meshAsset) && valid(primitive.baseColorTexture) && primitive.material.IsValid();
 		}
+
+        // v1〜7にはInstance材質がないため、既定のdisabledを保つ。
+        bool ReadMaterial(std::istream& input, MaterialOverride& material) {
+            input >> material.enabled >> material.slot;
+            for(float& value : material.baseColor) input >> value;
+            input >> material.metallic >> material.roughness >> material.normalScale;
+            for(float& value : material.emissive) input >> value;
+            input >> material.occlusionStrength;
+            return static_cast<bool>(input) && material.IsValid();
+        }
 
 		struct PendingParent {
 			EntityId child;       //< 新World内で生成された子Entity
@@ -149,7 +162,14 @@ namespace NexusEngine {
 				}
 				if(const auto* primitive = entity.GetComponent<PrimitiveRenderComponent>()) {
 					output << "PRIMITIVE 1 " << primitive->tint[0] << ' ' << primitive->tint[1] << ' '
-					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << ' ' << primitive->staticLighting << '\n';
+					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << ' ' << primitive->staticLighting
+                           << ' ' << std::quoted(primitive->meshAsset) << ' ' << std::quoted(primitive->baseColorTexture);
+                    const auto& material = primitive->material;
+                    output << ' ' << material.enabled << ' ' << material.slot;
+                    for(float value : material.baseColor) output << ' ' << value;
+                    output << ' ' << material.metallic << ' ' << material.roughness << ' ' << material.normalScale;
+                    for(float value : material.emissive) output << ' ' << value;
+                    output << ' ' << material.occlusionStrength << '\n';
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
@@ -275,6 +295,9 @@ namespace NexusEngine {
 				if(!(input >> primitive.tint[0] >> primitive.tint[1] >> primitive.tint[2] >> primitive.tint[3] >> primitive.enabled) ||
 				   (version >= 2 && !(input >> primitive.nodeIndex)) ||
 				   (version >= 4 && !(input >> primitive.staticLighting)) ||
+                   (version >= 7 && !(input >> std::quoted(primitive.meshAsset) >> std::quoted(primitive.baseColorTexture))) ||
+                   (version >= 8 && !ReadMaterial(input, primitive.material)) ||
+                   primitive.meshAsset.size() > 4096 || primitive.baseColorTexture.size() > 4096 ||
 				   !IsValid(primitive) ||
 				   entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));

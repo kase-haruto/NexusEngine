@@ -102,4 +102,5 @@
     <ClInclude Include="..\Graphics\Lighting\DDGISettings.h" />
   </ItemGroup>
   <ItemGroup><None Include="DDGITests.inl" /></ItemGroup>
+  <ItemGroup><ClCompile Include="..\Graphics\Backend\DirectX12\Selection\SelectionOutline.cpp" /></ItemGroup>
 </Project>

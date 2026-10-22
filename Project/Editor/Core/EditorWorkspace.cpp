@@ -3,6 +3,7 @@
 #include "Editor/Gui/EditorChrome.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
+#include "Editor/Gui/Panels/PropertiesPanel.h"
 #include "Editor/Gui/Panels/UtilityPanels.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -25,6 +26,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     if(!text_.Load(root / "Resources/Editor/Localization")) NEXUS_LOG_WARNING("Editor", "Localization dictionary unavailable.");
     text_.SetLanguage(settings_.user.language);
     RegisterSceneTypes(types_); drawers_.RegisterDefaults();
+    RegisterPropertyPages(categories_);
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     assets_ = std::make_unique<AssetCatalog>(root / std::filesystem::path{ConvertString(settings_.project.assetPath)});
     logs_ = std::make_shared<BufferedLogBuffer>();
@@ -32,6 +34,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
     panels_.RegisterFactory("Outliner", "panel.outliner", [] { return std::make_unique<OutlinerPanel>(); });
     panels_.RegisterFactory("Details", "panel.details", [] { return std::make_unique<DetailsPanel>(); });
+    panels_.RegisterFactory("Properties", "panel.properties", [this] { return std::make_unique<PropertiesPanel>(categories_); });
     panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_); }, settings_.editor.viewport);
     panels_.RegisterFactory("OutputLog", "panel.log", [this] { return std::make_unique<OutputLogPanel>(logs_); });
     panels_.RegisterFactory("Terminal", "panel.terminal", [this] { return std::make_unique<TerminalPanel>(console_); });
@@ -202,14 +205,15 @@ void EditorWorkspace::Draw() {
     DrawEditorToolbar(text_, commands_, activeLevel.empty() ? text_.Text("file.untitled") : activeLevel,
         documents_.IsDirty(), session_.IsPlaying(), session_.IsPaused());
     layout_.Draw();
-    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_};
+    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_};
     ImGui::BeginDisabled(session_.IsPlaying()); panels_.Draw(context); ImGui::EndDisabled();
+    viewportTools_.CompleteInteraction();
     if(previousSelection_ != session_.GetSelection()) { properties_.Commit(); previousSelection_ = session_.GetSelection(); }
-    if(!ImGui::IsAnyItemActive()) properties_.Commit();
+    if(!ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating()) properties_.Commit();
     if(ImGui::IsKeyPressed(ImGuiKey_Escape) && ImGui::IsAnyItemActive()) properties_.Cancel();
     DrawUnsavedDialog(); DrawFileDialog(); SynchronizeDocument(); ReportDocumentError();
     const auto& io = ImGui::GetIO();
-    if(!io.WantTextInput && !ImGui::IsAnyItemActive() && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+    if(!io.WantTextInput && !ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating() && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
         commands_.Dispatch(io.KeyCtrl, io.KeyShift, io.KeyAlt, [](int key) { return ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false); });
     if(showAbout_) { ImGui::OpenPopup("###About"); showAbout_ = false; }
     if(ImGui::BeginPopupModal(text_.Label("help.about", "About").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {

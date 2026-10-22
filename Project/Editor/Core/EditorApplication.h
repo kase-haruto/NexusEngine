@@ -7,7 +7,10 @@
 #include "EditorSession.h"
 #include "Graphics/Model/ModelAssetData.h"
 #include "Graphics/Model/ModelInstance.h"
+#include "Graphics/Model/ModelAssetLibrary.h"
+#include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
+#include <set>
 
 namespace NexusEngine {
 	class ShadowSystem;
@@ -81,6 +84,10 @@ namespace NexusEngine {
 
 	private:
 		size_t sceneGeneration_ = 0;
+        std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
+        std::unique_ptr<PrimitiveRenderer> replacementRenderer_; //< GraphicsSystem停止まで保持する交換Renderer
+        size_t uploadedAssetRevision_ = 1; //< GPUへ反映済みsnapshot
+        std::set<std::string> reportedAssetErrors_; //< 同じ欠損参照による毎Frameのログ連打を防ぐ
 		std::array<char, 1024> environmentPath_ {}; //< Editor入力。RendererはScene設定だけを参照する
 		std::array<char, 1024> bakedPath_ {}; //< ベイク成果物の入力パス。GPU参照は保持しない
 		GraphicsSystem* graphicsSystem_ = nullptr; //< Non-owning post-process controls.

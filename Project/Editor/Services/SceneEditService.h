@@ -17,6 +17,8 @@ public:
     bool DeleteSelection();
     /** \brief Local Transformを保って親を変更する。循環を拒否する */
     bool Reparent(PersistentId child, PersistentId parent);
+    /** \brief 選択集合で不足するComponentを一括追加し、共通履歴へ記録する */
+    bool AddComponent(const TypeDescriptor& type);
 private:
     bool Execute(std::string label, const std::function<bool(Level&)>& apply);
     EditorSession& session_; //< Worldと選択の所有者

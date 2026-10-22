@@ -1,7 +1,6 @@
 #include "ViewportTools.h"
-#include "Runtime/Scene/Components/HierarchyComponent.h"
-#include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -83,7 +82,7 @@ void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     frame.camera = RenderCamera{{}, *view, projection, Multiply(*view,projection)};
 }
 bool ViewportTools::Pick(float x, float y, bool toggle) {
-    if(session_.IsPlaying() || !frame_ || !frame_->camera || !model_ || !pose_ ||
+    if(session_.IsPlaying() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera || !model_ || !pose_ ||
         !std::isfinite(x) || !std::isfinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
     auto inverse = TryInverse(frame_->camera->viewProjectionMatrix);
     if(!inverse) return false;
@@ -94,6 +93,7 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
     const auto& transforms = pose_->GetNodeWorldTransforms();
     for(const auto& object : frame_->primitives) for(size_t node = 0; node < model_->nodes.size() && node < transforms.size(); ++node) {
         if(object.nodeIndex != PrimitiveRenderItem::kAllNodes && object.nodeIndex != node) continue;
+        if(node < object.nodeBegin || node >= object.nodeEnd) continue;
         for(auto meshIndex : model_->nodes[node].meshIndices) {
             if(meshIndex >= bounds_.size() || !bounds_[meshIndex].valid) continue;
             const auto& mesh = model_->meshes[meshIndex];
@@ -122,29 +122,66 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
     if(!toggle) session_.Selection().Clear(); return false;
 }
 void ViewportTools::DrawToolbar(const LocalizationService& text) {
+    ImGui::BeginDisabled(IsManipulating());
     static constexpr const char* keys[]{"viewport.translate","viewport.rotate","viewport.scale"};
     for(int i = 0; i < 3; ++i) {
         if(i) ImGui::SameLine();
         if(ImGui::RadioButton(text.Label(keys[i],keys[i]).c_str(),mode_ == i)) { properties_.Commit(); mode_ = i; }
     }
     ImGui::TextDisabled("%s",text.Text("viewport.controls").c_str());
+    ImGui::EndDisabled();
+    if(gizmoRejected_) ImGui::TextWrapped("%s", text.Text("viewport.gizmoRejected").c_str());
+}
+std::optional<ViewportTools::Bounds> ViewportTools::GetEntityLocalBounds(Entity entity) const {
+    if(frame_ && model_ && pose_ && entity.IsAlive()) {
+        const auto& nodes = pose_->GetNodeWorldTransforms();
+        const auto local = entity.GetId();
+        const uint64_t packed = (static_cast<uint64_t>(local.generation)<<32)|local.index;
+        Vector3 low{1e30f,1e30f,1e30f}, high{-1e30f,-1e30f,-1e30f}; bool found = false;
+        for(const auto& item : frame_->primitives) if(item.sourceObject.value == packed) {
+            for(size_t node = item.nodeBegin; node < std::min(model_->nodes.size(), static_cast<size_t>(item.nodeEnd)) && node < nodes.size(); ++node) {
+                if(item.nodeIndex != PrimitiveRenderItem::kAllNodes && item.nodeIndex != node) continue;
+                for(auto mesh : model_->nodes[node].meshIndices) if(mesh < bounds_.size() && bounds_[mesh].valid) {
+                    // 通常描画と同じNode変換。Skin MeshはEntity空間の頂点を使用する。
+                    const auto nodeTransform = model_->meshes[mesh].skinIndex == MeshAssetData::kNoSkin ? nodes[node] : Matrix4x4::Identity();
+                    const auto& bound = bounds_[mesh];
+                    for(int corner = 0; corner < 8; ++corner) {
+                        auto point = Point({corner&1 ? bound.high.x : bound.low.x, corner&2 ? bound.high.y : bound.low.y, corner&4 ? bound.high.z : bound.low.z}, nodeTransform);
+                        low={std::min(low.x,point.x),std::min(low.y,point.y),std::min(low.z,point.z)};
+                        high={std::max(high.x,point.x),std::max(high.y,point.y),std::max(high.z,point.z)}; found=true;
+                    }
+                }
+            }
+        }
+        if(found) return Bounds{low,high,true};
+    }
+    return {};
+}
+std::optional<Matrix4x4> ViewportTools::GetSelectionPivot() const {
+    auto entity = session_.GetSelectedEntity();
+    const auto* transform = entity.GetComponent<TransformComponent>();
+    if(!transform) return {};
+    auto pivot = transform->worldMatrix;
+    if(auto bounds = GetEntityLocalBounds(entity)) {
+        // T(centerLocal) * world。回転/拡縮時も同じ形状中心を保持し、原点周りの公転を防ぐ。
+        const auto center = Point((bounds->low+bounds->high)*.5f,transform->worldMatrix);
+        pivot.At(3,0)=center.x; pivot.At(3,1)=center.y; pivot.At(3,2)=center.z;
+    }
+    return pivot;
 }
 void ViewportTools::FocusSelection() {
     if(session_.IsPlaying()) return;
+    auto pivotMatrix = GetSelectionPivot();
+    if(!pivotMatrix) return;
+    const auto pivot = Point({},*pivotMatrix);
+    float radius = 1;
     auto entity = session_.GetSelectedEntity();
-    auto* transform = entity.GetComponent<TransformComponent>();
-    if(!transform) return;
-    Vector3 pivot = Point({},transform->worldMatrix); float radius = 1;
-    if(auto* primitive = entity.GetComponent<PrimitiveRenderComponent>(); primitive && model_ && pose_) {
-        const auto& nodes = pose_->GetNodeWorldTransforms();
-        const size_t node = primitive->nodeIndex;
-        if(node < model_->nodes.size() && node < nodes.size() && !model_->nodes[node].meshIndices.empty()) {
-            const auto mesh = model_->nodes[node].meshIndices.front();
-            if(mesh < bounds_.size() && bounds_[mesh].valid) {
-                const auto world = Multiply(nodes[node],transform->worldMatrix);
-                pivot = Point((bounds_[mesh].low+bounds_[mesh].high)*0.5f,world);
-                radius = (Point(bounds_[mesh].high,world)-Point(bounds_[mesh].low,world)).Length()*0.5f;
-            }
+    if(auto bounds = GetEntityLocalBounds(entity)) {
+        const auto& world = entity.GetComponent<TransformComponent>()->worldMatrix;
+        radius = 0;
+        for(int corner=0;corner<8;++corner) {
+            auto point = Point({corner&1 ? bounds->high.x : bounds->low.x, corner&2 ? bounds->high.y : bounds->low.y, corner&4 ? bounds->high.z : bounds->low.z},world);
+            radius = std::max(radius,(point-pivot).Length());
         }
     }
     const auto camera = MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({pitch_,yaw_,0}),{});
@@ -153,7 +190,7 @@ void ViewportTools::FocusSelection() {
 void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
     if(session_.IsPlaying() || !frame_ || !frame_->camera) return;
     const auto& io = ImGui::GetIO(); const bool hovered = ImGui::IsItemHovered();
-    if(hovered && ImGui::IsMouseClicked(1)) { navigating_ = true; ImGui::SetWindowFocus(); }
+    if(hovered && !IsManipulating() && ImGui::IsMouseClicked(1)) { navigating_ = true; ImGui::SetWindowFocus(); }
     if(!ImGui::IsMouseDown(1) || !ImGui::IsWindowFocused() || io.AppFocusLost) navigating_ = false;
     if(navigating_ && !io.WantTextInput) {
         yaw_ += io.MouseDelta.x*0.004f; pitch_ = std::clamp(pitch_+io.MouseDelta.y*0.004f,-1.55f,1.55f);
@@ -167,85 +204,58 @@ void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
         if(ImGui::IsKeyDown(ImGuiKey_E)) position_.y += distance;
         if(ImGui::IsKeyDown(ImGuiKey_Q)) position_.y -= distance;
     }
-    if(hovered && io.MouseWheel != 0) {
+    if(hovered && !IsManipulating() && io.MouseWheel != 0) {
         const auto camera = MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({pitch_,yaw_,0}),{});
         position_ = position_+Point({0,0,1},camera,0)*io.MouseWheel*2;
     }
-    if(ImGui::IsWindowFocused() && !io.WantTextInput && !navigating_ && !ImGui::IsAnyItemActive()) {
+    if(ImGui::IsWindowFocused() && !io.WantTextInput && !navigating_ && !IsManipulating() && !ImGui::IsAnyItemActive()) {
         if(ImGui::IsKeyPressed(ImGuiKey_W,false)) mode_ = 0;
         if(ImGui::IsKeyPressed(ImGuiKey_E,false)) mode_ = 1;
         if(ImGui::IsKeyPressed(ImGuiKey_R,false)) mode_ = 2;
     }
-    bool gizmoHovered = false;
-    const auto cursor = ImGui::GetCursorScreenPos();
-    auto entity = session_.GetSelectedEntity();
-    auto* transform = entity.GetComponent<TransformComponent>();
-    if(transform) {
-        auto pivot = Point({},transform->worldMatrix);
-        Matrix4x4 parentWorld;
-        if(auto* hierarchy = entity.GetComponent<HierarchyComponent>())
-            if(auto* parent = entity.GetScene()->GetComponent<TransformComponent>(hierarchy->parent)) parentWorld = parent->worldMatrix;
-        const float length = std::max((pivot-position_).Length()*0.12f,0.1f);
-        const auto project = [&](Vector3 p) -> std::optional<ImVec2> {
-            const auto& matrix = frame_->camera->viewProjectionMatrix;
-            const float w = p.x*matrix.At(0,3)+p.y*matrix.At(1,3)+p.z*matrix.At(2,3)+matrix.At(3,3);
-            if(w <= 0) return {};
-            auto ndc = Unproject(p,matrix);
-            if(!ndc || ndc->z < 0 || ndc->z > 1) return {};
-            return ImVec2{x+(ndc->x+1)*0.5f*width,y+(1-ndc->y)*0.5f*height};
-        };
-        if(auto center = project(pivot)) {
-            const Vector3 axes[]{{1,0,0},{0,1,0},{0,0,1}};
-            const ImU32 colors[]{IM_COL32(240,90,90,255),IM_COL32(90,220,130,255),IM_COL32(90,150,250,255)};
-            for(int axis = 0; axis < 3; ++axis) {
-                auto end = project(pivot+Point(axes[axis],parentWorld,0)*length);
-                if(!end || end->x < x+10 || end->y < y+10 || end->x > x+width-10 || end->y > y+height-10) continue;
-                ImGui::GetWindowDrawList()->AddLine(*center,*end,colors[axis],3);
-                ImGui::GetWindowDrawList()->AddCircleFilled(*end,6,colors[axis]);
-                const auto selectedId = session_.GetSelection();
-                const auto stableId = std::to_string(selectedId.high) + ':' + std::to_string(selectedId.low);
-                ImGui::PushID(stableId.c_str()); ImGui::PushID(axis); ImGui::SetCursorScreenPos({end->x-9,end->y-9});
-                ImGui::InvisibleButton("axis",{18,18}); gizmoHovered |= ImGui::IsItemHovered();
-                if(ImGui::IsItemActivated()) {
-                    dragHandles_.clear(); dragValues_.clear();
-                    for(auto id : session_.Selection().All()) {
-                        PropertyHandle handle{id,"Transform",mode_ == 0 ? "translation" : mode_ == 1 ? "rotation" : "scale"};
-                        if(auto value = properties_.Read(handle)) { dragHandles_.push_back(handle); dragValues_.push_back(*value); }
-                    }
-                    properties_.Begin(dragHandles_);
-                }
-                if(ImGui::IsItemActive() && !dragValues_.empty()) {
-                    if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
-                        properties_.Cancel(); dragValues_.clear(); dragHandles_.clear(); ImGui::PopID(); ImGui::PopID(); continue;
-                    }
-                    const auto delta = ImGui::GetMouseDragDelta(0);
-                    const float sx = end->x-center->x, sy = end->y-center->y, squared = sx*sx+sy*sy;
-                    const float amount = squared > 4 ? (delta.x*sx+delta.y*sy)/squared : delta.x*0.01f;
-                    auto values = dragValues_;
-                    for(auto& value : values) {
-                        if(mode_ == 1) {
-                            const auto& v = std::get<std::array<float,4>>(value);
-                            const float rotation = io.KeyCtrl ? std::round(amount/0.2617993878f)*0.2617993878f : amount;
-                            const auto q = Quaternion::Multiply(Quaternion{v[0],v[1],v[2],v[3]},Quaternion::FromEulerRadians(axes[axis]*rotation));
-                            value = std::array<float,4>{q.x,q.y,q.z,q.w};
-                        } else {
-                            auto v = std::get<std::array<float,3>>(value);
-                            v[axis] += amount*(mode_ == 0 ? length : 1.0f);
-                            if(io.KeyCtrl) { const float step = mode_ == 0 ? 0.5f : 0.1f; v[axis] = std::round(v[axis]/step)*step; }
-                            value = v;
-                        }
-                    }
-                    properties_.PreviewValues(dragHandles_,values);
-                }
-                if(ImGui::IsItemDeactivated()) { properties_.Commit(); dragValues_.clear(); dragHandles_.clear(); }
-                ImGui::PopID(); ImGui::PopID();
-            }
-        }
+    if(IsManipulating() && (!gizmo_.IsCurrent() || ImGui::IsKeyPressed(ImGuiKey_Escape,false))) {
+        gizmo_.Cancel(); blockedUntilRelease_ = ImGui::IsMouseDown(0);
+        ImGuizmo::PushID("NexusViewport"); ImGuizmo::Enable(false); ImGuizmo::PopID();
     }
-    // Overlay後に内容範囲を延長せず通常layoutへ戻す。SetCursorだけではImGuiの検証が失敗する。
-    ImGui::SetCursorScreenPos({cursor.x,cursor.y-ImGui::GetStyle().ItemSpacing.y});
-    ImGui::Dummy({0,0});
-    if(hovered && !gizmoHovered && !ImGui::IsAnyItemActive() && ImGui::IsMouseClicked(0))
+    if(!ImGui::IsMouseDown(0)) blockedUntilRelease_ = false;
+    bool gizmoHovered = false;
+    if(auto pivot = GetSelectionPivot()) {
+        ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
+        ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+        ImGuizmo::SetRect(x,y,width,height);
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::PushID("NexusViewport");
+        ImGuizmo::Enable(!navigating_ && !blockedUntilRelease_ && !io.AppFocusLost);
+        auto edited = *pivot;
+        const auto before = edited;
+        const ImGuizmo::OPERATION operations[]{ImGuizmo::TRANSLATE,ImGuizmo::ROTATE,ImGuizmo::SCALE};
+        const float step = mode_ == 0 ? .5f : mode_ == 1 ? 15.0f : .1f;
+        const float snap[]{step,step,step};
+        // Engineはrow-vector/row-major。ImGuizmoのfloat[16]と同じ配置なので転置しない。
+        const bool changed = ImGuizmo::Manipulate(frame_->camera->viewMatrix.elements.data(),
+            frame_->camera->projectionMatrix.elements.data(),operations[mode_],ImGuizmo::LOCAL,
+            edited.elements.data(),nullptr,io.KeyCtrl ? snap : nullptr);
+        const bool usingGizmo = ImGuizmo::IsUsing();
+        // IsOver()は前Frameのhoverを返す。今Frameのハンドルを使い、瞬間的なclickも消費する。
+        gizmoHovered = ImGuizmo::GetHoveredHandleType() != ImGuizmo::MT_NONE || usingGizmo;
+        if(usingGizmo || (gizmoHovered && ImGui::IsMouseClicked(0))) gizmoOwnsMouse_ = true;
+        if(usingGizmo && !IsManipulating()) gizmo_.Begin(before,mode_ == 0);
+        if(changed && IsManipulating()) gizmoRejected_ = !gizmo_.Preview(edited);
+        if(IsManipulating() && !usingGizmo) gizmo_.Commit();
+        ImGuizmo::PopID();
+    }
+    const bool gizmoOwnedThisFrame = gizmoOwnsMouse_;
+    CompleteInteraction();
+    if(hovered && !gizmoHovered && !gizmoOwnedThisFrame && !IsManipulating() && !blockedUntilRelease_ && !ImGui::IsAnyItemActive() && ImGui::IsMouseClicked(0))
         Pick((io.MousePos.x-x)/width,(io.MousePos.y-y)/height,io.KeyCtrl);
+}
+void ViewportTools::CompleteInteraction() {
+    if(!ImGui::IsMouseDown(0)) gizmoOwnsMouse_ = false;
+    if(!IsManipulating()) return;
+    const bool canceled = !gizmo_.IsCurrent() || ImGui::GetIO().AppFocusLost || ImGui::IsKeyPressed(ImGuiKey_Escape,false);
+    if(canceled) { gizmo_.Cancel(); blockedUntilRelease_ = ImGui::IsMouseDown(0); }
+    else if(!ImGui::IsMouseDown(0)) gizmo_.Commit();
+    else return;
+    ImGuizmo::PushID("NexusViewport"); ImGuizmo::Enable(false); ImGuizmo::PopID();
 }
 }

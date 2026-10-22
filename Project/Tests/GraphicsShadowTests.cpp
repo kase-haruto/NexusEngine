@@ -231,7 +231,8 @@ namespace {
 	#include "GlobalIlluminationTests.inl"
 	#include "BakedLightingTests.inl"
 	#include "DDGITests.inl"
-	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false) {
+    #include "SelectionOutlineTests.inl"
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = performanceMeasurement ? 1280U : (sponza || metalTest ? 384U : (opticalDemo ? 256U : 64U));
         const uint32_t height = performanceMeasurement ? 720U : (sponza || metalTest ? 216U : (opticalDemo ? 192U : 64U));
@@ -421,6 +422,27 @@ namespace {
 		}
 		if(giVariant != 0) {
             return ValidateGIIntegration(giVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
+        }
+        if(overrideTest) {
+            const auto before = render(ShadowMode::Auto,false);
+            const auto signature = LightBaker::Signature(test.asset, pose, scene);
+            auto& material = scene.primitives.front().material;
+            material.enabled = true; material.slot = 100000;
+            Require(render(ShadowMode::Auto,false) == before, "Override affected an unrelated material slot.");
+            material.slot = 0; material.baseColor = {.02f,.8f,.03f,1};
+            material.metallic = .6f; material.roughness = .18f; material.emissive = {.05f,0,0};
+            const auto edited = render(ShadowMode::Auto,false);
+            size_t changed = 0;
+            for(size_t i=0; i<edited.size(); i+=4) if(std::abs(int(edited[i])-int(before[i])) > 2 || std::abs(int(edited[i+1])-int(before[i+1])) > 2) ++changed;
+            Require(changed > 20, "Material override did not affect rendered pixels.");
+            Require(LightBaker::Signature(test.asset, pose, scene) != signature, "Bake signature ignored material override.");
+            material.enabled = false;
+            Require(render(ShadowMode::Auto,false) == before, "Disabling material override did not restore source rendering.");
+            Require(LightBaker::Signature(test.asset, pose, scene) == signature, "Disabled override invalidated bake signature.");
+            Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
+            std::cout << "Material override: slot isolation, live GPU pixels, source restoration and bake signature passed. optical=" << opticalDemo << '\n';
+            return edited;
         }
 		if(bakedVariant) return ValidateBakedIntegration(bakedVariant,scene,renderer,render,test,depth,rtv,transient,width,height);
 		if(ddgiVariant) return ValidateDDGIIntegration(ddgiVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
@@ -785,6 +807,13 @@ int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+        if(argc == 2 && std::strcmp(argv[1], "--baked-cpu") == 0) { BakedLightingCpuTests(); return 0; }
+        if(argc == 2 && std::strcmp(argv[1], "--material-override") == 0) {
+            ForwardIntegration(false,false,false,0,false,false,0,0,4,0,false,false,true);
+            ForwardIntegration(false,true,false,0,false,false,0,0,4,0,false,false,true);
+            return 0;
+        }
+        if(argc==2 && std::strcmp(argv[1],"--selection-outline")==0) { SelectionOutlineIntegration(); return 0; }
 		if(argc==2 && std::strcmp(argv[1],"--ddgi")==0) {
 			DDGISettings invalid;invalid.spacing[0]=0;Require(!invalid.IsValid(),"Zero DDGI spacing accepted.");
 			invalid={};invalid.hysteresis=1;Require(!invalid.IsValid(),"Non-convergent DDGI hysteresis accepted.");

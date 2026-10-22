@@ -168,6 +168,7 @@ namespace NexusEngine {
 		friend class ShadowSystem;
 		friend class OpticalSystem;
 		friend class EnvironmentLighting;
+        friend class SelectionOutline;
 		void ConnectBackend(
 			void* nativeDevice,
 			CommandQueue* commandQueue,

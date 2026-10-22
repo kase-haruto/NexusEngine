@@ -2,6 +2,7 @@
 #include "EditorSession.h"
 #include "Editor/Gui/Panels/PanelRegistry.h"
 #include "Editor/Gui/PropertyDrawerRegistry.h"
+#include "Editor/Gui/Properties/PropertyCategoryRegistry.h"
 #include "Editor/Gui/DockingLayout.h"
 #include "Editor/Gui/MainMenuBar.h"
 #include "Editor/Services/PropertyEditService.h"
@@ -12,6 +13,7 @@
 #include "Editor/Services/EditorSettings.h"
 #include "Editor/Services/ConsoleService.h"
 #include "Editor/Services/AssetCatalog.h"
+#include "Editor/Gui/Widgets/AssetPropertyWidget.h"
 #include "Editor/Runtime/ViewportSession.h"
 #include "Foundation/Logging/BufferedLogSink.h"
 #include <array>
@@ -43,6 +45,9 @@ public:
     EditorCommandRegistry& Commands() { return commands_; }
     ViewportSession& Viewport() { return viewport_; }
     ViewportTools& ViewportEditor() { return viewportTools_; }
+    AssetPropertyWidget& AssetEditor() { return assetEditor_; }
+    /** \brief 起動時のEditor拡張から専門ページを登録する */
+    PropertyCategoryRegistry& PropertyCategories() { return categories_; }
 private:
     void RegisterCommands();
     void DrawFileDialog();
@@ -56,6 +61,8 @@ private:
     EditorSession& session_; //< Application所有
     TypeRegistry types_; //< Runtime型情報
     PropertyDrawerRegistry drawers_; //< UI型別描画
+    PropertyCategoryRegistry categories_; //< Panelより長寿命の専門ページ登録情報
+    AssetPropertyWidget assetEditor_; //< Asset PickerとプレビューUI
     PropertyEditService properties_; //< 操作履歴
     SceneEditService sceneEdits_; //< 原子的な構造編集
     EditorDocumentService documents_; //< 保存・切替・終了の進行

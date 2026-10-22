@@ -8,6 +8,7 @@
 #include "Graphics/Environment/EnvironmentLightingData.h"
 #include "Graphics/Shadow/ShadowTypes.h"
 #include "Graphics/Material/OpticalMaterial.h"
+#include "Graphics/Material/MaterialOverride.h"
 #include "Graphics/Descriptor/ShaderResourceRef.h"
 #include "Foundation/Error/Result.h"
 
@@ -30,6 +31,8 @@ namespace NexusEngine {
 	struct OpticalDrawItem {
 		ShadowDrawItem geometry;
 		std::array<float, 4> tint {1, 1, 1, 1};
+        MaterialOverride material;
+        uint32_t materialBegin = 0;
 	};
 	struct OpticalSettings {
 		bool enabled = true;

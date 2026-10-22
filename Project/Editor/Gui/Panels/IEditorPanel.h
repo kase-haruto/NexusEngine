@@ -10,6 +10,7 @@ class PropertyDrawerRegistry;
 class LocalizationService;
 class EditorCommandRegistry;
 class SceneEditService;
+class AssetPropertyWidget;
 struct EditorContext {
     EditorSession& session; //< 既存編集documentの非所有参照
     SelectionService& selection; //< 全Panel共通の選択
@@ -19,6 +20,7 @@ struct EditorContext {
     const LocalizationService& text; //< UTF-8翻訳
     const EditorCommandRegistry& commands; //< 操作要求の送信先
     SceneEditService& sceneEdits; //< 共通履歴に接続する構造編集
+    AssetPropertyWidget* assets = nullptr; //< Application接続時にAsset編集を有効にする
 };
 /*-----------------------------------------------------------------------------------------
  * IEditorPanel

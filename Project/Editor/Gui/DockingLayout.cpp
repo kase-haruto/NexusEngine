@@ -37,6 +37,9 @@ void DockingLayout::Draw() {
     ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.3f, &bottom, &center);
     ImGui::DockBuilderDockWindow("###Outliner", left);
     ImGui::DockBuilderDockWindow("###Details", right);
+    ImGuiID properties;
+    ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.55f, &properties, &right);
+    ImGui::DockBuilderDockWindow("###Properties", properties);
     ImGui::DockBuilderDockWindow("###Viewport", center);
     ImGui::DockBuilderDockWindow("###ContentBrowser", bottom);
     ImGui::DockBuilderDockWindow("###OutputLog", bottom);

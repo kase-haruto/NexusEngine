@@ -7,6 +7,20 @@
 #include <algorithm>
 
 namespace NexusEngine {
+bool SceneEditService::AddComponent(const TypeDescriptor& type) {
+    if(!type.add || session_.Selection().All().empty()) return false;
+    return Execute("edit.addComponent", [this, &type](Level& level) {
+        bool changed = false;
+        for(auto id : session_.Selection().All()) {
+            auto entity = level.FindEntity(id);
+            if(!entity.IsAlive()) return false;
+            if(type.contains(entity)) continue;
+            if(!type.add(entity)) return false;
+            changed = true;
+        }
+        return changed;
+    });
+}
 bool SceneEditService::Execute(std::string label, const std::function<bool(Level&)>& apply) {
     auto* level = session_.GetLevel();
     if(!level || !level->GetScene() || session_.IsPlaying()) return false;

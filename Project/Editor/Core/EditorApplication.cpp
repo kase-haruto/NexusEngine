@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "Graphics/Model/ModelLoader.h"
+#include "Graphics/Model/ModelThumbnail.h"
 
 #include "Graphics/Shadow/ShadowSystem.h"
 #include "Graphics/RayTracing/OpticalSystem.h"
@@ -20,6 +21,7 @@
 namespace NexusEngine {
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
 		editPose_.reset();
+        reportedAssetErrors_.clear();
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。
 		modelPose_.Shutdown();
 		session_.Close();
@@ -42,6 +44,8 @@ namespace NexusEngine {
 		auto testScene = AppendPBRTestScene(modelAsset_);
 		if(!testScene) return testScene;
 		auto poseResult = modelPose_.Initialize(modelAsset_);
+        modelLibrary_ = std::make_unique<ModelAssetLibrary>(assetDirectory, modelAsset_);
+        uploadedAssetRevision_ = modelLibrary_->Revision();
 		if(!poseResult) return poseResult;
 
 		if(!modelAsset_.animations.empty()) {
@@ -361,6 +365,34 @@ namespace NexusEngine {
 		workspace_->Initialize(std::filesystem::current_path(), editorExtensions_);
 		workspace_->SetDpiScale(static_cast<float>(GetDpiForWindow(static_cast<HWND>(context.nativeWindow))) / 96.0f);
 		workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
+        workspace_->AssetEditor().Configure(modelLibrary_->Root(),
+            [this](const std::filesystem::path& path, bool texture) -> Result<std::string> {
+                auto reference = modelLibrary_->Reference(path);
+                if(!reference) return std::unexpected(reference.error());
+                if(texture) { auto loaded = modelLibrary_->Texture(*reference); if(!loaded) return std::unexpected(loaded.error()); }
+                else { auto loaded = modelLibrary_->Model(*reference); if(!loaded) return std::unexpected(loaded.error()); }
+                return reference;
+            }, [this](const std::string& reference) -> const ModelAssetData* {
+                auto model = modelLibrary_->Model(reference); return model ? *model : nullptr;
+            }, [this](const std::string& path, bool texture, int node) -> ImTextureRef {
+                std::string reference;
+                if(!path.empty()) {
+                    auto result = modelLibrary_->Reference(std::filesystem::path(reinterpret_cast<const char8_t*>(path.c_str())));
+                    if(!result) return {}; reference = *result;
+                }
+                const auto key = std::string(texture ? "texture:" : "mesh:") + reference + ":" + std::to_string(node);
+                auto cached = imguiRenderer_.FindPreview(key);
+                if(cached._TexData) return cached;
+                if(!imguiRenderer_.CanCreatePreview()) return {};
+                if(texture) {
+                    auto bytes = modelLibrary_->Texture(reference); if(!bytes) return {};
+                    auto image = WicImageDecoder{}.Decode(**bytes); if(!image) return {};
+                    return imguiRenderer_.CreatePreview(key, CreateImageThumbnail(*image));
+                }
+                auto model = modelLibrary_->Model(reference); if(!model) return {};
+                auto image = CreateModelThumbnail(**model, node); if(!image) return {};
+                return imguiRenderer_.CreatePreview(key, *image);
+            });
 		if(!workspace_->Viewport().AttachLocalPreview(imguiRenderer_, ImGuiRenderer::SceneViewportTexture,
 			[graphics = context.graphicsSystem](uint32_t width, uint32_t height) { return graphics->RequestSceneViewportSize(width, height); })) {
 			workspace_->Shutdown(); workspace_.reset(); guiContext_.Shutdown(); imguiRenderer_.Shutdown();
@@ -425,6 +457,46 @@ namespace NexusEngine {
 		if(preview == nullptr || preview->GetScene() == nullptr || sceneHeight == 0) return {};
 		const float aspect = static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight);
 		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_);
+        if(extracted && modelLibrary_) {
+            for(auto& item : renderScene_.primitives) {
+                auto range = modelLibrary_->Resolve(item.meshAsset, item.baseColorTexture);
+                if(!range) {
+                    const auto key = item.meshAsset + "\n" + item.baseColorTexture;
+                    if(reportedAssetErrors_.insert(key).second) NEXUS_LOG_ERROR("Assets", range.error().GetMessageText());
+                    item.nodeEnd = 0;
+                    continue;
+                }
+                item.nodeBegin = range->begin; item.nodeEnd = range->end;
+                item.materialBegin = range->materialBegin;
+                if(item.nodeIndex != PrimitiveRenderItem::kAllNodes) {
+                    if(item.nodeIndex >= range->end - range->begin) item.nodeEnd = 0;
+                    else item.nodeIndex += range->begin;
+                }
+                if(!session_.IsPlaying()) for(auto id : session_.Selection().All()) {
+                    const auto entity = preview->FindEntity(id);
+                    const auto local = entity.GetId();
+                    item.selected |= entity.IsAlive() && item.sourceObject.value == ((static_cast<uint64_t>(local.generation) << 32) | local.index);
+                }
+            }
+            if(graphicsSystem_ && uploadedAssetRevision_ != modelLibrary_->Revision()) {
+                auto previousAsset = std::move(modelAsset_);
+                auto previousPose = modelPose_;
+                modelAsset_ = modelLibrary_->Snapshot();
+                modelPose_.Shutdown();
+                auto initialized = modelPose_.Initialize(modelAsset_);
+                if(!initialized) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return initialized; }
+                auto renderer = std::make_unique<PrimitiveRenderer>();
+                renderer->SetRenderScene(&renderScene_); renderer->SetModelInput(&modelAsset_, &modelPose_);
+                // 初期化はCommandList記録前。旧GPU資源はidle後にだけ解放する。
+                auto replaced = graphicsSystem_->ReplaceRenderer(renderer.get());
+                if(!replaced) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return replaced; }
+                replacementRenderer_ = std::move(renderer);
+                materialRenderer_ = replacementRenderer_.get(); shadows_ = &materialRenderer_->GetShadows(); optics_ = &materialRenderer_->GetOptics();
+                uploadedAssetRevision_ = modelLibrary_->Revision();
+                NEXUS_LOG_INFO("Assets", "Uploaded model and material asset snapshot.");
+                if(workspace_) workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
+            }
+        }
 		if(extracted && workspace_) workspace_->ViewportEditor().Prepare(renderScene_, aspect);
 		return extracted;
 	}

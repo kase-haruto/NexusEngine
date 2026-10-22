@@ -25,7 +25,7 @@ Pop-Location
 | 保存 / 名前を付けて保存 | Ctrl+S / Ctrl+Shift+S。保存先未指定ならパス入力を表示 |
 | Undo / Redo | Ctrl+Z / Ctrl+Y、Edit menu、Toolbar |
 | Entity / Camera / Light作成 | Edit menu。ToolbarにはEntity作成も表示 |
-| Model Instance作成 | Edit menu。現在Rendererへ接続されたModelのInstanceを生成 |
+| Model Instance作成 | Edit menu。Detailsで描画するMeshを選択 |
 | 複数選択 | Outliner / ViewportのCtrl+クリック |
 | 範囲選択 | OutlinerでShift+クリック。Ctrl+Shiftで既存選択へ追加 |
 | 削除 | Delete / context menu。選択Entityだけ削除し、残る子はrootへ戻す |
@@ -44,17 +44,35 @@ OSの閉じる操作も共通確認を通ります。SaveAs取消・保存失敗
 ### Viewport
 
 - クリックで静的Meshの最近傍三角形を選択します。Ctrlで選択を反転します。
+- 選択したMeshは約2.5pxのオレンジ色の輪郭で強調します。Sceneの深度を参照しない独立マスクから外周を合成するため、手前の物体に遮られていても表示します。複数選択では選択集合の外周を表示します。
 - 右ボタンを押しながらWASD/QEで編集Cameraを移動し、マウスで向きを変えます。Shiftで加速します。
 - ホイールで前後移動、Fで主選択の境界へCameraを寄せます。
 - W/E/RまたはViewport内の選択肢で移動/回転/拡縮を切り替えます。
-- 色付き軸の先端をドラッグします。複数対象はそれぞれのLocal値に同じ軸操作を適用します。
+- ImGuizmoの軸・平面・回転リング・拡縮ハンドルをドラッグします。操作の開始から終了までを一回のUndoにまとめます。
 - Ctrlを押すと移動0.5、回転15度、拡縮0.1の刻みに揃えます。Escapeで操作開始値へ戻します。
 
-Gizmoは主選択の親座標系を基準に表示します。共通のWorld pivotを中心とした群回転・比例拡縮ではありません。
+ImGuizmoは主選択のLocal軸で表示し、Nodeのオフセットを含むメッシュ境界の中心をpivotにします。形状を持たないEntityではTransformの原点を使います。
+回転・拡縮は同じEntity空間の形状中心を保ちます。複数選択も主選択の形状中心をpivotにWorld空間でまとめて操作し、各Entityの親座標系へ戻します。
+ギズモ上のクリックを優先し、ドラッグやEscape取消からマウスを離すまで、背後の物体の選択へ入力を渡しません。
+親子を同時選択した場合も二重に変換しません。非一様scaleの親等でLocal TRSに戻せないshearが生じる操作は拒否し、直前の有効値を保持します。
 Camera操作は編集DocumentのTransformを変更しません。再生中はRuntime Cameraを使います。
-Skin変形Meshのpickingは未対応です。非一様scaleの親を持つGizmoやEuler角の特異姿勢は今後の改善対象です。
+Skin変形Meshのpickingは未対応です。DetailsのEuler角には特異姿勢があるため、Viewportの回転リングも利用してください。
 
 ### Details・履歴
+
+Details上部の「Add Component / Componentを追加」からPrimitive Rendering、Camera、DirectionalLightを追加できます。
+複数選択時は不足しているEntityだけに追加し、一回のUndoで戻せます。追加Cameraは非primary、既存Lightがあれば追加Lightは無効で始まります。
+
+Primitive RenderingのMesh欄をクリックしてglTF / GLB / OBJを選ぶか、Content BrowserのファイルをMesh欄へドロップします。
+Mesh Nodeでモデル全体または個別Nodeを選択できます。Mesh変更時は全Nodeへ戻し、以前のモデルのNode番号を引き継ぎません。
+Base Color Texture欄も同じ操作で画像を選べます。PNG / JPEG / BMP / TIFFに対応し、Xでモデル付属の材質へ戻します。
+AssetはプロジェクトのAssetフォルダ内から選びます。型違い・破損ファイル・外部への参照は拒否し、理由を欄に表示します。
+
+Meshには実Geometryから生成した深度付き形状プレビュー、画像には実画像のプレビューを表示します。
+Content Browserでは対応ファイルにマウスを置くとプレビューが出ます。
+Meshと画像の参照はAssetフォルダからの相対パスでLevelへ保存し、Undo / Redoと再読込に対応します。
+Base Colorの差替えは選択Entityの全材質へ適用し、Raster・影・光学描画で同じGeometry / Materialを使います。
+初めて使うモデル・材質の組ではGPU snapshotを再構築するため、一時的に編集が止まる場合があります。
 
 Name、Transform（位置・Euler角UIによるQuaternion回転・拡縮）、Primitive（表示・色・静的Lighting）、
 Camera（FOV・clip・primary/enabled）、DirectionalLight（強度・色・方向・enabled）を登録しています。
@@ -138,6 +156,16 @@ RTX 3060 Tiで実起動し、Docking、Toolbar、SponzaのViewport描画、Conte
 ## 今後の範囲
 
 別プロセスRuntimeの起動、実IPC、共有GPU画像、切断復旧は設計契約のみで、今回のローカル再生とは別です。
-現在のModel Instanceは接続済みModelを参照し、Browserから任意ModelをimportしてRendererへ追加するAsset pipelineは未実装です。
-Clipboard操作、Component追加削除、配列/構造体/Asset参照の汎用Drawer、Profilerと専門Asset Editorも今後の範囲です。
+glTF / GLB / OBJのMesh選択とBase Color画像の差替えに対応しています。AssetのGUID管理、自動再import、Normal / Metallic等の画像差替えは今後の範囲です。
+Clipboard操作、Component削除、配列/構造体の汎用Drawer、Profilerと専門Asset Editorも今後の範囲です。
 これらを実装済みとしてUI上で有効化したり、Remote接続済みとして表示したりしません。
+
+## Propertiesウィンドウ
+
+WindowメニューのPropertiesから開けます。Detailsと別のDocking Windowで、Layout Reset時にはDetailsの下に配置されます。左の縦アイコンでObject・Material・Cameraを切り替え、アイコンにカーソルを置くと説明が表示されます。対象に対応するカテゴリだけが表示されます。
+
+Materialでは主選択のEntityのSlotを選び、「元の材質からOverrideを作成」で編集を始めます。Base Color、Metallic、Roughness、Normal Scale、発光色、遮蔽強度を編集できます。共有モデルや他のEntityの材質は変わりません。変更はUndo/RedoとLevel保存に対応します。
+
+現在はEntityあたり1 SlotをOverrideします。Slotを変えると前のSlotのOverrideを置き換えます。Base Color画像とTintは従来どおりEntity全体に適用され、画像欄にはContent BrowserからDropできます。ほかの埋込画像はモデルから継承します。静的な間接光の変更には再ベイクが必要です。
+
+実装の依存関係、制約、新しい専門カテゴリの追加方法は[PropertiesPanel開発ノート](PropertiesPanel.md)を参照してください。

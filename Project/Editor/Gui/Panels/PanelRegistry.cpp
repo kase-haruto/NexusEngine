@@ -33,6 +33,9 @@ void PanelRegistry::Draw(const EditorContext& context) {
         if(!entry.panel && entry.factory) entry.panel = entry.factory();
         if(!entry.panel || entry.panel->Id() != entry.Id()) { entry.panel.reset(); entry.isOpen = false; continue; }
         const auto title = context.text.Label(entry.TitleKey(), entry.Id());
+        // 保存済み配置にない新規Panelも、Empty Stateの折返しで極小幅にならないようにする。
+        // FirstUseEverなので既存のDock配置や利用者が変更したサイズは維持する。
+        ImGui::SetNextWindowSize({360, 480}, ImGuiCond_FirstUseEver);
         if(ImGui::Begin(title.c_str(), &entry.isOpen)) entry.panel->Draw(context);
         ImGui::End();
     }

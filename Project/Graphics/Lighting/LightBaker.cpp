@@ -32,6 +32,7 @@ namespace NexusEngine {
 			V						   geometricNormal;
 			uint32_t				   material = 0;
 			std::array<float, 4>	   tint{1, 1, 1, 1};
+            MaterialOverride materialOverride; //< この三角形のSlotに適用するInstance値
 		};
 		struct Node {
 			V		 lo, hi;
@@ -232,11 +233,16 @@ namespace NexusEngine {
 						color  = color + From(tri.vertices[k].color) * weights[k];
 						normal = normal + tri.n[k] * weights[k];
 					}
-					color		   = Product(Product(Product(color, From(source.baseColorFactor.data())), From(tri.tint.data())), Sample(material.base, u, v, source.sampler, true));
+                    const auto& override = tri.materialOverride;
+                    const auto& base = override.enabled ? override.baseColor : source.baseColorFactor;
+                    const auto& emissive = override.enabled ? override.emissive : source.emissiveFactor;
+                    const float metallic = override.enabled ? override.metallic : source.metallicFactor;
+                    const float occlusion = override.enabled ? override.occlusionStrength : source.occlusionStrength;
+					color		   = Product(Product(Product(color, From(base.data())), From(tri.tint.data())), Sample(material.base, u, v, source.sampler, true));
 					color		   = {std::clamp(color.x, 0.0f, 1.0f), std::clamp(color.y, 0.0f, 1.0f), std::clamp(color.z, 0.0f, 1.0f)};
-					float metal	   = std::clamp(source.metallicFactor * Sample(material.mr, u, v, source.metallicRoughnessSampler, false).z, 0.0f, 1.0f);
-					float ao	   = 1 - source.occlusionStrength * (1 - Sample(material.ao, u, v, source.occlusionSampler, false).x);
-					V	  emission = Product(From(source.emissiveFactor.data()), Sample(material.emission, u, v, source.emissiveSampler, true));
+					float metal	   = std::clamp(metallic * Sample(material.mr, u, v, source.metallicRoughnessSampler, false).z, 0.0f, 1.0f);
+					float ao	   = 1 - occlusion * (1 - Sample(material.ao, u, v, source.occlusionSampler, false).x);
+					V	  emission = Product(From(emissive.data()), Sample(material.emission, u, v, source.emissiveSampler, true));
 					normal		   = normal.Normalized();
 					V ng		   = tri.geometricNormal;
 					if(V::Dot(ng, direction) > 0) {
@@ -319,12 +325,20 @@ namespace NexusEngine {
 				add(id);
 				add(item.worldMatrix);
 				add(item.tint);
+                // paddingをhashせず、描画と同じ有効材質値をBakeの照合に含める。
+                if(item.material.enabled) {
+                    const uint32_t materialTag = 0x4d41544f; add(materialTag);
+                    add(item.material.slot); add(item.materialBegin); add(item.material.baseColor);
+                    add(item.material.metallic); add(item.material.roughness); add(item.material.normalScale);
+                    add(item.material.emissive); add(item.material.occlusionStrength);
+                }
 				add(item.nodeIndex);
 			}
 		for(const auto& item : scene.primitives)
 			if(item.staticLighting)
 				for(uint32_t node = 0; node < asset.nodes.size(); ++node) {
 					if(item.nodeIndex != PrimitiveRenderItem::kAllNodes && item.nodeIndex != node) continue;
+                if(node < item.nodeBegin || node >= item.nodeEnd) continue;
 					bool hasStaticMesh = false;
 					for(uint32_t mesh : asset.nodes[node].meshIndices)
 						if(mesh < asset.meshes.size() && asset.meshes[mesh].skinIndex == MeshAssetData::kNoSkin) hasStaticMesh = true;
@@ -388,6 +402,7 @@ namespace NexusEngine {
 			if(item.staticLighting)
 				for(uint32_t node = 0; node < asset.nodes.size(); ++node) {
 					if(item.nodeIndex != PrimitiveRenderItem::kAllNodes && item.nodeIndex != node) continue;
+                if(node < item.nodeBegin || node >= item.nodeEnd) continue;
 					auto world	 = Multiply(transforms[node], item.worldMatrix);
 					auto inverse = TryInverse(world);
 					if(!inverse) return fail("Singular static bake transform.");
@@ -404,6 +419,7 @@ namespace NexusEngine {
 								Triangle tri;
 								tri.material = sub.materialSlot;
 								tri.tint	 = item.tint;
+                                if(item.material.AppliesTo(sub.materialSlot, item.materialBegin)) tri.materialOverride = item.material;
 								for(uint32_t k = 0; k < 3; ++k) {
 									uint32_t index	 = 0;
 									size_t	 address = size_t(sub.firstIndex + i + k) * indexSize;

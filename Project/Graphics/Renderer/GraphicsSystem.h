@@ -63,6 +63,8 @@ namespace NexusEngine {
 		 * \param renderer Applicationが所有し、GraphicsSystemより長く生存するRenderer
 		 */
 		[[nodiscard]] Result<void> AttachRenderer(IGraphicsRenderer* renderer);
+        /** \brief 記録開始前にGPU完了を待ち、初期化成功したRendererへ原子的に交換する */
+        [[nodiscard]] Result<void> ReplaceRenderer(IGraphicsRenderer* renderer);
 		/** \brief 上位描画拡張を初期化してPresent前の記録経路へ接続する */
 		[[nodiscard]] Result<void> AttachRenderExtension(IGraphicsRenderExtension* extension);
 		/** \brief 起動時GPU機能の値を返す。未初期化時は全機能が非対応 */

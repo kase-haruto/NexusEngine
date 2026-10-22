@@ -23,6 +23,17 @@ template<class C> TypeDescriptor Type(const char* id, const char* label) {
     return {id, label, [](Entity entity) { return entity.HasComponent<C>(); }, {}};
 }
 bool Finite(const std::array<float, 3>& value) { return std::ranges::all_of(value, [](float f) { return std::isfinite(f); }); }
+// 元のInstance値を検証前に変更せず、Detailsと専門ページで同じsetterを共有する。
+template<class Value>
+PropertyDescriptor MaterialProperty(const char* id, const char* label, PropertyKind kind, Value MaterialOverride::*member) {
+    return Property<PrimitiveRenderComponent, Value>(id, label, kind,
+        [member](const auto& c) { return c.material.*member; },
+        [member](auto& c, const Value& value) {
+            auto next = c.material; next.*member = value;
+            if(!next.IsValid()) return false;
+            c.material = next; return true;
+        });
+}
 }
 void RegisterSceneTypes(TypeRegistry& registry) {
     auto name = Type<NameComponent>("Name", "component.name");
@@ -53,6 +64,17 @@ void RegisterSceneTypes(TypeRegistry& registry) {
         }));
     registry.Register(std::move(transform));
     auto primitive = Type<PrimitiveRenderComponent>("PrimitiveRender", "component.primitive");
+    primitive.add = [](Entity entity) { return entity.AddComponent<PrimitiveRenderComponent>() != nullptr; };
+    const auto validPath = [](const std::string& v) {
+        return v.size() <= 4096 && v.find('\0') == v.npos && v.find('\n') == v.npos && v.find('\r') == v.npos;
+    };
+    primitive.properties.push_back(Property<PrimitiveRenderComponent, std::string>("meshAsset", "property.mesh", PropertyKind::MeshAsset,
+        [](const auto& c) { return c.meshAsset; }, [validPath](auto& c, const auto& v) { if(!validPath(v)) return false; c.meshAsset = v; return true; }));
+    primitive.properties.push_back(Property<PrimitiveRenderComponent, int>("nodeIndex", "property.meshNode", PropertyKind::MeshNode,
+        [](const auto& c) { return c.nodeIndex == PrimitiveRenderComponent::kAllNodes ? -1 : static_cast<int>(c.nodeIndex); },
+        [](auto& c, int v) { if(v < -1) return false; c.nodeIndex = v == -1 ? PrimitiveRenderComponent::kAllNodes : static_cast<uint32_t>(v); return true; }));
+    primitive.properties.push_back(Property<PrimitiveRenderComponent, std::string>("baseColorTexture", "property.baseColorTexture", PropertyKind::TextureAsset,
+        [](const auto& c) { return c.baseColorTexture; }, [validPath](auto& c, const auto& v) { if(!validPath(v)) return false; c.baseColorTexture = v; return true; }));
     primitive.properties.push_back(Property<PrimitiveRenderComponent, bool>("enabled", "property.visible", PropertyKind::Bool,
         [](const auto& c) { return c.enabled; }, [](auto& c, bool v) { c.enabled = v; return true; }));
     primitive.properties.push_back(Property<PrimitiveRenderComponent, bool>("staticLighting", "property.staticLighting", PropertyKind::Bool,
@@ -62,8 +84,22 @@ void RegisterSceneTypes(TypeRegistry& registry) {
             if(!std::ranges::all_of(v, [](float f) { return std::isfinite(f); })) return false;
             c.tint = v; return true;
         }));
+    primitive.properties.push_back(MaterialProperty("materialEnabled", "material.override", PropertyKind::Bool, &MaterialOverride::enabled));
+    primitive.properties.push_back(MaterialProperty("materialSlot", "material.slot", PropertyKind::Int, &MaterialOverride::slot));
+    primitive.properties.push_back(MaterialProperty("materialBaseColor", "material.baseColor", PropertyKind::Color, &MaterialOverride::baseColor));
+    primitive.properties.push_back(MaterialProperty("materialMetallic", "material.metallic", PropertyKind::Float, &MaterialOverride::metallic));
+    primitive.properties.push_back(MaterialProperty("materialRoughness", "material.roughness", PropertyKind::Float, &MaterialOverride::roughness));
+    primitive.properties.push_back(MaterialProperty("materialNormalScale", "material.normalScale", PropertyKind::Float, &MaterialOverride::normalScale));
+    primitive.properties.push_back(MaterialProperty("materialEmissive", "material.emissive", PropertyKind::Vector3, &MaterialOverride::emissive));
+    primitive.properties.push_back(MaterialProperty("materialOcclusion", "material.occlusion", PropertyKind::Float, &MaterialOverride::occlusionStrength));
     registry.Register(std::move(primitive));
     auto camera = Type<CameraComponent>("Camera", "component.camera");
+    camera.add = [](Entity entity) {
+        auto* value = entity.AddComponent<CameraComponent>();
+        if(!value) return false;
+        value->primary = false;
+        return true;
+    };
     camera.properties.push_back(Property<CameraComponent, float>("fov", "property.fov", PropertyKind::Float,
         [](const auto& c) { return c.verticalFieldOfViewRadians; }, [](auto& c, float v) {
             if(!std::isfinite(v) || v <= 0 || v >= 3.14159265f) return false;
@@ -98,6 +134,14 @@ void RegisterSceneTypes(TypeRegistry& registry) {
     }
     registry.Register(std::move(camera));
     auto light = Type<DirectionalLightComponent>("DirectionalLight", "component.light");
+    light.add = [](Entity entity) {
+        auto* value = entity.AddComponent<DirectionalLightComponent>();
+        if(!value) return false;
+        entity.GetScene()->ForEach<DirectionalLightComponent>([&](Entity other, const auto& existing) {
+            if(other.GetId() != entity.GetId() && existing.enabled) value->enabled = false;
+        });
+        return true;
+    };
     light.properties.push_back(Property<DirectionalLightComponent, float>("intensity", "property.intensity", PropertyKind::Float,
         [](const auto& c) { return c.light.intensity; }, [](auto& c, float v) {
             if(!std::isfinite(v) || v < 0) return false; c.light.intensity = v; return true;

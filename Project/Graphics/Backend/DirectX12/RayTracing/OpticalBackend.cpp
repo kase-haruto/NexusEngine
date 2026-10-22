@@ -251,7 +251,9 @@ namespace NexusEngine {
 				return std::unexpected(Error(ErrorCategory::Graphics,70,"Optical mesh is invalid."));
 			for(const auto& sub:draw.geometry.mesh->GetSubmeshes()) {
 				if(sub.materialSlot>=materials.size()) return std::unexpected(Error(ErrorCategory::Graphics,70,"Optical material slot out of range."));
-				const auto& m=materials[sub.materialSlot];
+				auto m=materials[sub.materialSlot];
+                if(draw.material.AppliesTo(sub.materialSlot, draw.materialBegin))
+                    draw.material.Apply(m.color, m.pbr, m.emissiveOcclusion);
 				localReflections|=settings.enabled && settings.metallicReflections && m.pbr[0]>0 && (m.pbr[1]<.5f || m.metallicRoughnessTexture.IsValid());
 				optical|=m.optics.IsOptical();
 			}
@@ -295,7 +297,10 @@ namespace NexusEngine {
 			accelerationDraws_.push_back(draw.geometry);
 			for(const auto& submesh : mesh->GetSubmeshes()) {
 				if(submesh.materialSlot >= materials.size()) return std::unexpected(Error(ErrorCategory::Graphics, 70, "Optical material slot out of range."));
-				const auto& m = materials[submesh.materialSlot]; GeometryData geometry;
+				auto m = materials[submesh.materialSlot]; GeometryData geometry;
+                // Rasterと同じCPU値をFrame metadataへコピーし、共有Materialは書き換えない。
+                if(draw.material.AppliesTo(submesh.materialSlot, draw.materialBegin))
+                    draw.material.Apply(m.color, m.pbr, m.emissiveOcclusion);
 				geometry.indices = {(*views)->vertexView.index, (*views)->indexView.index, mesh->vertexBuffer_.GetStride(),
 					mesh->indexBuffer_.GetFormat() == IndexFormat::UInt32 ? 1U : 0U, submesh.firstIndex,
 					static_cast<uint32_t>(submesh.vertexOffset), m.texture.index, m.sampler.index};

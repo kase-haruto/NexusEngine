@@ -2,6 +2,7 @@
 #include "Editor/Gui/Widgets/SearchBar.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/SelectionService.h"
+#include "Editor/Gui/Widgets/AssetPropertyWidget.h"
 #include "ThirdParty/imgui/imgui.h"
 #include <cstdio>
 #include <algorithm>
@@ -144,6 +145,9 @@ void ContentBrowserPanel::Draw(const EditorContext& context) {
             // OS handleやResource pointerでなくUTF-8 pathをコピーする拡張用payload。
             ImGui::SetDragDropPayload("NEXUS_ASSET_PATH", path.c_str(), path.size() + 1);
             ImGui::TextUnformatted(entry.name.c_str()); ImGui::EndDragDropSource();
+        }
+        if(context.assets && !entry.directory && (entry.typeKey == "asset.model" || entry.typeKey == "asset.texture") && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+            ImGui::BeginTooltip(); context.assets->DrawPreview(path, entry.typeKey == "asset.texture", -1, 160); ImGui::EndTooltip();
         }
         ImGui::PopID();
     }

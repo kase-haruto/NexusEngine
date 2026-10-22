@@ -16,12 +16,28 @@
 #include "Graphics/Resource/TextureFormatDx12.h"
 #include "Graphics/Resource/Depthstencil/DepthstencilFormatDx12.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "ThirdParty/imgui/imgui_internal.h"
+#include "ThirdParty/ImGuizmo/ImGuizmo.h"
+#include <cstring>
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
 namespace NexusEngine {
+    ImTextureRef ImGuiRenderer::FindPreview(const std::string& key) const {
+        auto found = previews_.find(key);
+        return found == previews_.end() ? ImTextureRef{} : found->second->GetTexRef();
+    }
+    ImTextureRef ImGuiRenderer::CreatePreview(const std::string& key, const DecodedImage& image) {
+        if(auto found = previews_.find(key); found != previews_.end()) return found->second->GetTexRef();
+        if(!initialized_ || previews_.size() >= 256 || image.width != 160 || image.height != 160 || image.rgbaPixels.size() != 160*160*4) return {};
+        auto texture = std::make_unique<ImTextureData>();
+        texture->Create(ImTextureFormat_RGBA32, 160, 160);
+        std::memcpy(texture->Pixels, image.rgbaPixels.data(), image.rgbaPixels.size());
+        ImGui::RegisterUserTexture(texture.get());
+        auto reference = texture->GetTexRef(); previews_.emplace(key, std::move(texture)); return reference;
+    }
 	namespace {
 		constexpr int32_t kInvalidContext = 1;
 		constexpr int32_t kBackendInitializationFailed = 2;
@@ -123,6 +139,8 @@ namespace NexusEngine {
 		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
+        ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
+        ImGuizmo::BeginFrame();
 	}
 
 	void ImGuiRenderer::Record(GraphicsContext& context) {
@@ -135,11 +153,20 @@ namespace NexusEngine {
 	void ImGuiRenderer::Shutdown() noexcept {
 		graphicsSystem_ = nullptr;
 		if(initialized_) {
+            // NewFrame前に作られた画像もBackendの停止対象へ含める。
+            for(auto& [key, texture] : previews_) {
+                static_cast<void>(key);
+                if(!ImGui::GetPlatformIO().Textures.contains(texture.get())) ImGui::GetPlatformIO().Textures.push_back(texture.get());
+            }
 			ImGui_ImplDX12_Shutdown();
 			ImGui_ImplWin32_Shutdown();
 			initialized_ = false;
 		}
-		if(ImGui::GetCurrentContext() != nullptr) ImGui::DestroyContext();
+        if(ImGui::GetCurrentContext() != nullptr) {
+            for(auto& [key, texture] : previews_) { static_cast<void>(key); ImGui::UnregisterUserTexture(texture.get()); }
+            previews_.clear();
+            ImGui::DestroyContext();
+        }
 		// GraphicsSystemはShutdown前にGPU idleを保証するため、ここで安全に全slotを返せる。
 		if(descriptors_ != nullptr) {
 			for(const auto& allocation : allocations_) static_cast<void>(descriptors_->Free(allocation));
