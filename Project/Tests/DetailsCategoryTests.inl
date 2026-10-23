@@ -10,6 +10,13 @@ void DetailsCategoryIntegration() {
     AssetPropertyWidget assets;
     ModelAssetData source;
     source.materials.resize(2);
+    source.nodes.resize(2); source.meshes.resize(2);
+    source.nodes[0].meshIndices = {0}; source.nodes[1].meshIndices = {1};
+    source.meshes[0].submeshes = {{0,3,0,0}};
+    source.meshes[1].submeshes = {{0,3,0,1}};
+    assert(MaterialSlots(source, -1) == std::vector<int>({0,1}));
+    assert(MaterialSlots(source, 1) == std::vector<int>({1}));
+    assert(MaterialSlots(source, 2).empty());
     source.materials[0].name = "Surface";
     source.materials[0].baseColorFactor = {.2f,.4f,.6f,1};
     source.materials[0].metallicFactor = .7f;
@@ -93,9 +100,21 @@ void DetailsCategoryIntegration() {
             "PRIMITIVE 1 1 1 1 1 1 4294967295 1 \"\" \"\"\nDIRECTIONAL_LIGHT 0\nEND_ENTITY\nEND_LEVEL\n";
     }
     Level legacy; assert(legacy.Load(legacyPath));
+    assert(legacy.FindEntity({1,1}).GetComponent<PrimitiveRenderComponent>()->meshAsset == kStartupModelAssetReference);
     assert(!legacy.FindEntity({1,1}).GetComponent<PrimitiveRenderComponent>()->material.enabled);
     loaded.FindEntity(id).GetComponent<PrimitiveRenderComponent>()->material.metallic = std::numeric_limits<float>::infinity();
     assert(!loaded.Save(path.parent_path() / "InvalidMaterial.level"));
+    // A selected node using slot 1 must not expose edits to invisible slot 0.
+    assert(f.properties.Preview({id,"PrimitiveRender","nodeIndex"},1)); f.properties.Commit();
+    frame(); frame();
+    page = child("PropertyPage"); ImGui::FocusWindow(page);
+    ImGui::ActivateItemByID(ImHashStr("###UseSource", 0, ImHashStr("Material", 0, page->ID)));
+    frame(); frame();
+    assert(material().enabled && material().slot == 1);
+    assert(material().baseColor == source.materials[1].baseColorFactor);
+    assert(material().AppliesTo(13,12) && !material().AppliesTo(12,12));
+    assert(f.properties.Undo()); assert(material().slot == 0);
+    assert(f.properties.Undo()); frame();
     // NameとComponent追加はMaterialページを選択中でも常にヘッダから操作できる。
     auto* header = ImGui::FindWindowByName("Details Test");
     ImGui::FocusWindow(header);

@@ -1,12 +1,59 @@
 #include "ViewportTools.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
+#include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include <algorithm>
 #include <cstring>
 #include <limits>
 
 namespace NexusEngine {
 namespace {
+constexpr float kIconRadius = 14;
+struct ClipPoint { float x, y, z, w; };
+ClipPoint ToClip(Vector3 p, const Matrix4x4& m) {
+    return {p.x*m.At(0,0)+p.y*m.At(1,0)+p.z*m.At(2,0)+m.At(3,0),
+        p.x*m.At(0,1)+p.y*m.At(1,1)+p.z*m.At(2,1)+m.At(3,1),
+        p.x*m.At(0,2)+p.y*m.At(1,2)+p.z*m.At(2,2)+m.At(3,2),
+        p.x*m.At(0,3)+p.y*m.At(1,3)+p.z*m.At(2,3)+m.At(3,3)};
+}
+bool Finite(ClipPoint p) { return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) && std::isfinite(p.w); }
+ImVec2 Screen(ClipPoint p, float x, float y, float width, float height) {
+    return {x+(p.x/p.w+1)*width*.5f, y+(1-p.y/p.w)*height*.5f};
+}
+// Clip in homogeneous D3D space, including segments crossing the eye/near plane.
+void GuideLine(ImDrawList& draw, Vector3 a, Vector3 b, const Matrix4x4& vp,
+    float x, float y, float width, float height, ImU32 color) {
+    auto ca = ToClip(a,vp), cb = ToClip(b,vp);
+    if(!Finite(ca) || !Finite(cb)) return;
+    const float da[]{ca.x+ca.w,ca.w-ca.x,ca.y+ca.w,ca.w-ca.y,ca.z,ca.w-ca.z,ca.w-1e-5f};
+    const float db[]{cb.x+cb.w,cb.w-cb.x,cb.y+cb.w,cb.w-cb.y,cb.z,cb.w-cb.z,cb.w-1e-5f};
+    float low = 0, high = 1;
+    for(size_t i=0;i<7;++i) {
+        if(da[i]<0 && db[i]<0) return;
+        if(da[i]<0) low=std::max(low,da[i]/(da[i]-db[i]));
+        if(db[i]<0) high=std::min(high,da[i]/(da[i]-db[i]));
+    }
+    if(low>high) return;
+    const auto at=[&](float t) { return ClipPoint{ca.x+(cb.x-ca.x)*t,ca.y+(cb.y-ca.y)*t,
+        ca.z+(cb.z-ca.z)*t,ca.w+(cb.w-ca.w)*t}; };
+    draw.AddLine(Screen(at(low),x,y,width,height),Screen(at(high),x,y,width,height),color,1.5f);
+}
+struct SceneIcon { Entity entity; ClipPoint clip; bool camera, enabled; };
+std::vector<SceneIcon> SceneIcons(Scene& scene, const Matrix4x4& vp) {
+    std::vector<SceneIcon> icons;
+    scene.ForEach<TransformComponent>([&](Entity entity, TransformComponent& transform) {
+        const auto* camera=entity.GetComponent<CameraComponent>();
+        const auto* light=entity.GetComponent<DirectionalLightComponent>();
+        if(!camera && !light) return;
+        const auto clip=ToClip({transform.worldMatrix.At(3,0),transform.worldMatrix.At(3,1),transform.worldMatrix.At(3,2)},vp);
+        if(!Finite(clip) || clip.w<=1e-5f || clip.z<0 || clip.z>clip.w ||
+            std::abs(clip.x)>clip.w || std::abs(clip.y)>clip.w) return;
+        icons.push_back({entity,clip,camera!=nullptr,camera ? camera->enabled : light->enabled});
+    });
+    std::stable_sort(icons.begin(),icons.end(),[](const auto& a,const auto& b) { return a.clip.z/a.clip.w>b.clip.z/b.clip.w; });
+    return icons;
+}
 Vector3 Point(Vector3 p, const Matrix4x4& m, float w = 1) {
     return {p.x*m.At(0,0)+p.y*m.At(1,0)+p.z*m.At(2,0)+w*m.At(3,0),
         p.x*m.At(0,1)+p.y*m.At(1,1)+p.z*m.At(2,1)+w*m.At(3,1),
@@ -68,6 +115,7 @@ void ViewportTools::SetModel(const ModelAssetData& model, const ModelInstance& p
 void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     frame_ = &frame;
     if(session_.IsPlaying()) return;
+    PrepareCameraGuides(aspect);
     if(generation_ != session_.Generation()) {
         generation_ = session_.Generation(); position_ = {0,2,-10}; yaw_ = pitch_ = 0;
         if(frame.camera) if(auto world = TryInverse(frame.camera->viewMatrix)) {
@@ -82,8 +130,25 @@ void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     frame.camera = RenderCamera{{}, *view, projection, Multiply(*view,projection)};
 }
 bool ViewportTools::Pick(float x, float y, bool toggle) {
-    if(session_.IsPlaying() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera || !model_ || !pose_ ||
+    if(session_.IsPlaying() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera ||
         !std::isfinite(x) || !std::isfinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
+    auto* level = session_.GetLevel();
+    if(level && level->GetScene() && viewportWidth_>0 && viewportHeight_>0) {
+        auto icons=SceneIcons(*level->GetScene(),frame_->camera->viewProjectionMatrix);
+        // Icons are overlays; the frontmost visible icon wins before mesh picking.
+        for(auto it=icons.rbegin();it!=icons.rend();++it) {
+            const auto p=Screen(it->clip,0,0,viewportWidth_,viewportHeight_);
+            const float dx=x*viewportWidth_-p.x, dy=y*viewportHeight_-p.y;
+            if(dx*dx+dy*dy>kIconRadius*kIconRadius) continue;
+            if(auto* id=it->entity.GetComponent<PersistentIdComponent>()) {
+                const auto value=id->value;
+                properties_.Commit(); session_.Selection().Select(value,toggle); return true;
+            }
+        }
+    }
+    if(!model_ || !pose_) {
+        properties_.Commit(); if(!toggle) session_.Selection().Clear(); return false;
+    }
     auto inverse = TryInverse(frame_->camera->viewProjectionMatrix);
     if(!inverse) return false;
     auto near = Unproject({2*x-1,1-2*y,0},*inverse), far = Unproject({2*x-1,1-2*y,1},*inverse);
@@ -91,33 +156,65 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
     const auto direction = (*far-*near).Normalized();
     float closest = std::numeric_limits<float>::max(); EntityId picked;
     const auto& transforms = pose_->GetNodeWorldTransforms();
+    std::vector<std::vector<Vector3>> deformed(model_->meshes.size());
+    std::vector<Bounds> deformedBounds(model_->meshes.size());
     for(const auto& object : frame_->primitives) for(size_t node = 0; node < model_->nodes.size() && node < transforms.size(); ++node) {
         if(object.nodeIndex != PrimitiveRenderItem::kAllNodes && object.nodeIndex != node) continue;
         if(node < object.nodeBegin || node >= object.nodeEnd) continue;
         for(auto meshIndex : model_->nodes[node].meshIndices) {
             if(meshIndex >= bounds_.size() || !bounds_[meshIndex].valid) continue;
             const auto& mesh = model_->meshes[meshIndex];
-            // 静的geometryを厳密に三角形判定する。Skin変形のCPU展開は別の拡張対象。
-            if(mesh.skinIndex != MeshAssetData::kNoSkin) continue;
-            auto local = TryInverse(Multiply(transforms[node],object.worldMatrix));
+            const bool skinned = mesh.skinIndex != MeshAssetData::kNoSkin;
+            if(skinned && deformed[meshIndex].empty()) {
+                const auto* palette = pose_->GetSkinPalette(mesh.skinIndex);
+                if(!palette || mesh.vertexStride != sizeof(ModelVertex)) continue;
+                auto& positions = deformed[meshIndex];
+                auto& bound = deformedBounds[meshIndex];
+                for(size_t vertex = 0; vertex < mesh.vertexData.size()/mesh.vertexStride; ++vertex) {
+                    ModelVertex input;
+                    std::memcpy(&input, mesh.vertexData.data()+vertex*mesh.vertexStride, sizeof(input));
+                    Vector3 position{};
+                    for(size_t joint = 0; joint < 4; ++joint) {
+                        const float index = input.jointIndices[joint];
+                        if(!std::isfinite(index) || index < 0 || index >= static_cast<float>(palette->size())) continue;
+                        position = position + Point({input.position[0],input.position[1],input.position[2]},
+                            (*palette)[static_cast<size_t>(index)]) * input.jointWeights[joint];
+                    }
+                    positions.push_back(position);
+                    if(!bound.valid) { bound.low = bound.high = position; bound.valid = true; }
+                    else {
+                        bound.low = {std::min(bound.low.x,position.x),std::min(bound.low.y,position.y),std::min(bound.low.z,position.z)};
+                        bound.high = {std::max(bound.high.x,position.x),std::max(bound.high.y,position.y),std::max(bound.high.z,position.z)};
+                    }
+                }
+            }
+            auto local = TryInverse(skinned ? object.worldMatrix : Multiply(transforms[node],object.worldMatrix));
             if(!local) continue;
             const auto origin = Point(*near,*local), ray = Point(direction,*local,0);
-            const auto& bound = bounds_[meshIndex];
+            const auto& bound = skinned ? deformedBounds[meshIndex] : bounds_[meshIndex];
             if(!HitBox(origin,ray,bound.low,bound.high,closest)) continue;
             const size_t count = mesh.indexData.size()/(mesh.indexFormat == IndexFormat::UInt16 ? 2 : 4);
             const size_t vertices = mesh.vertexData.size()/mesh.vertexStride;
-            for(size_t triangle = 0; triangle+2 < count; triangle += 3) {
-                auto a = Index(mesh,triangle), b = Index(mesh,triangle+1), c = Index(mesh,triangle+2);
-                if(a >= vertices || b >= vertices || c >= vertices) continue;
-                auto hit = HitTriangle(origin,ray,Vertex(mesh,a),Vertex(mesh,b),Vertex(mesh,c));
-                if(hit && *hit < closest) {
-                    closest = *hit; picked = {static_cast<uint32_t>(object.sourceObject.value), static_cast<uint32_t>(object.sourceObject.value >> 32)};
+            const auto vertex = [&](uint32_t index) { return skinned ? deformed[meshIndex][index] : Vertex(mesh,index); };
+            for(const auto& sub : mesh.submeshes) {
+                if(sub.firstIndex > count || sub.indexCount > count-sub.firstIndex) continue;
+                const size_t end = static_cast<size_t>(sub.firstIndex)+sub.indexCount;
+                for(size_t triangle = sub.firstIndex; triangle+2 < end; triangle += 3) {
+                    const int64_t a = static_cast<int64_t>(Index(mesh,triangle))+sub.vertexOffset;
+                    const int64_t b = static_cast<int64_t>(Index(mesh,triangle+1))+sub.vertexOffset;
+                    const int64_t c = static_cast<int64_t>(Index(mesh,triangle+2))+sub.vertexOffset;
+                    if(a < 0 || b < 0 || c < 0 || static_cast<uint64_t>(a) >= vertices ||
+                        static_cast<uint64_t>(b) >= vertices || static_cast<uint64_t>(c) >= vertices) continue;
+                    auto hit = HitTriangle(origin,ray,vertex(static_cast<uint32_t>(a)),vertex(static_cast<uint32_t>(b)),vertex(static_cast<uint32_t>(c)));
+                    if(hit && *hit < closest) {
+                        closest = *hit; picked = {static_cast<uint32_t>(object.sourceObject.value), static_cast<uint32_t>(object.sourceObject.value >> 32)};
+                    }
                 }
             }
         }
     }
     properties_.Commit();
-    auto* level = session_.GetLevel(); auto entity = level && level->GetScene() ? level->GetScene()->GetEntity(picked) : Entity{};
+    auto entity = level && level->GetScene() ? level->GetScene()->GetEntity(picked) : Entity{};
     if(auto* persistent = entity.GetComponent<PersistentIdComponent>()) { session_.Selection().Select(persistent->value,toggle); return true; }
     if(!toggle) session_.Selection().Clear(); return false;
 }
@@ -187,9 +284,114 @@ void ViewportTools::FocusSelection() {
     const auto camera = MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({pitch_,yaw_,0}),{});
     position_ = pivot-Point({0,0,1},camera,0)*std::max(radius*2.5f,2.0f);
 }
+void ViewportTools::PrepareCameraGuides(float aspect) {
+    cameraGuides_.clear();
+    auto* level=session_.GetLevel();
+    if(!level || !level->GetScene() || !std::isfinite(aspect) || aspect<=0) return;
+    // Capture the scene camera volume before installing the editor camera. These world
+    // vertices must never be rebuilt from the observer's matrices or GUI viewport size.
+    level->GetScene()->ForEach<TransformComponent,CameraComponent>([&](Entity entity,TransformComponent& transform,CameraComponent& camera) {
+        if(!std::isfinite(camera.verticalFieldOfViewRadians) || camera.verticalFieldOfViewRadians<=0 ||
+            camera.verticalFieldOfViewRadians>=3.14159265f || !std::isfinite(camera.nearClip) ||
+            !std::isfinite(camera.farClip) || camera.nearClip<=0 || camera.farClip<=camera.nearClip) return;
+        CameraGuide guide{entity.GetId(),transform.worldMatrix,{}};
+        guide.symbolScale=camera.smallFrustum ? 1.0f/7.0f : 1.0f;
+        const float tangent=std::tan(camera.verticalFieldOfViewRadians*.5f);
+        // Keep the frustum as a compact editor symbol, preserving FOV and clip ratios.
+        // This changes only the guide geometry, never the runtime camera's clipping.
+        constexpr float kMaximumGuideDepth=3.0f;
+        const float guideScale=std::min(1.0f,kMaximumGuideDepth/camera.farClip)*guide.symbolScale;
+        for(int plane=0;plane<2;++plane) {
+            const float depth=(plane ? camera.farClip : camera.nearClip)*guideScale;
+            const float h=tangent*depth, w=h*aspect;
+            for(int corner=0;corner<4;++corner)
+                guide.corners[plane*4+corner]=Point({corner==0 || corner==3 ? -w : w,corner<2 ? -h : h,depth},guide.world);
+        }
+        cameraGuides_.push_back(guide);
+    });
+}
+void ViewportTools::DrawSceneGuides(float x, float y, float width, float height) {
+    auto* level=session_.GetLevel();
+    if(!level || !level->GetScene()) return;
+    auto& scene=*level->GetScene();
+    auto& draw=*ImGui::GetWindowDrawList();
+    const auto& vp=frame_->camera->viewProjectionMatrix;
+    draw.PushClipRect({x,y},{x+width,y+height},true);
+    const auto selected=[&](Entity entity) {
+        const auto* id=entity.GetComponent<PersistentIdComponent>();
+        return id && session_.Selection().Contains(id->value);
+    };
+    const auto colorFor=[&](Entity entity,bool camera,bool enabled) {
+        return selected(entity) ? IM_COL32(255,170,55,255) : !enabled ? IM_COL32(150,150,150,180) :
+            camera ? IM_COL32(100,205,255,220) : IM_COL32(255,225,110,220);
+    };
+    const auto line=[&](Vector3 a,Vector3 b,ImU32 color) { GuideLine(draw,a,b,vp,x,y,width,height,color); };
+    for(const auto& guide : cameraGuides_) {
+        auto entity=scene.GetEntity(guide.entity);
+        const auto* camera=entity.GetComponent<CameraComponent>();
+        if(!camera) continue;
+        const auto color=colorFor(entity,true,camera->enabled);
+        const auto& corners=guide.corners;
+        for(int i=0;i<4;++i) {
+            line(corners[i],corners[(i+1)%4],color);
+            line(corners[i+4],corners[(i+1)%4+4],color);
+            line(corners[i],corners[i+4],color);
+        }
+        // A short camera body/direction marker stays readable with distant far planes.
+        const float symbolScale=guide.symbolScale;
+        const auto localLine=[&](Vector3 a,Vector3 b) { line(Point(a*symbolScale,guide.world),Point(b*symbolScale,guide.world),color); };
+        localLine({-.3f,.2f,0},{.3f,.2f,0}); localLine({.3f,.2f,0},{0,.5f,0}); localLine({0,.5f,0},{-.3f,.2f,0});
+        localLine({}, {0,0,1});
+    }
+    scene.ForEach<TransformComponent,DirectionalLightComponent>([&](Entity entity,TransformComponent& transform,DirectionalLightComponent& light) {
+        if(!light.IsValid()) return;
+        // The component stores surface-to-light; arrows show photons travelling in the opposite direction.
+        const auto direction=Point({light.light.direction[0],light.light.direction[1],light.light.direction[2]},transform.worldMatrix,0).Normalized()*-1;
+        if(direction.LengthSquared()<1e-8f) return;
+        const auto right=Vector3::Cross(std::abs(direction.y)>.99f ? Vector3::Right() : Vector3::Up(),direction).Normalized();
+        const auto up=Vector3::Cross(direction,right);
+        const auto origin=Point({},transform.worldMatrix);
+        const auto color=colorFor(entity,false,light.enabled);
+        for(int i=0;i<5;++i) {
+            const auto start=origin+(i==1 ? right*.5f : i==2 ? right*-.5f : i==3 ? up*.5f : i==4 ? up*-.5f : Vector3{});
+            const auto end=start+direction*3;
+            line(start,end,color); line(end,end-direction*.35f+right*.18f,color); line(end,end-direction*.35f-right*.18f,color);
+        }
+    });
+    auto icons=SceneIcons(scene,vp);
+    for(const auto& icon : icons) {
+        const auto p=Screen(icon.clip,x,y,width,height);
+        const auto color=colorFor(icon.entity,icon.camera,icon.enabled);
+        draw.AddCircleFilled(p,kIconRadius,IM_COL32(22,27,34,230),24);
+        draw.AddCircle(p,kIconRadius,color,24,selected(icon.entity) ? 2.5f : 1.0f);
+        if(icon.camera) {
+            draw.AddRect({p.x-8,p.y-5},{p.x+3,p.y+5},color,1.0f,2.0f);
+            draw.AddQuad({p.x+3,p.y-2},{p.x+9,p.y-6},{p.x+9,p.y+6},{p.x+3,p.y+2},color,2);
+        } else {
+            draw.AddCircle(p,4,color,16,2);
+            for(int i=0;i<8;++i) {
+                const float a=static_cast<float>(i)*.7853981634f;
+                draw.AddLine({p.x+std::cos(a)*7,p.y+std::sin(a)*7},{p.x+std::cos(a)*10,p.y+std::sin(a)*10},color,2);
+            }
+        }
+    }
+    draw.PopClipRect();
+    if(ImGui::IsItemHovered() && !navigating_ && !IsManipulating()) {
+        const auto mouse=ImGui::GetIO().MousePos;
+        for(auto it=icons.rbegin();it!=icons.rend();++it) {
+            const auto p=Screen(it->clip,x,y,width,height);
+            if((mouse.x-p.x)*(mouse.x-p.x)+(mouse.y-p.y)*(mouse.y-p.y)>kIconRadius*kIconRadius) continue;
+            const auto* name=it->entity.GetComponent<NameComponent>();
+            ImGui::SetTooltip("%s (%s)",name ? name->name.c_str() : "",it->camera ? "Camera" : "Directional Light");
+            break;
+        }
+    }
+}
 void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
-    if(session_.IsPlaying() || !frame_ || !frame_->camera) return;
+    viewportWidth_=width; viewportHeight_=height;
+    if(session_.IsPlaying() || !frame_ || !frame_->camera || !std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0) return;
     const auto& io = ImGui::GetIO(); const bool hovered = ImGui::IsItemHovered();
+    DrawSceneGuides(x,y,width,height);
     if(hovered && !IsManipulating() && ImGui::IsMouseClicked(1)) { navigating_ = true; ImGui::SetWindowFocus(); }
     if(!ImGui::IsMouseDown(1) || !ImGui::IsWindowFocused() || io.AppFocusLost) navigating_ = false;
     if(navigating_ && !io.WantTextInput) {

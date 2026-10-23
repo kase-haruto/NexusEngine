@@ -376,7 +376,8 @@ namespace NexusEngine {
                 auto model = modelLibrary_->Model(reference); return model ? *model : nullptr;
             }, [this](const std::string& path, bool texture, int node) -> ImTextureRef {
                 std::string reference;
-                if(!path.empty()) {
+                if(path == kStartupModelAssetReference && !texture) reference = path;
+                else if(!path.empty()) {
                     auto result = modelLibrary_->Reference(std::filesystem::path(reinterpret_cast<const char8_t*>(path.c_str())));
                     if(!result) return {}; reference = *result;
                 }
@@ -459,15 +460,16 @@ namespace NexusEngine {
 		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_);
         if(extracted && modelLibrary_) {
             for(auto& item : renderScene_.primitives) {
-                auto range = modelLibrary_->Resolve(item.meshAsset, item.baseColorTexture);
+                auto range = modelLibrary_->Resolve(item.shape, item.meshAsset, item.baseColorTexture);
                 if(!range) {
-                    const auto key = item.meshAsset + "\n" + item.baseColorTexture;
+                    const auto key = std::to_string(static_cast<uint32_t>(item.shape)) + "\n" + item.meshAsset + "\n" + item.baseColorTexture;
                     if(reportedAssetErrors_.insert(key).second) NEXUS_LOG_ERROR("Assets", range.error().GetMessageText());
                     item.nodeEnd = 0;
                     continue;
                 }
                 item.nodeBegin = range->begin; item.nodeEnd = range->end;
                 item.materialBegin = range->materialBegin;
+                if(item.shape != PrimitiveShape::Asset) item.nodeIndex = PrimitiveRenderItem::kAllNodes;
                 if(item.nodeIndex != PrimitiveRenderItem::kAllNodes) {
                     if(item.nodeIndex >= range->end - range->begin) item.nodeEnd = 0;
                     else item.nodeIndex += range->begin;

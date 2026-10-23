@@ -20,6 +20,7 @@
 #include "Runtime/Scene/Components/NameComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Graphics/Model/ModelAssetReference.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 
 namespace NexusEngine {
@@ -27,7 +28,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 8;
+		constexpr uint32_t kFormatVersion = 11;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -54,7 +55,7 @@ namespace NexusEngine {
             const auto valid = [](const std::string& path) {
                 return path.size() <= 4096 && path.find('\0') == path.npos && path.find('\n') == path.npos && path.find('\r') == path.npos;
             };
-            return valid(primitive.meshAsset) && valid(primitive.baseColorTexture) && primitive.material.IsValid();
+            return valid(primitive.meshAsset) && valid(primitive.baseColorTexture) && primitive.material.IsValid() && IsValidPrimitiveShape(primitive.shape);
 		}
 
         // v1〜7にはInstance材質がないため、既定のdisabledを保つ。
@@ -65,6 +66,12 @@ namespace NexusEngine {
             for(float& value : material.emissive) input >> value;
             input >> material.occlusionStrength;
             return static_cast<bool>(input) && material.IsValid();
+        }
+        bool ReadShape(std::istream& input, PrimitiveShape& shape) {
+            uint32_t value = 0;
+            if(!(input >> value)) return false;
+            shape = static_cast<PrimitiveShape>(value);
+            return IsValidPrimitiveShape(shape);
         }
 
 		struct PendingParent {
@@ -156,7 +163,7 @@ namespace NexusEngine {
 
 				if(const auto* camera = entity.GetComponent<CameraComponent>()) {
 					output << "CAMERA 1 " << camera->verticalFieldOfViewRadians << ' ' << camera->nearClip << ' '
-					       << camera->farClip << ' ' << camera->primary << ' ' << camera->enabled << '\n';
+					       << camera->farClip << ' ' << camera->primary << ' ' << camera->enabled << ' ' << camera->smallFrustum << '\n';
 				} else {
 					output << "CAMERA 0\n";
 				}
@@ -169,7 +176,7 @@ namespace NexusEngine {
                     for(float value : material.baseColor) output << ' ' << value;
                     output << ' ' << material.metallic << ' ' << material.roughness << ' ' << material.normalScale;
                     for(float value : material.emissive) output << ' ' << value;
-                    output << ' ' << material.occlusionStrength << '\n';
+                    output << ' ' << material.occlusionStrength << ' ' << static_cast<uint32_t>(primitive->shape) << '\n';
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
@@ -280,6 +287,7 @@ namespace NexusEngine {
 			if(hasCamera) {
 				CameraComponent camera;
 				if(!(input >> camera.verticalFieldOfViewRadians >> camera.nearClip >> camera.farClip >> camera.primary >> camera.enabled) ||
+                   (version>=11 && !(input >> camera.smallFrustum)) ||
 				   !IsValid(camera) ||
 				   entity.AddComponent<CameraComponent>(camera) == nullptr) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Camera component is invalid."));
@@ -297,11 +305,15 @@ namespace NexusEngine {
 				   (version >= 4 && !(input >> primitive.staticLighting)) ||
                    (version >= 7 && !(input >> std::quoted(primitive.meshAsset) >> std::quoted(primitive.baseColorTexture))) ||
                    (version >= 8 && !ReadMaterial(input, primitive.material)) ||
+                   (version >= 9 && !ReadShape(input, primitive.shape)) ||
                    primitive.meshAsset.size() > 4096 || primitive.baseColorTexture.size() > 4096 ||
-				   !IsValid(primitive) ||
-				   entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr) {
+				   !IsValid(primitive)) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));
 				}
+                if(version < 10 && primitive.shape == PrimitiveShape::Asset && primitive.meshAsset.empty())
+                    primitive.meshAsset = kStartupModelAssetReference;
+                if(entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr)
+                    return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));
 			}
 			if(version >= 3) {
 				bool hasLight = false;

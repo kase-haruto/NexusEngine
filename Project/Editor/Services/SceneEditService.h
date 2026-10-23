@@ -12,7 +12,7 @@ class SceneEditService final {
 public:
     SceneEditService(EditorSession& session, PropertyEditService& properties) : session_(session), properties_(properties) {}
     /** \brief 指定Component構成のEntityを追加し選択する */
-    bool Create(std::string_view kind);
+    bool Create(std::string_view kind, std::string_view name = {});
     /** \brief 選択Entityだけを削除する。残る子はrootへ戻す */
     bool DeleteSelection();
     /** \brief Local Transformを保って親を変更する。循環を拒否する */

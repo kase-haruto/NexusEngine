@@ -1,5 +1,6 @@
 #pragma once
 #include "ModelAssetData.h"
+#include "PrimitiveShape.h"
 #include "Foundation/Error/Result.h"
 namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
@@ -9,6 +10,8 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class PrimitiveMeshBuilder final {
 	public:
+        /** Unit shapes centered at the origin; Sphere/Cylinder/Cone radius is 0.5. */
+        [[nodiscard]] static Result<ModelAssetData> Build(PrimitiveShape shape);
 		/** \brief 外向き法線のUV Sphere。radius>0、rings>=3、sectors>=3を検証する */
 		[[nodiscard]] static Result<MeshAssetData> Sphere(float radius, uint32_t rings, uint32_t sectors, uint32_t material);
 		/** \brief 原点中心の単位Box（各軸-0.5〜0.5）、面ごとの法線とUV */

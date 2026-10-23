@@ -65,6 +65,16 @@ void RegisterSceneTypes(TypeRegistry& registry) {
     registry.Register(std::move(transform));
     auto primitive = Type<PrimitiveRenderComponent>("PrimitiveRender", "component.primitive");
     primitive.add = [](Entity entity) { return entity.AddComponent<PrimitiveRenderComponent>() != nullptr; };
+    auto shape = Property<PrimitiveRenderComponent, EnumValue>("shape", "property.primitiveShape", PropertyKind::Enum,
+        [](const auto& c) { return EnumValue{static_cast<int>(c.shape)}; },
+        [](auto& c, EnumValue v) {
+            auto next = static_cast<PrimitiveShape>(v.value);
+            if(!IsValidPrimitiveShape(next)) return false;
+            c.shape = next; return true;
+        });
+    shape.enumValues = {{0,"primitive.asset"},{1,"primitive.cube"},{2,"primitive.sphere"},
+        {3,"primitive.plane"},{4,"primitive.cylinder"},{5,"primitive.cone"}};
+    primitive.properties.push_back(std::move(shape));
     const auto validPath = [](const std::string& v) {
         return v.size() <= 4096 && v.find('\0') == v.npos && v.find('\n') == v.npos && v.find('\r') == v.npos;
     };
@@ -115,6 +125,14 @@ void RegisterSceneTypes(TypeRegistry& registry) {
             if(!std::isfinite(v) || v <= c.nearClip) return false;
             c.farClip = v; return true;
         }));
+    auto frustumSize = Property<CameraComponent, EnumValue>("frustumSize", "property.frustumSize", PropertyKind::Enum,
+        [](const auto& c) { return EnumValue{c.smallFrustum ? 1 : 0}; },
+        [](auto& c, EnumValue v) {
+            if(v.value!=0 && v.value!=1) return false;
+            c.smallFrustum=v.value==1; return true;
+        });
+    frustumSize.enumValues={{0,"camera.frustumNormal"},{1,"camera.frustumSmall"}};
+    camera.properties.push_back(std::move(frustumSize));
     for(bool primary : {false, true}) {
         PropertyDescriptor flag{primary ? "primary" : "enabled", primary ? "property.primary" : "property.enabled", PropertyKind::Bool,
             [primary](Entity entity) -> std::optional<PropertyValue> {

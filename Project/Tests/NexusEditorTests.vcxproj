@@ -67,6 +67,7 @@
 <ItemGroup><ClCompile Include="..\Editor\Gui\Widgets\AssetPropertyWidget.cpp" /></ItemGroup>
 <ItemGroup>
 <ClCompile Include="..\Graphics\Model\ModelAssetLibrary.cpp" />
+<ClCompile Include="..\Graphics\Model\PrimitiveMeshBuilder.cpp" />
 <ClCompile Include="..\Graphics\Model\ModelThumbnail.cpp" />
 <ClCompile Include="..\Graphics\Model\ModelLoader.cpp" />
 <ClCompile Include="..\Graphics\Model\GltfModelLoader.cpp" />

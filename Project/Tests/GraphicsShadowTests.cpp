@@ -10,6 +10,7 @@
 #include <fstream>
 #include "Samples/OpticalDemoScene.h"
 #include "Graphics/Model/ModelLoader.h"
+#include "Graphics/Model/PrimitiveMeshBuilder.h"
 #include <stdexcept>
 
 #include "Graphics/Backend/DirectX12/Shadow/ShadowBackend.h"
@@ -232,7 +233,7 @@ namespace {
 	#include "BakedLightingTests.inl"
 	#include "DDGITests.inl"
     #include "SelectionOutlineTests.inl"
-	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false) {
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false, PrimitiveShape primitiveShape = PrimitiveShape::Asset) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = performanceMeasurement ? 1280U : (sponza || metalTest ? 384U : (opticalDemo ? 256U : 64U));
         const uint32_t height = performanceMeasurement ? 720U : (sponza || metalTest ? 216U : (opticalDemo ? 192U : 64U));
@@ -282,6 +283,10 @@ namespace {
 		TransientDescriptorArena transient;
 		Check(transient.Initialize(test.device.GetDevice(), &test.descriptors.Resources(), 2, sponza ? 512U : 16U));
 		if(metalTest) { test.asset = {}; Check(AppendPBRTestScene(test.asset)); }
+        if(primitiveShape != PrimitiveShape::Asset) {
+            auto generated = PrimitiveMeshBuilder::Build(primitiveShape); Check(generated);
+            test.asset = std::move(*generated);
+        }
 		ModelInstance pose; Check(pose.Initialize(test.asset));
 		RenderScene scene; scene.camera = RenderCamera {};
         if(opticalDemo) {
@@ -305,6 +310,13 @@ namespace {
             if(giVariant<4 || giVariant==5) { scene.directionalLight.intensity=0; scene.ambientIrradiance=giVariant==1 || giVariant==5?std::array<float,3>{1,1,1}:std::array<float,3>{0,0,0}; }
         }
         scene.primitives.push_back({ {1}, Matrix4x4::Identity(), {1,1,1,1} });
+        if(primitiveShape != PrimitiveShape::Asset) {
+            scene.camera->viewMatrix = *TryInverse(MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({.35f,0,0}),{0,1,-3}));
+            scene.camera->projectionMatrix = MakePerspectiveFovMatrix(1.04719755f,static_cast<float>(width)/height,.1f,100);
+            scene.camera->viewProjectionMatrix = Multiply(scene.camera->viewMatrix,scene.camera->projectionMatrix);
+            scene.directionalLight.direction = {0,1,-1};
+            scene.ambientIrradiance = {1,1,1};
+        }
 		if(metalTest) {
 			scene.primitives.clear();
 			for(uint32_t node=0;node<test.asset.nodes.size();++node)
@@ -443,6 +455,19 @@ namespace {
             Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
             std::cout << "Material override: slot isolation, live GPU pixels, source restoration and bake signature passed. optical=" << opticalDemo << '\n';
             return edited;
+        }
+        if(primitiveShape != PrimitiveShape::Asset) {
+            const auto pixels = render(ShadowMode::Auto,false);
+            size_t covered = 0;
+            for(size_t i = 0; i < pixels.size(); i += 4) if(pixels[i+3] == 255) ++covered;
+            Require(covered > 20, "Generated primitive produced no visible geometry.");
+            scene.primitives.clear();
+            const auto empty = render(ShadowMode::Auto,false);
+            Require(pixels != empty, "Generated primitive did not affect the render target.");
+            Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
+            std::cout << "Primitive " << static_cast<uint32_t>(primitiveShape) << ": " << covered << " pixels, GPU validation passed.\n";
+            return pixels;
         }
 		if(bakedVariant) return ValidateBakedIntegration(bakedVariant,scene,renderer,render,test,depth,rtv,transient,width,height);
 		if(ddgiVariant) return ValidateDDGIIntegration(ddgiVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
@@ -807,6 +832,11 @@ int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+        if(argc == 2 && std::strcmp(argv[1], "--primitives") == 0) {
+            for(auto shape : {PrimitiveShape::Cube,PrimitiveShape::Sphere,PrimitiveShape::Plane,PrimitiveShape::Cylinder,PrimitiveShape::Cone})
+                ForwardIntegration(false,false,false,0,false,false,0,0,4,0,false,false,false,shape);
+            return 0;
+        }
         if(argc == 2 && std::strcmp(argv[1], "--baked-cpu") == 0) { BakedLightingCpuTests(); return 0; }
         if(argc == 2 && std::strcmp(argv[1], "--material-override") == 0) {
             ForwardIntegration(false,false,false,0,false,false,0,0,4,0,false,false,true);

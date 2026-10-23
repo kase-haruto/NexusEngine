@@ -18,6 +18,7 @@
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
 #include "Editor/Gui/Properties/MaterialPage.h"
+#include "Editor/Gui/Properties/MaterialSlots.h"
 #include "Runtime/Level/LevelSerializer.h"
 #include "Editor/ImGui/ImGuiStyle.h"
 #include "ThirdParty/imgui/imgui_internal.h"
@@ -239,6 +240,8 @@ void OffsetMeshGizmoInteraction() {
     const auto id=Id(entity), backgroundId=Id(background);
     assert(entity.AddComponent<PrimitiveRenderComponent>());
     assert(background.AddComponent<PrimitiveRenderComponent>());
+    entity.GetComponent<PrimitiveRenderComponent>()->meshAsset = kStartupModelAssetReference;
+    background.GetComponent<PrimitiveRenderComponent>()->meshAsset = kStartupModelAssetReference;
     entity.GetComponent<TransformComponent>()->translation={-3,0,4};
     background.GetComponent<TransformComponent>()->translation={-300,0,8};
     background.GetComponent<TransformComponent>()->scale={100,100,1};
@@ -252,7 +255,7 @@ void OffsetMeshGizmoInteraction() {
     mesh.vertexData.assign(vertexBytes,vertexBytes+sizeof(vertices));
     const auto* indexBytes=reinterpret_cast<const uint8_t*>(indices.data());
     mesh.indexData.assign(indexBytes,indexBytes+sizeof(indices));
-    mesh.indexFormat=IndexFormat::UInt16; model.meshes.push_back(std::move(mesh));
+    mesh.indexFormat=IndexFormat::UInt16; mesh.submeshes.push_back({0,3,0,0}); model.meshes.push_back(std::move(mesh));
     ModelNodeAssetData node; node.meshIndices={0}; node.localTransform.translation={1,0,0};
     model.nodes.push_back(node);
     ModelInstance pose; assert(pose.Initialize(model));
@@ -494,13 +497,49 @@ void ViewportPickingAndValidation() {
     const float vertices[]{-2,0,0, 2,0,0, 0,4,0}; const uint16_t indices[]{0,1,2};
     mesh.vertexData.resize(sizeof(vertices)); std::memcpy(mesh.vertexData.data(),vertices,sizeof(vertices));
     mesh.indexData.resize(sizeof(indices)); std::memcpy(mesh.indexData.data(),indices,sizeof(indices));
+    mesh.submeshes.push_back({0,3,0,0});
     ModelInstance pose; assert(pose.Initialize(model));
     assert(f.session.GetLevel()->Update(0));
     RenderScene frame; assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(),1,frame));
     ViewportTools tools{f.session,f.properties}; tools.SetModel(model,pose); tools.Prepare(frame,1);
+    f.session.Selection().Clear();
+    assert(!tools.Pick(0.5f,0.5f,false));
+    assert(f.session.Selection().All().empty());
+    entity.GetComponent<PrimitiveRenderComponent>()->meshAsset = kStartupModelAssetReference;
+    assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(),1,frame));
+    tools.Prepare(frame,1);
     f.session.Selection().Clear(); assert(tools.Pick(0.5f,0.5f,false)); assert(f.session.GetSelection() == selected);
     assert(tools.Pick(0.5f,0.5f,true)); assert(f.session.Selection().All().empty());
     assert(!tools.Pick(0,0,false)); assert(!tools.Pick(-1,0,false));
+    // Only the submitted index range is selectable, with the draw's base vertex.
+    const float offsetVertices[]{20,0,0, 24,0,0, 22,4,0, -2,0,0, 2,0,0, 0,4,0};
+    const uint16_t offsetIndices[]{0,0,0,0,1,2};
+    mesh.vertexData.resize(sizeof(offsetVertices)); std::memcpy(mesh.vertexData.data(),offsetVertices,sizeof(offsetVertices));
+    mesh.indexData.resize(sizeof(offsetIndices)); std::memcpy(mesh.indexData.data(),offsetIndices,sizeof(offsetIndices));
+    mesh.submeshes = {{3,3,3,0}};
+    tools.SetModel(model,pose);
+    assert(tools.Pick(.5f,.5f,false) && f.session.GetSelection() == selected);
+    mesh.submeshes = {{0,3,0,0}};
+    assert(!tools.Pick(.5f,.5f,false));
+    mesh.submeshes.clear(); assert(!tools.Pick(.5f,.5f,false));
+    // Skinning uses the current palette and must not apply the mesh node twice.
+    model.nodes[0].localTransform.translation = {40,0,0};
+    model.nodes.resize(2); model.nodes[1].localTransform.translation = {-22,0,0};
+    model.skins.push_back({"skin",{1},{Matrix4x4::Identity()}});
+    std::array<ModelVertex,3> skinned{};
+    for(size_t v = 0; v < skinned.size(); ++v) {
+        std::copy_n(offsetVertices+v*3,3,skinned[v].position);
+        skinned[v].position[1] = vertices[v*3+1];
+        skinned[v].jointWeights[0] = 1;
+    }
+    mesh.vertexStride = sizeof(ModelVertex); mesh.vertexData.resize(sizeof(skinned));
+    std::memcpy(mesh.vertexData.data(),skinned.data(),sizeof(skinned));
+    mesh.submeshes = {{3,3,0,0}}; mesh.skinIndex = 0;
+    pose.Shutdown(); assert(pose.Initialize(model)); tools.SetModel(model,pose);
+    assert(tools.Pick(.5f,.5f,false) && f.session.GetSelection() == selected);
+    model.nodes[1].localTransform.translation.x = 0;
+    pose.Shutdown(); assert(pose.Initialize(model));
+    assert(!tools.Pick(.5f,.5f,false));
     assert(!f.properties.Preview({selected,"Transform","rotation"},std::array<float,4>{0,0,0,0}));
     assert(f.properties.Preview({selected,"Transform","rotation"},std::array<float,4>{0,2,0,2})); f.properties.Commit();
     assert(std::abs(f.session.GetLevel()->FindEntity(selected).GetComponent<TransformComponent>()->rotation.LengthSquared()-1) < 1e-5f);
@@ -606,17 +645,27 @@ void CacheAndWorkspaceIntegration() {
 }
 }
 #include "DetailsCategoryTests.inl"
+#include "PrimitiveShapeTests.inl"
+#include "StartupPathTests.inl"
+#include "EntityConsoleTests.inl"
+#include "ViewportSceneGuidesTests.inl"
 int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     ComponentAndAssetEditing();
+    EntityConsoleTests();
+    TerminalSuggestionTests();
+    PrimitiveShapeTests();
+    StartupPathTests();
     DetailsCategoryIntegration();
     AssetDropInteraction();
     GizmoWorldTransactions(); ImGuizmoInteraction();
     OffsetMeshGizmoInteraction();
     PropertyTransactions(); StructuralHistory(); DocumentsAndPlay(); HistoryBoundsAndCommands(); LazyPanelLifecycle();
     ViewportPickingAndValidation();
+    ViewportSceneGuidesTests();
+    CameraFarPlaneWorldProjectionTests();
     CacheAndWorkspaceIntegration();
     std::cout << "PASS: unified Details categories/header, component fallback/extensions, material source/undo/save, selection lifetime, offset-mesh pivot/rotation/scale, gizmo click capture over background, ImGuizmo mouse interaction, parent/multi-selection transforms, gizmo undo/cancel, component addition, asset round-trip/undo, model/texture variants, thumbnails, property transactions, rollback, structural undo, save protection, play isolation, history bounds, shortcuts, lazy panels, viewport picking, rotation/camera/light validation\n";
 }

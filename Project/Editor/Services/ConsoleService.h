@@ -19,6 +19,7 @@ public:
         std::string text; //< コマンド出力または翻訳キー
         bool translate = false; //< システムエラーだけを翻訳する
         Output(std::string value = {}, bool localized = false) : text(std::move(value)), translate(localized) {}
+        Output(const char* value) : text(value) {}
     };
     using Handler = std::function<Output(std::string_view)>;
     /** \brief 重複を拒否して内部コマンドを登録する */
@@ -31,6 +32,8 @@ public:
         const auto start = line.find_first_not_of(" \t");
         if(start == line.npos) return {};
         line.remove_prefix(start);
+        if(line.starts_with('/')) line.remove_prefix(1);
+        if(line.empty()) return {};
         const auto end = line.find_first_of(" \t");
         auto it = commands_.find(std::string(line.substr(0, end)));
         if(it == commands_.end()) return {"console.unknown", true};
@@ -40,6 +43,7 @@ public:
     }
     /** \brief 補完候補を返す。将来引数Completerを追加可能 */
     std::vector<std::string> Complete(std::string_view prefix) const {
+        if(prefix.starts_with('/')) prefix.remove_prefix(1);
         std::vector<std::string> result;
         for(const auto& [name, handler] : commands_) if(name.starts_with(prefix)) result.push_back(name);
         return result;

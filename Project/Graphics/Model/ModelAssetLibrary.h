@@ -1,5 +1,7 @@
 #pragma once
 #include "ModelAssetData.h"
+#include "ModelAssetReference.h"
+#include "PrimitiveShape.h"
 #include "Foundation/Error/Result.h"
 #include <filesystem>
 #include <map>
@@ -21,6 +23,8 @@ public:
     Result<const std::vector<uint8_t>*> Texture(const std::string& reference);
     /** \brief MeshとBase Color画像の組から統合Node範囲を返す */
     Result<Range> Resolve(const std::string& mesh, const std::string& texture);
+    /** Built-in shapes are generated once and share the normal material/upload path. */
+    Result<Range> Resolve(PrimitiveShape shape, const std::string& mesh, const std::string& texture);
     const ModelAssetData& Snapshot() const { return aggregate_; }
     size_t Revision() const { return ranges_.size(); }
     const auto& Root() const { return root_; }

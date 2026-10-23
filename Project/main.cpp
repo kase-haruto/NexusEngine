@@ -2,6 +2,7 @@
 // engine
 #include "Core/Framework/NexusFramework.h"
 #include "Editor/Core/EditorApplication.h"
+#include "Editor/Core/EditorProjectPaths.h"
 #include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -11,6 +12,28 @@
  * - エンジンのエントリーポイント
  *---------------------------------------------------------------------------------------*/
 int main() {
+    // Scene loading runs before Framework::Run, so its errors need logging too.
+    NexusEngine::Logger::Get().InitializeDefaultSinks();
+    const auto failStartup = [](const std::string& message) {
+        NEXUS_LOG_ERROR("Startup", message);
+        const auto wide = NexusEngine::ConvertString(message);
+        MessageBoxW(nullptr, wide.c_str(), L"NexusEngine - Startup failed", MB_OK | MB_ICONERROR);
+        return 1;
+    };
+    std::error_code pathError;
+    auto projectRoot = NexusEngine::FindEditorProjectRoot(std::filesystem::current_path(pathError));
+    if(!projectRoot) {
+        std::wstring executable(32768, L'\0');
+        const DWORD length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+        if(length > 0 && length < executable.size()) {
+            executable.resize(length);
+            projectRoot = NexusEngine::FindEditorProjectRoot(std::filesystem::path(executable).parent_path());
+        }
+    }
+    if(!projectRoot) return failStartup("Cannot locate the project folder (Config/Project.settings, Resources/Assets and Shaders).");
+    std::filesystem::current_path(*projectRoot, pathError);
+    if(pathError) return failStartup("Cannot access the project folder: " + pathError.message());
+
 	NexusEngine::EditorApplication editor;
 	NexusEngine::PrimitiveRenderer primitiveRenderer;
 	editor.SetShadowSystem(&primitiveRenderer.GetShadows());
@@ -26,8 +49,7 @@ int main() {
 	// GPU Resourceの所有はRenderer/Graphics側に残すため、SceneにはDeviceを渡さない。
 	auto sceneResult = editor.CreateScene(desc.graphics.assetDirectory);
 	if(!sceneResult) {
-		NEXUS_LOG_ERROR("Scene", sceneResult.error().GetMessageText());
-		return 1;
+		return failStartup(sceneResult.error().GetMessageText());
 	}
 	primitiveRenderer.SetRenderScene(&editor.GetRenderScene());
 	primitiveRenderer.SetModelInput(&editor.GetModelAsset(), &editor.GetModelPose());

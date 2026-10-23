@@ -1,5 +1,6 @@
 #include "ModelAssetLibrary.h"
 #include "ModelLoader.h"
+#include "PrimitiveMeshBuilder.h"
 #include "Graphics/Resource/WicImageDecoder.h"
 #include <fstream>
 #include <algorithm>
@@ -15,8 +16,8 @@ std::filesystem::path Path(const std::string& text) { return std::filesystem::pa
 }
 ModelAssetLibrary::ModelAssetLibrary(std::filesystem::path root, const ModelAssetData& initial)
     : root_(std::filesystem::weakly_canonical(root)), aggregate_(initial) {
-    models_.emplace("", initial);
-    ranges_[{"", ""}] = {0, static_cast<uint32_t>(initial.nodes.size())};
+    models_.emplace(kStartupModelAssetReference, initial);
+    ranges_[{kStartupModelAssetReference, ""}] = {0, static_cast<uint32_t>(initial.nodes.size())};
 }
 Result<std::string> ModelAssetLibrary::Reference(const std::filesystem::path& path) const {
     std::error_code error;
@@ -28,6 +29,7 @@ Result<std::string> ModelAssetLibrary::Reference(const std::filesystem::path& pa
     return Utf8(relative);
 }
 Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& reference) {
+    if(reference.empty()) return std::unexpected(Invalid("No mesh is assigned."));
     if(auto found = models_.find(reference); found != models_.end()) return &found->second;
     auto canonical = Reference(Path(reference));
     if(!canonical) return std::unexpected(canonical.error());
@@ -56,6 +58,8 @@ Result<const std::vector<uint8_t>*> ModelAssetLibrary::Texture(const std::string
     return &textures_.emplace(reference, std::move(bytes)).first->second;
 }
 Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& mesh, const std::string& texture) {
+    // An unassigned renderer has no geometry, even if the library contains models.
+    if(mesh.empty()) return Range{};
     const auto key = std::make_pair(mesh, texture);
     if(auto found = ranges_.find(key); found != ranges_.end()) return found->second;
     auto source = Model(mesh);
@@ -90,5 +94,16 @@ Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& m
     aggregate_ = std::move(next);
     Range range{nodeOffset, static_cast<uint32_t>(aggregate_.nodes.size()), materialOffset};
     ranges_.emplace(key, range); return range;
+}
+Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(PrimitiveShape shape, const std::string& mesh, const std::string& texture) {
+    if(!IsValidPrimitiveShape(shape)) return std::unexpected(Invalid("Invalid primitive shape."));
+    if(shape == PrimitiveShape::Asset) return Resolve(mesh, texture);
+    const auto key = ":primitive/" + std::to_string(static_cast<uint32_t>(shape));
+    if(!models_.contains(key)) {
+        auto generated = PrimitiveMeshBuilder::Build(shape);
+        if(!generated) return std::unexpected(generated.error());
+        models_.emplace(key, std::move(*generated));
+    }
+    return Resolve(key, texture);
 }
 }

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include "Graphics/Material/MaterialOverride.h"
+#include "Graphics/Model/PrimitiveShape.h"
 
 namespace NexusEngine {
 
@@ -19,9 +20,10 @@ namespace NexusEngine {
 		bool enabled = true;                                   //< 描画抽出の対象か
 		uint32_t nodeIndex = kAllNodes; //< 接続されたModelの描画対象Node。既定ではModel全体
 		bool staticLighting = true; //< 静的背景としてベイクに含める。動く物体はfalse
-        std::string meshAsset; //< Assetルートからの相対パス。空は起動時モデル
+        std::string meshAsset; //< Assetルートからの相対パス。空ならメッシュ未設定で描画しない
         std::string baseColorTexture; //< 空ならモデル付属の材質を使用
         MaterialOverride material; //< Entity固有の材質設定。共有Assetは変更しない
+        PrimitiveShape shape = PrimitiveShape::Asset; //< 組み込み形状はmeshAssetなしで生成。大きさはTransformで指定
 	};
 
 } // namespace NexusEngine

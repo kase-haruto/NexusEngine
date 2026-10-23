@@ -4,6 +4,7 @@
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
 #include "Editor/Gui/Panels/UtilityPanels.h"
+#include "Editor/Services/EntityConsoleCommands.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ThirdParty/imgui/imgui.h"
@@ -60,12 +61,22 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
         if(it != settings_.user.panels.end()) entry.isOpen = it->second;
     }
     console_.Register("help", [this](auto) {
-        std::string result; for(const auto& name : console_.Complete({})) result += name + '\n'; return result;
+        std::string result; for(const auto& name : console_.Complete({})) result += name + '\n';
+        result += "\nEntity targets: name, #ID from entity.list, or @selected. Quote names with spaces.\n"
+            "Run an entity command without arguments for usage (entity.list lists entities).\n"
+            "Example: entity.create Entity \"My Entity\"\n"
+            "Example: entity.set @selected Transform.translation 1 2 3\n"
+            "Use entity.info @selected to see components, properties and value formats.\n";
+        return result;
     });
     console_.Register("echo", [](auto argument) { return std::string(argument); });
     console_.Register("log.clear", [this](auto) { logs_->Clear(); return std::string{}; });
     console_.Register("editor.undo", [this](auto) { return ConsoleService::Output{commands_.Execute("edit.undo") ? "" : "console.unavailable", true}; });
     console_.Register("editor.redo", [this](auto) { return ConsoleService::Output{commands_.Execute("edit.redo") ? "" : "console.unavailable", true}; });
+    EntityConsoleCommands{session_, properties_, sceneEdits_, types_, [this] {
+        SynchronizeDocument();
+        return !session_.IsPlaying() && !documents_.ConfirmationRequired() && !documents_.NeedsSaveAs();
+    }}.Register(console_);
     // FNV-1aでProjectの正規化パスを識別し、他Projectの配置を上書きしない。
     std::error_code pathError;
     const auto projectPath = AssetCatalog::Utf8(std::filesystem::weakly_canonical(root,pathError));

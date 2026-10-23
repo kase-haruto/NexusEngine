@@ -1,4 +1,5 @@
 #include "MaterialPage.h"
+#include "MaterialSlots.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Gui/ReflectedPropertyEditor.h"
 #include "Editor/Gui/Widgets/AssetPropertyWidget.h"
@@ -30,13 +31,24 @@ void MaterialPage::Draw(const EditorContext& context) {
     if(!IsAvailable(context)) return;
     const auto id = context.selection.Primary();
     const auto read = [&](const char* property) { return context.properties.Read({id, "PrimitiveRender", property}); };
-    auto meshValue = read("meshAsset"), slotValue = read("materialSlot"), enabledValue = read("materialEnabled");
-    if(!meshValue || !slotValue || !enabledValue) return;
+    auto meshValue = read("meshAsset"), slotValue = read("materialSlot"), enabledValue = read("materialEnabled"), nodeValue = read("nodeIndex");
+    if(!meshValue || !slotValue || !enabledValue || !nodeValue) return;
     const auto& mesh = std::get<std::string>(*meshValue);
     int slot = std::get<int>(*slotValue);
-    const bool enabled = std::get<bool>(*enabledValue);
-    const auto* source = context.assets ? context.assets->SourceModel(mesh) : nullptr;
-    const bool validSlot = source && slot >= 0 && static_cast<size_t>(slot) < source->materials.size();
+    const auto shapeValue = read("shape");
+    const bool builtIn = shapeValue && std::get<EnumValue>(*shapeValue).value != 0;
+    // All generated primitives have one default material at local slot zero.
+    static const ModelAssetData primitiveMaterial = [] {
+        ModelAssetData model;
+        model.materials.emplace_back(); model.materials.front().name = "Primitive";
+        return model;
+    }();
+    const auto* source = builtIn ? &primitiveMaterial : (context.assets ? context.assets->SourceModel(mesh) : nullptr);
+    const auto slots = builtIn ? std::vector<int>{0} : (source ? MaterialSlots(*source, std::get<int>(*nodeValue)) : std::vector<int>{});
+    const bool usedSlot = !source || std::ranges::find(slots, slot) != slots.end();
+    const bool enabled = std::get<bool>(*enabledValue) && usedSlot;
+    if(!usedSlot && !slots.empty()) slot = slots.front();
+    const bool validSlot = !slots.empty();
     ImGui::TextWrapped("%s", context.text.Text("material.instanceHelp").c_str());
     if(context.selection.All().size() > 1) ImGui::TextWrapped("%s", context.text.Text("material.primaryOnly").c_str());
     ImGui::BeginDisabled(context.session.IsPlaying());
@@ -44,19 +56,22 @@ void MaterialPage::Draw(const EditorContext& context) {
         const auto current = validSlot ? source->materials[slot].name + " [" + std::to_string(slot) + "]" : context.text.Text("asset.missing");
         ImGui::SetNextItemWidth(-1);
         if(ImGui::BeginCombo("##MaterialSlot", current.c_str())) {
-            if(source) for(size_t index = 0; index < source->materials.size(); ++index) {
+            if(source) for(int index : slots) {
                 const auto label = source->materials[index].name + " [" + std::to_string(index) + "]###" + std::to_string(index);
                 if(ImGui::Selectable(label.c_str(), slot == static_cast<int>(index))) UseSource(context, static_cast<int>(index), source->materials[index]);
             }
             ImGui::EndCombo();
         }
         if(!source) ImGui::TextWrapped("%s", context.text.Text("material.sourceUnavailable").c_str());
+        if(source && !usedSlot) ImGui::TextWrapped("%s", context.text.Text("material.slotUnused").c_str());
         if(validSlot) {
             if(ImGui::Button(context.text.Label(enabled ? "material.resetSource" : "material.createOverride", "UseSource").c_str()))
                 UseSource(context, slot, source->materials[slot]);
             ImGui::TextWrapped("%s", context.text.Text("material.embeddedMaps").c_str());
         }
+        ImGui::BeginDisabled(!usedSlot);
         DrawReflectedProperty(context, "PrimitiveRender", "materialEnabled", true);
+        ImGui::EndDisabled();
     }
     ImGui::BeginDisabled(!enabled);
     if(ImGui::CollapsingHeader(context.text.Label("material.surface", "Surface").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {

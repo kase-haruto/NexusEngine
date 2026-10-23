@@ -42,10 +42,17 @@ public:
     std::string_view TitleKey() const noexcept override { return "panel.terminal"; }
     void Draw(const EditorContext& context) override;
 private:
+    void UpdateSuggestions(std::string_view input);
     ConsoleService& console_; //< host所有
     std::array<char, 512> input_{}; //< 入力上限
     std::deque<std::string> output_; //< 最大256出力
     int historyIndex_ = -1; //< -1は新規入力
+    bool scrollToBottom_ = false;
+    bool focusInput_ = false;
+    std::vector<std::string> suggestions_;
+    std::string suggestionPrefix_, pendingCompletion_;
+    int suggestionIndex_ = 0;
+    bool suggestionsOpen_ = false, scrollToSuggestion_ = false;
 };
 /*-----------------------------------------------------------------------------------------
  * ContentBrowserPanel

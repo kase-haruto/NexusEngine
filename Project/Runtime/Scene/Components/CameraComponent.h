@@ -13,6 +13,7 @@ namespace NexusEngine {
 		float farClip = 1000.0f;                         //< Far clipping distance
 		bool primary = true;                             //< Runtime描画に使用するCamera候補か
 		bool enabled = true;                             //< 描画抽出の対象か
+        bool smallFrustum = false; // Editor guide: normal size or 1/7 size; does not change projection.
 	};
 
 } // namespace NexusEngine

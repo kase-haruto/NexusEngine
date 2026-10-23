@@ -55,10 +55,11 @@ bool SceneEditService::Execute(std::string label, const std::function<bool(Level
         level->ExchangeScene(std::move(original)); session_.Selection().Replace(selected); throw;
     }
 }
-bool SceneEditService::Create(std::string_view kind) {
+bool SceneEditService::Create(std::string_view kind, std::string_view name) {
     if(kind != "Entity" && kind != "Camera" && kind != "DirectionalLight" && kind != "Model") return false;
-    return Execute("edit.create", [this, kind](Level& level) {
-        auto entity = level.CreateEntity(std::string(kind));
+    if(name.size() > 1024 || name.find('\0') != name.npos) return false;
+    return Execute("edit.create", [this, kind, name](Level& level) {
+        auto entity = level.CreateEntity(std::string(name.empty() ? kind : name));
         if(!entity.IsAlive()) return false;
         if(kind == "Camera") {
             auto* camera = entity.AddComponent<CameraComponent>();

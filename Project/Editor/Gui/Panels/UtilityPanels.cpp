@@ -4,6 +4,7 @@
 #include "Editor/Services/SelectionService.h"
 #include "Editor/Gui/Widgets/AssetPropertyWidget.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "ThirdParty/imgui/imgui_internal.h"
 #include <cstdio>
 #include <algorithm>
 #include <ctime>
@@ -66,14 +67,38 @@ void OutputLogPanel::Draw(const EditorContext& context) {
     ImGui::EndChild();
     if(copy) { for(const auto& line : lines_) clipboard += line + '\n'; ImGui::SetClipboardText(clipboard.c_str()); }
 }
+void TerminalPanel::UpdateSuggestions(std::string_view input) {
+    if(input != suggestionPrefix_) {
+        suggestionPrefix_ = input;
+        suggestionIndex_ = 0;
+        scrollToSuggestion_ = true;
+    }
+    suggestions_ = input.starts_with('/') && input.find_first_of(" \t\r\n") == input.npos
+        ? console_.Complete(input) : std::vector<std::string>{};
+}
 void TerminalPanel::Draw(const EditorContext& context) {
-    ImGui::BeginChild("results", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2));
+    ImGui::BeginChild("results", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
     for(const auto& line : output_) ImGui::TextUnformatted(line.c_str());
+    if(scrollToBottom_) { ImGui::SetScrollHereY(1); scrollToBottom_ = false; }
     ImGui::EndChild();
+    UpdateSuggestions(input_.data());
     const auto callback = [](ImGuiInputTextCallbackData* data) -> int {
         auto& self = *static_cast<TerminalPanel*>(data->UserData);
         std::string replacement;
-        if(data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
+        if(!self.pendingCompletion_.empty()) {
+            replacement = std::move(self.pendingCompletion_);
+            self.pendingCompletion_.clear();
+        } else if(data->EventFlag == ImGuiInputTextFlags_CallbackEdit) {
+            self.UpdateSuggestions(std::string_view(data->Buf, data->BufTextLen));
+            return 0;
+        } else if(data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
+            self.UpdateSuggestions(std::string_view(data->Buf, data->BufTextLen));
+            if(!self.suggestions_.empty()) {
+                const int count = static_cast<int>(self.suggestions_.size());
+                self.suggestionIndex_ = (self.suggestionIndex_ + (data->EventKey == ImGuiKey_UpArrow ? count - 1 : 1)) % count;
+                self.scrollToSuggestion_ = true;
+                return 0;
+            }
             const auto& history = self.console_.History();
             if(history.empty()) return 0;
             if(data->EventKey == ImGuiKey_UpArrow) {
@@ -82,22 +107,67 @@ void TerminalPanel::Draw(const EditorContext& context) {
             } else if(self.historyIndex_ >= 0 && ++self.historyIndex_ >= static_cast<int>(history.size())) self.historyIndex_ = -1;
             if(self.historyIndex_ >= 0) replacement = history[self.historyIndex_];
         } else if(data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) {
-            auto options = self.console_.Complete(std::string_view(data->Buf, data->CursorPos));
-            if(options.size() != 1) return 0;
-            replacement = options.front() + ' ';
+            self.UpdateSuggestions(std::string_view(data->Buf, data->BufTextLen));
+            if(!self.suggestions_.empty()) replacement = '/' + self.suggestions_[self.suggestionIndex_] + ' ';
+            else {
+                auto options = self.console_.Complete(std::string_view(data->Buf, data->CursorPos));
+                if(options.size() != 1) return 0;
+                replacement = (data->Buf[0] == '/' ? "/" : "") + options.front() + ' ';
+            }
         } else return 0;
         data->DeleteChars(0, data->BufTextLen);
-        data->InsertChars(0, replacement.c_str()); return 0;
+        data->InsertChars(0, replacement.c_str());
+        self.UpdateSuggestions(std::string_view(data->Buf, data->BufTextLen));
+        return 0;
     };
+    if(focusInput_) { ImGui::SetKeyboardFocusHere(); focusInput_ = false; }
     bool execute = ImGui::InputText(context.text.Label("console.input", "input").c_str(), input_.data(), input_.size(),
-        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCompletion, callback, this);
+        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCompletion |
+        ImGuiInputTextFlags_CallbackEdit | ImGuiInputTextFlags_CallbackAlways, callback, this);
+    const auto inputOrigin = ImGui::GetItemRectMin();
+    const auto inputWidth = ImGui::GetItemRectSize().x;
+    const bool inputActive = ImGui::IsItemActive();
+    UpdateSuggestions(input_.data());
+    if(inputActive) suggestionsOpen_ = true;
+    if(suggestions_.empty()) suggestionsOpen_ = false;
+    if(execute && !suggestions_.empty()) {
+        pendingCompletion_ = '/' + suggestions_[suggestionIndex_] + ' ';
+        focusInput_ = true;
+        execute = false;
+    }
     ImGui::SameLine(); execute |= ImGui::Button(context.text.Label("console.execute", "execute").c_str());
+    if(!suggestions_.empty() && suggestionsOpen_) {
+        ImGui::SetNextWindowPos(inputOrigin, ImGuiCond_Always, {0,1});
+        const auto maxHeight = ImGui::GetTextLineHeightWithSpacing() * 8 + ImGui::GetStyle().WindowPadding.y * 2;
+        ImGui::SetNextWindowSizeConstraints({inputWidth, 0}, {inputWidth, maxHeight});
+        if(ImGui::Begin("###TerminalSuggestions", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+            // Keep the list above the terminal without moving keyboard focus out of InputText.
+            ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+            for(size_t i = 0; i < suggestions_.size(); ++i) {
+                const bool selected = static_cast<int>(i) == suggestionIndex_;
+                const auto label = '/' + suggestions_[i];
+                if(ImGui::Selectable(label.c_str(), selected)) {
+                    pendingCompletion_ = label + ' ';
+                    focusInput_ = true;
+                }
+                if(selected && scrollToSuggestion_) ImGui::SetScrollHereY();
+            }
+            scrollToSuggestion_ = false;
+            if(ImGui::IsMouseClicked(0) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && !inputActive)
+                suggestionsOpen_ = false;
+        }
+        ImGui::End();
+    }
+    if(execute) focusInput_ = true;
     if(execute && input_[0]) {
         output_.emplace_back(std::string("> ") + input_.data());
         auto result = console_.Execute(input_.data());
-        if(!result.text.empty()) output_.push_back(result.translate ? context.text.Text(result.text) : result.text.substr(0, 8192));
+        if(!result.text.empty()) output_.push_back(result.translate ? context.text.Text(result.text) : result.text);
         while(output_.size() > 256) output_.pop_front();
         input_.fill(0); historyIndex_ = -1;
+        scrollToBottom_ = true;
     }
     ImGui::TextUnformatted(context.text.Text("console.help").c_str());
 }

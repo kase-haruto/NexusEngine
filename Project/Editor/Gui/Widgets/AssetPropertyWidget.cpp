@@ -1,5 +1,6 @@
 #include "AssetPropertyWidget.h"
 #include "SearchBar.h"
+#include "Graphics/Model/ModelAssetReference.h"
 #include <cstring>
 #include <algorithm>
 
@@ -41,7 +42,8 @@ UI::ItemResult AssetPropertyWidget::Draw(const UI::ItemOptions& options, Propert
             if(!result) { error_ = result.error().GetMessageText(); return; }
             changed = *path != *result; *path = std::move(*result); error_.clear();
         };
-        const auto label = path->empty() ? text.Text("asset.default") : *path;
+        const auto label = path->empty() ? text.Text(texture ? "asset.default" : "asset.none") :
+            (!texture && *path == kStartupModelAssetReference ? text.Text("asset.startup") : *path);
         ImGui::Button((label + "###asset").c_str(), {std::max(60.0f, ImGui::GetContentRegionAvail().x - 40), 0});
         if(ImGui::BeginDragDropTarget()) {
             if(const auto* payload = ImGui::AcceptDragDropPayload("NEXUS_ASSET_PATH")) {
@@ -74,7 +76,7 @@ UI::ItemResult AssetPropertyWidget::Draw(const UI::ItemOptions& options, Propert
             if(navigate) catalog_->Navigate(*navigate);
             ImGui::EndChild(); ImGui::EndPopup();
         }
-        if(!texture || !path->empty()) DrawPreview(*path, texture, texture ? -1 : node);
+        if(!path->empty()) DrawPreview(*path, texture, texture ? -1 : node);
     }
     if(!error_.empty()) ImGui::TextWrapped("%s", error_.c_str());
     return changed ? UI::ItemResult{UI::ItemStatus::Activated | UI::ItemStatus::Edited | UI::ItemStatus::EditCompleted} : UI::ItemResult{};

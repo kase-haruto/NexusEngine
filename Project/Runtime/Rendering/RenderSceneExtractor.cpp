@@ -72,6 +72,8 @@ namespace NexusEngine {
 					auto& item = result.primitives.back();
 					item.staticLighting = primitive.staticLighting;
                     item.meshAsset = primitive.meshAsset;
+                    item.shape = primitive.shape;
+                    if(primitive.shape == PrimitiveShape::Asset && primitive.meshAsset.empty()) item.nodeEnd = 0;
                     item.baseColorTexture = primitive.baseColorTexture;
                     item.material = primitive.material;
 					if(const auto* id = entity.GetComponent<PersistentIdComponent>()) {

@@ -35,6 +35,16 @@ public:
     /** \brief Panelが閉じられた場合もrelease/cancelを完了する */
     void CompleteInteraction();
 private:
+    struct CameraGuide {
+        EntityId entity;
+        Matrix4x4 world;
+        std::array<Vector3,8> corners;
+        float symbolScale = 1;
+    };
+    void PrepareCameraGuides(float aspect);
+    std::vector<CameraGuide> cameraGuides_;
+    void DrawSceneGuides(float x, float y, float width, float height);
+    float viewportWidth_ = 0, viewportHeight_ = 0;
     struct Bounds { Vector3 low, high; bool valid = false; };
     /** \brief NodeのOffsetを含むEntity空間の境界。World AABBを中心にして回転中にpivotをずらさない */
     std::optional<Bounds> GetEntityLocalBounds(Entity entity) const;
