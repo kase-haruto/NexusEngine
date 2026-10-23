@@ -2,6 +2,7 @@
 #include "Editor/Gui/Widgets/SearchBar.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/SelectionService.h"
+#include "Editor/Gui/Widgets/AssetPropertyWidget.h"
 #include "ThirdParty/imgui/imgui.h"
 #include <cstdio>
 #include <algorithm>
@@ -34,21 +35,36 @@ void OutputLogPanel::Draw(const EditorContext& context) {
         ImGui::Checkbox(context.text.Label(keys[i], keys[i]).c_str(), &levels_[i]);
     }
     // mutex下でコピーしたsnapshotだけを描く。UI処理中はログthreadを妨げない。
-    const auto records = buffer_->Snapshot();
+    auto snapshot = buffer_->SnapshotIfChanged(logRevision_);
+    std::string filterKey = search_ + '\n' + std::string(context.text.Language());
+    for(bool enabled : levels_) filterKey += enabled ? '1' : '0';
+    if(snapshot || filterKey != filterKey_) {
+        if(snapshot) records_ = std::move(*snapshot);
+        filterKey_ = std::move(filterKey); lines_.clear();
+        for(const auto& record : records_) {
+            const auto level = static_cast<size_t>(record.level);
+            if(level >= levels_.size() || !levels_[level]) continue;
+            auto line = LogLine(record, context.text);
+            // 1ログを1clip行にする。元messageの改行は行ごとに保持する。
+            size_t start = 0;
+            do {
+                auto end = line.find('\n',start);
+                auto part = line.substr(start,end == line.npos ? line.npos : end-start);
+                if(search_.empty() || part.find(search_) != part.npos) lines_.push_back(std::move(part));
+                if(end == line.npos) break;
+                start = end+1;
+            } while(start <= line.size());
+        }
+    }
     std::string clipboard;
     ImGui::BeginChild("records", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
     bool atBottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1;
-    for(const auto& record : records) {
-        auto level = static_cast<size_t>(record.level);
-        if(level >= levels_.size() || !levels_[level]) continue;
-        auto line = LogLine(record, context.text);
-        if(!search_.empty() && line.find(search_) == line.npos) continue;
-        ImGui::TextUnformatted(line.c_str());
-        if(copy) clipboard += line + '\n';
-    }
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(lines_.size()));
+    while(clipper.Step()) for(int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) ImGui::TextUnformatted(lines_[row].c_str());
     if(autoScroll_ && atBottom) ImGui::SetScrollHereY(1);
     ImGui::EndChild();
-    if(copy) ImGui::SetClipboardText(clipboard.c_str());
+    if(copy) { for(const auto& line : lines_) clipboard += line + '\n'; ImGui::SetClipboardText(clipboard.c_str()); }
 }
 void TerminalPanel::Draw(const EditorContext& context) {
     ImGui::BeginChild("results", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2));
@@ -87,6 +103,7 @@ void TerminalPanel::Draw(const EditorContext& context) {
 }
 void ContentBrowserPanel::Draw(const EditorContext& context) {
     if(ImGui::Button(context.text.Label("asset.up", "up").c_str())) assets_.Navigate(assets_.Current().parent_path());
+    ImGui::SameLine(); if(ImGui::Button(context.text.Label("asset.refresh", "refresh").c_str())) assets_.Refresh();
     ImGui::SameLine(); ImGui::TextUnformatted(AssetCatalog::Utf8(assets_.Current()).c_str());
     UI::SearchBar("ContentBrowserSearch", search_, context.text.Text("search").c_str());
     if(!ImGui::BeginTable("browser", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) return;
@@ -100,15 +117,24 @@ void ContentBrowserPanel::Draw(const EditorContext& context) {
         bool open = ImGui::TreeNodeEx("folder", ImGuiTreeNodeFlags_OpenOnArrow, "%s", AssetCatalog::Utf8(path.filename()).c_str());
         if(ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) navigate = path;
         if(open) {
-            if(depth < 12) for(const auto& entry : assets_.List(path)) if(entry.directory) tree(entry.path, depth + 1);
+            if(depth < 12) {
+                auto entries = assets_.Snapshot(path);
+                for(const auto& entry : *entries) if(entry.directory) tree(entry.path, depth + 1);
+            }
             ImGui::TreePop();
         }
         ImGui::PopID();
     };
     tree(assets_.Root(), 0);
     ImGui::TableNextColumn();
-    for(const auto& entry : assets_.List(assets_.Current())) {
-        if(!search_.empty() && entry.name.find(search_) == entry.name.npos) continue;
+    ImGui::BeginChild("asset-list",{0,0});
+    auto entries = assets_.Snapshot(assets_.Current());
+    std::vector<size_t> matching;
+    for(size_t i = 0; i < entries->size(); ++i) if(search_.empty() || (*entries)[i].name.find(search_) != std::string::npos) matching.push_back(i);
+    ImGuiListClipper assetClipper;
+    assetClipper.Begin(static_cast<int>(matching.size()));
+    while(assetClipper.Step()) for(int row = assetClipper.DisplayStart; row < assetClipper.DisplayEnd; ++row) {
+        const auto& entry = (*entries)[matching[row]];
         auto path = AssetCatalog::Utf8(entry.path);
         ImGui::PushID(path.c_str());
         auto label = entry.name + "  [" + context.text.Text(entry.typeKey) + ']';
@@ -120,9 +146,12 @@ void ContentBrowserPanel::Draw(const EditorContext& context) {
             ImGui::SetDragDropPayload("NEXUS_ASSET_PATH", path.c_str(), path.size() + 1);
             ImGui::TextUnformatted(entry.name.c_str()); ImGui::EndDragDropSource();
         }
+        if(context.assets && !entry.directory && (entry.typeKey == "asset.model" || entry.typeKey == "asset.texture") && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+            ImGui::BeginTooltip(); context.assets->DrawPreview(path, entry.typeKey == "asset.texture", -1, 160); ImGui::EndTooltip();
+        }
         ImGui::PopID();
     }
-    ImGui::EndTable();
+    ImGui::EndChild(); ImGui::EndTable();
     if(navigate) assets_.Navigate(*navigate);
 }
 void PreferencesPanel::Draw(const EditorContext& context) {
@@ -146,12 +175,14 @@ void ViewportPanel::Draw(const EditorContext& context) {
     static constexpr const char* states[] = {"runtime.disconnected", "runtime.starting", "runtime.connected", "runtime.running", "runtime.paused", "runtime.stopping", "runtime.error"};
     auto state = static_cast<size_t>(session_.State());
     ImGui::TextUnformatted(context.text.Text(session_.IsLocalPreview() ? "runtime.localPreview" : states[state < 7 ? state : 6]).c_str());
+    if(session_.IsLocalPreview() && !context.session.IsPlaying()) tools_.DrawToolbar(context.text);
     const auto size = ImGui::GetContentRegionAvail();
     if(size.x < 1 || size.y < 1) { session_.Resize(0, 0); return; }
     session_.Resize(static_cast<uint32_t>(std::min(size.x, 16384.0f)), static_cast<uint32_t>(std::min(size.y, 16384.0f)));
     if(auto image = session_.Image(); image && image->IsValid()) {
         const auto origin = ImGui::GetCursorScreenPos();
         ImGui::Image(static_cast<ImTextureID>(image->nativeId), size);
+        if(session_.IsLocalPreview()) { tools_.DrawOverlay(origin.x, origin.y, size.x, size.y); return; }
         if(ImGui::IsItemHovered()) {
             const auto mouse = ImGui::GetMousePos();
             float x = (mouse.x - origin.x) / size.x, y = (mouse.y - origin.y) / size.y;

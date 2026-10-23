@@ -1,6 +1,7 @@
 #pragma once
 #include "Editor/Gui/Core/GuiItem.h"
 #include <cstddef>
+#include <array>
 #include <span>
 #include <string>
 
@@ -24,6 +25,10 @@ ItemResult PropertyFloat(const ItemOptions& options, float& value, float speed =
 ItemResult PropertyText(const ItemOptions& options, std::string& value, size_t maxBytes = 1024);
 /** \brief 2〜4成分のVectorを編集する。Component固有の型は受け取らない */
 ItemResult PropertyVector(const ItemOptions& options, std::span<float> values, float speed = 0.01f);
+/** \brief QuaternionをXYZ Euler角（degree）として編集する */
+ItemResult PropertyRotation(const ItemOptions& options, std::array<float, 4>& quaternion);
+/** \brief RGBAの色を共通Styleで編集する */
+ItemResult PropertyColor(const ItemOptions& options, std::array<float, 4>& color);
 /** \brief 明示値を持つenumを編集する。未知値は数値表示し、勝手に変更しない */
 ItemResult PropertyEnum(const ItemOptions& options, int& value, std::span<const EnumOption> choices);
 }

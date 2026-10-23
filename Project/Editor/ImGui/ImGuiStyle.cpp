@@ -157,10 +157,22 @@ void ApplyEditorStyle(const EditorStyleOptions& options) noexcept {
                 color.x = color.y = color.z = 1.0f - color.x;
         }
     }
-    const float scale = std::isfinite(options.scale) ? std::clamp(options.scale, 0.5f, 3.0f) : 1.0f;
+    const float scale = std::isfinite(options.scale) ? std::clamp(options.scale, 0.5f, 12.0f) : 1.0f;
     style.FontSizeBase = std::isfinite(options.fontSize) ? std::clamp(options.fontSize, 10.0f, 40.0f) : 18.0f;
     style.FontScaleMain = scale;
     style.ScaleAllSizes(scale);
+}
+Theme CurrentEditorTheme() noexcept {
+    const auto& style = ImGui::GetStyle();
+    const auto color = [&](ImGuiCol index) { const auto& c = style.Colors[index]; return Color{c.x,c.y,c.z,c.w}; };
+    Theme result;
+    result.text = color(ImGuiCol_Text); result.textDisabled = color(ImGuiCol_TextDisabled);
+    result.surface = color(ImGuiCol_FrameBg); result.surfaceHovered = color(ImGuiCol_FrameBgHovered);
+    result.surfaceActive = color(ImGuiCol_FrameBgActive); result.accent = color(ImGuiCol_CheckMark);
+    result.itemSpacing = {style.ItemSpacing.x,style.ItemSpacing.y};
+    result.framePadding = {style.FramePadding.x,style.FramePadding.y};
+    result.controlRounding = style.FrameRounding; result.disabledOpacity = style.DisabledAlpha;
+    return result;
 }
 }
 

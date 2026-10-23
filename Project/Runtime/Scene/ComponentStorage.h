@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <span>
 #include <type_traits>
 #include <utility>
@@ -15,6 +16,8 @@ namespace NexusEngine {
 	public:
 		virtual ~IComponentStorage() = default;
 		virtual void Remove(uint32_t entityIndex) = 0;
+		/** \brief 所有値を複製する。コピーできないComponentがある場合は空を返す */
+		[[nodiscard]] virtual std::unique_ptr<IComponentStorage> Clone() const = 0;
 		[[nodiscard]] virtual size_t GetSize() const noexcept = 0;
 		[[nodiscard]] virtual uint32_t GetEntityIndexAt(size_t denseIndex) const noexcept = 0;
 		[[nodiscard]] virtual std::span<const uint32_t> GetEntityIndices() const noexcept = 0;
@@ -30,6 +33,19 @@ namespace NexusEngine {
 	public:
 		static_assert(std::is_nothrow_move_constructible_v<Component>);
 		static_assert(std::is_nothrow_move_assignable_v<Component>);
+
+		std::unique_ptr<IComponentStorage> Clone() const override {
+			if constexpr(std::is_copy_constructible_v<Component>) {
+				auto copy = std::make_unique<ComponentStorage<Component>>();
+				copy->sparseIndices_ = sparseIndices_;
+				copy->denseEntities_ = denseEntities_;
+				copy->denseComponents_ = std::vector<Component>(denseComponents_);
+				return copy;
+			} else {
+				if(GetSize() == 0) return std::make_unique<ComponentStorage<Component>>();
+				return {};
+			}
+		}
 
 		/** \brief 重複を拒否してComponentを構築する。再確保により既存参照は無効になる */
 		template<typename... Arguments>

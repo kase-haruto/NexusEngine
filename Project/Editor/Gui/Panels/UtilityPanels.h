@@ -4,6 +4,7 @@
 #include "Editor/Services/AssetCatalog.h"
 #include "Editor/Services/EditorSettings.h"
 #include "Editor/Runtime/ViewportSession.h"
+#include "Editor/Gui/ViewportTools.h"
 #include "Foundation/Logging/BufferedLogSink.h"
 #include <array>
 
@@ -24,6 +25,10 @@ private:
     std::array<bool, 6> levels_{true, true, true, true, true, true}; //< レベルfilter
     std::string search_; //< 共通SearchBarのUTF-8検索入力
     bool autoScroll_ = true; //< 最下部に追従する
+    uint64_t logRevision_ = 0; //< 最後に取り込んだログ番号
+    std::vector<OwnedLogRecord> records_; //< 変更時だけ取得するsnapshot
+    std::vector<std::string> lines_; //< filter適用済みの整形行
+    std::string filterKey_; //< 検索・level・言語のcache識別子
 };
 /*-----------------------------------------------------------------------------------------
  * TerminalPanel
@@ -80,11 +85,12 @@ private:
  *---------------------------------------------------------------------------------------*/
 class ViewportPanel final : public IEditorPanel {
 public:
-    explicit ViewportPanel(ViewportSession& session) : session_(session) {}
+    ViewportPanel(ViewportSession& session, ViewportTools& tools) : session_(session), tools_(tools) {}
     std::string_view Id() const noexcept override { return "Viewport"; }
     std::string_view TitleKey() const noexcept override { return "panel.viewport"; }
     void Draw(const EditorContext& context) override;
 private:
     ViewportSession& session_; //< host所有
+    ViewportTools& tools_; //< host所有。GPUへ直接アクセスしない
 };
 }

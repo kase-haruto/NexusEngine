@@ -3,6 +3,8 @@
 // c++
 #include <array>
 #include <cstdint>
+#include <string>
+#include "Graphics/Material/MaterialOverride.h"
 
 namespace NexusEngine {
 
@@ -17,6 +19,9 @@ namespace NexusEngine {
 		bool enabled = true;                                   //< 描画抽出の対象か
 		uint32_t nodeIndex = kAllNodes; //< 接続されたModelの描画対象Node。既定ではModel全体
 		bool staticLighting = true; //< 静的背景としてベイクに含める。動く物体はfalse
+        std::string meshAsset; //< Assetルートからの相対パス。空は起動時モデル
+        std::string baseColorTexture; //< 空ならモデル付属の材質を使用
+        MaterialOverride material; //< Entity固有の材質設定。共有Assetは変更しない
 	};
 
 } // namespace NexusEngine

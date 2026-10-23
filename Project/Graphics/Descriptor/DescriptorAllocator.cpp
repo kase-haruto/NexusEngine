@@ -1,4 +1,5 @@
 #include "DescriptorAllocator.h"
+#include <string>
 
 namespace NexusEngine {
 	namespace {
@@ -86,7 +87,9 @@ namespace NexusEngine {
 			}
 			return allocation;
 		}
-		return std::unexpected(Error(ErrorCategory::Graphics, kCapacityExceeded, "Descriptor heap capacity is exhausted."));
+        return std::unexpected(Error(ErrorCategory::Graphics, kCapacityExceeded,
+            "Descriptor heap capacity is exhausted (type=" + std::to_string(static_cast<int>(heapType_)) +
+            ", capacity=" + std::to_string(allocated_.size()) + ", requested=" + std::to_string(count) + ")."));
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////

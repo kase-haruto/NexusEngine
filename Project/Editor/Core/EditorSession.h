@@ -35,6 +35,14 @@ namespace NexusEngine {
 		[[nodiscard]] Entity		 GetSelectedEntity();
 		[[nodiscard]] LevelDocument* GetLevelDocument() const noexcept { return levelDocument_.get(); }
 		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
+		/** \brief 描画・更新用World。再生中は編集Worldの複製を返す */
+		Level* GetPreviewLevel() noexcept { return playLevel_ ? playLevel_.get() : GetLevel(); }
+		/** \brief 編集Worldを変更せずに再生Worldを作る */
+		bool StartPlay();
+		void StopPlay() noexcept { playLevel_.reset(); paused_ = false; }
+		void TogglePause() noexcept { if(playLevel_) paused_ = !paused_; }
+		bool IsPlaying() const noexcept { return playLevel_ != nullptr; }
+		bool IsPaused() const noexcept { return paused_; }
 		[[nodiscard]] bool			 IsDirty() const noexcept { return dirty_; }
 
 		/** \brief IDとLocal値による編集を適用する。派生MatrixはLevel更新で再計算する */
@@ -44,6 +52,8 @@ namespace NexusEngine {
 
 	private:
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
+		std::unique_ptr<Level> playLevel_; //< 再生専用World。停止時に破棄する
+		bool paused_ = false; //< 再生更新を停止して描画は維持する
 
 		SelectionService selection_; //< 全Panel共通の永続ID集合
 		size_t generation_ = 0; //< documentの再生成を履歴サービスへ通知する

@@ -9,7 +9,7 @@
 namespace NexusEngine {
 struct EnumValue { int value = 0; friend bool operator==(EnumValue, EnumValue) = default; };
 using PropertyValue = std::variant<bool, int, float, std::string, std::array<float, 2>, std::array<float, 3>, std::array<float, 4>, EnumValue>;
-enum class PropertyKind { Bool, Int, Float, String, Vector2, Vector3, Vector4, Enum };
+enum class PropertyKind { Bool, Int, Float, String, Vector2, Vector3, Vector4, Enum, Rotation, Color, MeshAsset, TextureAsset, MeshNode };
 /*-----------------------------------------------------------------------------------------
  * PropertyDescriptor / TypeRegistry
  * - Runtime Componentの型と値アクセスを登録するUI非依存Reflection
@@ -27,6 +27,7 @@ struct TypeDescriptor {
     std::string id, labelKey; //< 安定型IDと表示metadata
     std::function<bool(Entity)> contains; //< Component存在確認
     std::vector<PropertyDescriptor> properties; //< 順序付き公開プロパティ
+    std::function<bool(Entity)> add; //< 未追加Entityへ既定値で追加する。必須Componentは公開しない
 };
 class TypeRegistry final {
 public:

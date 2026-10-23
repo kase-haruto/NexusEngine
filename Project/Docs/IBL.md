@@ -141,12 +141,12 @@ Levelへの環境設定シリアライズは追加していない。Editor設定
 
 ## DXRとの合成
 
-通常PBR材質の反射はIBLのGGX反射。OpticalMaterialの鏡・ガラスは既存の理想反射/屈折経路を使う。
+通常PBR材質の環境反射はIBLのGGX反射。DXR有効時の滑らかな通常金属には、[Lighting](Lighting.md)に記載した1回の局所反射を使用する。粗さ0.2～0.5でIBLへ移行し、0.5以上はprefiltered IBLを使用する。両者の重みの合計を1とし、二重加算しない。OpticalMaterialの鏡・ガラスは既存の理想反射/屈折経路を使う。
 交差面の通常PBR寄与は`(1-reflectivity)*(1-transmission)`で重み付けし、残りを既存の反射・屈折へ分配する。
 したがって同じoptical経路のエネルギーをIBLとDXRで二重加算しない。
-Emissiveはこの通常ローブの重みとは独立して加算する。DXR missは有効な環境cubeを参照し、未指定時だけ既存の空グラデーションを使う。
+Emissiveはこの通常ローブの重みとは独立して加算する。DXR missは有効な環境cubeを参照し、未指定時は一定環境照度からL=E/πを使用する。
 最終optical pixelは従来どおりRasterの結果を置換する。診断モードではOptical passを省略し、一次面の同一SurfaceDataを可視化する。
-DXRのVS-only skinning制限、roughness付きDXR反射rayの未対応は従来どおり。
+DXRのVS-only skinning制限は従来どおり。通常金属の局所反射はGGXをサンプリングし、深度・法線・材質境界を保つ空間デノイズを使用する。反射先からの追加の光学経路と時間蓄積には対応していない。
 
 ## 代替案と採用理由・性能
 

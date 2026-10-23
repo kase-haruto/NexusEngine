@@ -74,10 +74,10 @@ namespace NexusEngine {
 		// Backend型への変換はこの翻訳単位だけで行い、上位RendererへCommand Listを公開しない。
 		pipeline.Bind(static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_));
 	}
-	void GraphicsContext::RestoreMainRenderTargets() noexcept {
+    void GraphicsContext::RestoreMainRenderTargets(bool includeDepth) noexcept {
 		auto* commands = static_cast<ID3D12GraphicsCommandList*>(nativeCommandList_);
 		const D3D12_CPU_DESCRIPTOR_HANDLE rtv { nativeRtv_ }, dsv { nativeDsv_ };
-		commands->OMSetRenderTargets(1, &rtv, FALSE, nativeDsv_ ? &dsv : nullptr);
+        commands->OMSetRenderTargets(1, &rtv, FALSE, includeDepth && nativeDsv_ ? &dsv : nullptr);
 		const D3D12_VIEWPORT viewport { 0, 0, static_cast<float>(renderWidth_), static_cast<float>(renderHeight_), 0, 1 };
 		const D3D12_RECT scissor { 0, 0, static_cast<LONG>(renderWidth_), static_cast<LONG>(renderHeight_) };
 		commands->RSSetViewports(1, &viewport);

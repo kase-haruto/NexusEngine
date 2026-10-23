@@ -17,7 +17,7 @@ namespace NexusEngine {
 		impl_ = std::move(next); return {};
 	}
 	Result<void> OpticalSystem::SetSettings(const OpticalSettings& settings) {
-		if(settings.maxBounces < 1 || settings.maxBounces > 12 || !std::isfinite(settings.rayBias) ||
+		if(settings.maxBounces < 1 || settings.maxBounces > 12 || settings.reflectionSamples < 1 || settings.reflectionSamples > 64 || !std::isfinite(settings.rayBias) ||
 			settings.rayBias <= 0 || !std::isfinite(settings.rayDistance) || settings.rayDistance <= settings.rayBias)
 			return std::unexpected(Error(ErrorCategory::Graphics, 70, "Invalid optical settings."));
 		settings_ = settings; return {};
@@ -37,6 +37,7 @@ namespace NexusEngine {
 		return result;
 	}
 	uint32_t OpticalSystem::GetDDGIFrameCount() const noexcept {return impl_?impl_->backend.GetDDGIFrameCount():0;}
+	OpticalGpuTimings OpticalSystem::GetGpuTimings() const noexcept {return impl_?impl_->backend.GetGpuTimings():OpticalGpuTimings{};}
 	DDGIDrawData OpticalSystem::GetDDGIDrawData() const noexcept {
 		// Contextの破棄で履歴番号が巻き戻った場合も、未提出のTextureを返さない。
 		if(!impl_ || ddgi_.spacingEnabled[3]==0) return {};

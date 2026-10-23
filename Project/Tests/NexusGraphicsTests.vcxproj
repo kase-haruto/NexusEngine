@@ -60,6 +60,7 @@
     <ClCompile Include="..\Graphics\Resource\WicImageDecoder.cpp" />
     <ClCompile Include="..\Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Viewport\ViewportTarget.cpp" />
     <ClCompile Include="..\Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsContext.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsResourceFactory.cpp" />
@@ -101,4 +102,5 @@
     <ClInclude Include="..\Graphics\Lighting\DDGISettings.h" />
   </ItemGroup>
   <ItemGroup><None Include="DDGITests.inl" /></ItemGroup>
+  <ItemGroup><ClCompile Include="..\Graphics\Backend\DirectX12\Selection\SelectionOutline.cpp" /></ItemGroup>
 </Project>

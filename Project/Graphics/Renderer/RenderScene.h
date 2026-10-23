@@ -5,10 +5,12 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
+#include <string>
 
 // engine
 #include "Foundation/Math/Matrix4x4.h"
 #include "Graphics/Shadow/ShadowTypes.h"
+#include "Graphics/Material/MaterialOverride.h"
 #include "Graphics/Fog/FogSettings.h"
 #include "Graphics/Lighting/GlobalIlluminationSettings.h"
 #include "Graphics/Lighting/BakedLightingData.h"
@@ -54,6 +56,11 @@ namespace NexusEngine {
 		uint32_t nodeIndex = kAllNodes; //< Model全体または指定Nodeのみを描画する
         bool staticLighting = true; //< falseの物体はベイクから除外し、プローブで受光
         uint64_t lightingId = 0; //< 再ロード後も変わらないベイク照合ID。0はsourceObjectを使用
+        bool selected = false; //< 上位層が指定するシルエット強調
+        std::string meshAsset, baseColorTexture; //< 永続Asset参照。Hostが描画前に解決する
+        uint32_t nodeBegin = 0, nodeEnd = UINT32_MAX; //< 解決済みモデルのNode範囲
+        MaterialOverride material; //< 描画Instanceの材質値
+        uint32_t materialBegin = 0; //< Source Slotから統合Slotへのoffset
 	};
 
 	/*-----------------------------------------------------------------------------------------

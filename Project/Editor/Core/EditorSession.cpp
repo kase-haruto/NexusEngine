@@ -25,10 +25,21 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
 }
 
 void NexusEngine::EditorSession::Close() noexcept {
+	StopPlay();
 	selection_.Clear();
 	++generation_;
 	dirty_	  = false;
 	levelDocument_.reset();
+}
+
+bool NexusEngine::EditorSession::StartPlay() {
+	if(playLevel_ || !GetLevel() || !GetLevel()->GetScene()) return false;
+	auto scene = GetLevel()->GetScene()->Clone();
+	if(!scene) return false;
+	auto level = std::make_unique<Level>(GetLevel()->GetName());
+	level->Lighting() = GetLevel()->Lighting();
+	level->ExchangeScene(std::move(scene));
+	playLevel_ = std::move(level); paused_ = false; return true;
 }
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem::path& path) {

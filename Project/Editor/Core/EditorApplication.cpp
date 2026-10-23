@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "Graphics/Model/ModelLoader.h"
+#include "Graphics/Model/ModelThumbnail.h"
 
 #include "Graphics/Shadow/ShadowSystem.h"
 #include "Graphics/RayTracing/OpticalSystem.h"
@@ -11,12 +12,16 @@
 #include "Graphics/Color/ColorSpace.h"
 #include <cmath>
 #include <algorithm>
+#include <cstdio>
 
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "Editor/ImGui/ImGuiStyle.h"
 
 namespace NexusEngine {
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
+		editPose_.reset();
+        reportedAssetErrors_.clear();
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。
 		modelPose_.Shutdown();
 		session_.Close();
@@ -36,7 +41,11 @@ namespace NexusEngine {
 		}
 		mirrorMaterialSlot_ = sphereMaterials->mirror;
 		glassMaterialSlot_ = sphereMaterials->glass;
+		auto testScene = AppendPBRTestScene(modelAsset_);
+		if(!testScene) return testScene;
 		auto poseResult = modelPose_.Initialize(modelAsset_);
+        modelLibrary_ = std::make_unique<ModelAssetLibrary>(assetDirectory, modelAsset_);
+        uploadedAssetRevision_ = modelLibrary_->Revision();
 		if(!poseResult) return poseResult;
 
 		if(!modelAsset_.animations.empty()) {
@@ -128,10 +137,20 @@ namespace NexusEngine {
 			ImGui::End();
 		}
 		if(optics_ && ImGui::Begin("Ray Traced Optics")) {
-			ImGui::TextUnformatted("Left sphere: mirror / Right sphere: refractive glass");
-			ImGui::TextUnformatted("Sponza architecture reflects / refracts through the spheres.");
+			ImGui::TextUnformatted("Optical mirrors / glass and ordinary PBR metallic reflections");
+			ImGui::TextUnformatted("PBRTestLevel: front row gold, back row dielectric; roughness increases left to right.");
 			auto settings = optics_->GetSettings();
 			bool changed = ImGui::Checkbox("Reflection / Transmission", &settings.enabled);
+			changed |= ImGui::Checkbox("PBR Metallic Reflections", &settings.metallicReflections);
+			changed |= ImGui::Checkbox("Reflection Denoising", &settings.reflectionDenoising);
+			const auto timings=optics_->GetGpuTimings();
+			if(timings.valid) ImGui::Text("GPU (ms): AS %.2f / DDGI %.2f / Reflections %.2f / Filter %.2f",
+				timings.milliseconds[0],timings.milliseconds[1],timings.milliseconds[2],timings.milliseconds[3]);
+			int reflectionSamples = static_cast<int>(settings.reflectionSamples);
+			if(ImGui::SliderInt("Metal Reflection Samples", &reflectionSamples, 1, 64)) {
+				settings.reflectionSamples = static_cast<uint32_t>(reflectionSamples); changed = true;
+			}
+			ImGui::TextUnformatted("Polished: one stable ray. Rough: prefiltered IBL. Local blend: roughness 0.2-0.5.");
 			int bounces = static_cast<int>(settings.maxBounces);
 			if(ImGui::SliderInt("Max Optical Bounces", &bounces, 1, 12)) {
 				settings.maxBounces = static_cast<uint32_t>(bounces);
@@ -343,7 +362,37 @@ namespace NexusEngine {
 		}
 
 		workspace_ = std::make_unique<EditorWorkspace>(session_);
-		workspace_->Initialize(std::filesystem::current_path());
+		workspace_->Initialize(std::filesystem::current_path(), editorExtensions_);
+		workspace_->SetDpiScale(static_cast<float>(GetDpiForWindow(static_cast<HWND>(context.nativeWindow))) / 96.0f);
+		workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
+        workspace_->AssetEditor().Configure(modelLibrary_->Root(),
+            [this](const std::filesystem::path& path, bool texture) -> Result<std::string> {
+                auto reference = modelLibrary_->Reference(path);
+                if(!reference) return std::unexpected(reference.error());
+                if(texture) { auto loaded = modelLibrary_->Texture(*reference); if(!loaded) return std::unexpected(loaded.error()); }
+                else { auto loaded = modelLibrary_->Model(*reference); if(!loaded) return std::unexpected(loaded.error()); }
+                return reference;
+            }, [this](const std::string& reference) -> const ModelAssetData* {
+                auto model = modelLibrary_->Model(reference); return model ? *model : nullptr;
+            }, [this](const std::string& path, bool texture, int node) -> ImTextureRef {
+                std::string reference;
+                if(!path.empty()) {
+                    auto result = modelLibrary_->Reference(std::filesystem::path(reinterpret_cast<const char8_t*>(path.c_str())));
+                    if(!result) return {}; reference = *result;
+                }
+                const auto key = std::string(texture ? "texture:" : "mesh:") + reference + ":" + std::to_string(node);
+                auto cached = imguiRenderer_.FindPreview(key);
+                if(cached._TexData) return cached;
+                if(!imguiRenderer_.CanCreatePreview()) return {};
+                if(texture) {
+                    auto bytes = modelLibrary_->Texture(reference); if(!bytes) return {};
+                    auto image = WicImageDecoder{}.Decode(**bytes); if(!image) return {};
+                    return imguiRenderer_.CreatePreview(key, CreateImageThumbnail(*image));
+                }
+                auto model = modelLibrary_->Model(reference); if(!model) return {};
+                auto image = CreateModelThumbnail(**model, node); if(!image) return {};
+                return imguiRenderer_.CreatePreview(key, *image);
+            });
 		if(!workspace_->Viewport().AttachLocalPreview(imguiRenderer_, ImGuiRenderer::SceneViewportTexture,
 			[graphics = context.graphicsSystem](uint32_t width, uint32_t height) { return graphics->RequestSceneViewportSize(width, height); })) {
 			workspace_->Shutdown(); workspace_.reset(); guiContext_.Shutdown(); imguiRenderer_.Shutdown();
@@ -358,16 +407,44 @@ namespace NexusEngine {
 	}
 
 	Result<void> EditorApplication::Update(const float deltaTime) {
-
-		if(session_.GetLevel() == nullptr) return {};
+		if(session_.IsPlaying() && !editPose_) editPose_ = modelPose_;
+		if(!session_.IsPlaying() && editPose_) { modelPose_ = std::move(*editPose_); editPose_.reset(); }
+		auto* preview = session_.GetPreviewLevel();
+		if(preview == nullptr) return {};
 		// Transform解決より前にSceneの動きを適用する。同じframeを複数回描画しても時刻は進まない。
-		if(session_.GetLevel()->GetScene() == nullptr) return session_.GetLevel()->Update(deltaTime);
-		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return session_.GetLevel()->Update(deltaTime);
-		modelPose_.Update(deltaTime);
-		return session_.GetLevel()->Update(deltaTime);
+		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return preview->Update(deltaTime);
+		const float step = session_.IsPlaying() && !session_.IsPaused() ? deltaTime : 0.0f;
+		modelPose_.Update(step);
+		return preview->Update(step);
 	}
 
 	Result<void> EditorApplication::PrepareRender(const uint32_t width, const uint32_t height) {
+		if(sceneGeneration_ != session_.Generation()) {
+			sceneGeneration_ = session_.Generation();
+			// Probe history and a saved bake belong to one document's geometry/light setup.
+			++renderScene_.ddgi.revision;
+			const LevelLightingSettings lighting = session_.GetLevel() ? session_.GetLevel()->Lighting().value_or(LevelLightingSettings{}) : LevelLightingSettings{};
+			renderScene_.ambientIrradiance=lighting.skyIrradiance;
+			const auto environmentRevision=renderScene_.environment.revision; // Reuse identical baked IBL on Level switches.
+			renderScene_.environment=lighting.environment;
+			renderScene_.environment.revision=environmentRevision;
+			const auto environmentPath=AssetCatalog::Utf8(lighting.environment.imagePath);
+			std::snprintf(environmentPath_.data(),environmentPath_.size(),"%s",environmentPath.c_str());
+			renderScene_.ddgi.intensity=lighting.probes.intensity;
+			renderScene_.ddgi.origin=lighting.probes.origin;
+			renderScene_.ddgi.spacing=lighting.probes.spacing;
+			renderScene_.ddgi.counts=lighting.probes.counts;
+			renderScene_.ddgi.raysPerProbe=lighting.probes.raysPerProbe;
+			++renderScene_.bakedLighting.revision;
+			renderScene_.bakedLighting.enabled = false;
+			if(const auto* document = session_.GetLevelDocument()) {
+				auto stem = document->GetFilePath().value_or(std::filesystem::path{"UnsavedLevel"}).stem();
+				stem += ".nxgi";
+				renderScene_.bakedLighting.cachePath = std::filesystem::path{"Generated/Lighting"} / stem;
+				auto path = AssetCatalog::Utf8(renderScene_.bakedLighting.cachePath);
+				std::snprintf(bakedPath_.data(),bakedPath_.size(),"%s",path.c_str());
+			}
+		}
 		uint32_t sceneWidth = width, sceneHeight = height;
 		if(graphicsSystem_) {
 			// Panelの前frame要求を記録開始前に適用し、CameraとRTに同じaspectを使う。
@@ -376,13 +453,58 @@ namespace NexusEngine {
 			const auto image = graphicsSystem_->GetSceneViewportImage();
 			if(image.width && image.height) { sceneWidth = image.width; sceneHeight = image.height; }
 		}
-		if(session_.GetLevel() == nullptr || session_.GetLevel()->GetScene() == nullptr || sceneHeight == 0) return {};
-		return extractor_.ExtractInto(*session_.GetLevel()->GetScene(), static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight), renderScene_);
+		auto* preview = session_.GetPreviewLevel();
+		if(preview == nullptr || preview->GetScene() == nullptr || sceneHeight == 0) return {};
+		const float aspect = static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight);
+		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_);
+        if(extracted && modelLibrary_) {
+            for(auto& item : renderScene_.primitives) {
+                auto range = modelLibrary_->Resolve(item.meshAsset, item.baseColorTexture);
+                if(!range) {
+                    const auto key = item.meshAsset + "\n" + item.baseColorTexture;
+                    if(reportedAssetErrors_.insert(key).second) NEXUS_LOG_ERROR("Assets", range.error().GetMessageText());
+                    item.nodeEnd = 0;
+                    continue;
+                }
+                item.nodeBegin = range->begin; item.nodeEnd = range->end;
+                item.materialBegin = range->materialBegin;
+                if(item.nodeIndex != PrimitiveRenderItem::kAllNodes) {
+                    if(item.nodeIndex >= range->end - range->begin) item.nodeEnd = 0;
+                    else item.nodeIndex += range->begin;
+                }
+                if(!session_.IsPlaying()) for(auto id : session_.Selection().All()) {
+                    const auto entity = preview->FindEntity(id);
+                    const auto local = entity.GetId();
+                    item.selected |= entity.IsAlive() && item.sourceObject.value == ((static_cast<uint64_t>(local.generation) << 32) | local.index);
+                }
+            }
+            if(graphicsSystem_ && uploadedAssetRevision_ != modelLibrary_->Revision()) {
+                auto previousAsset = std::move(modelAsset_);
+                auto previousPose = modelPose_;
+                modelAsset_ = modelLibrary_->Snapshot();
+                modelPose_.Shutdown();
+                auto initialized = modelPose_.Initialize(modelAsset_);
+                if(!initialized) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return initialized; }
+                auto renderer = std::make_unique<PrimitiveRenderer>();
+                renderer->SetRenderScene(&renderScene_); renderer->SetModelInput(&modelAsset_, &modelPose_);
+                // 初期化はCommandList記録前。旧GPU資源はidle後にだけ解放する。
+                auto replaced = graphicsSystem_->ReplaceRenderer(renderer.get());
+                if(!replaced) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return replaced; }
+                replacementRenderer_ = std::move(renderer);
+                materialRenderer_ = replacementRenderer_.get(); shadows_ = &materialRenderer_->GetShadows(); optics_ = &materialRenderer_->GetOptics();
+                uploadedAssetRevision_ = modelLibrary_->Revision();
+                NEXUS_LOG_INFO("Assets", "Uploaded model and material asset snapshot.");
+                if(workspace_) workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
+            }
+        }
+		if(extracted && workspace_) workspace_->ViewportEditor().Prepare(renderScene_, aspect);
+		return extracted;
 	}
 
 	void EditorApplication::BeginFrame() {
 		// フォントサイズと共通StyleはImGuiがframeの寸法を計算する前に反映する。
 		if(workspace_) workspace_->PrepareFrame();
+		guiContext_.SetTheme(UI::CurrentEditorTheme());
 		imguiRenderer_.BeginFrame();
 		guiContext_.BeginFrame();
 		ShowGui();
@@ -395,6 +517,7 @@ namespace NexusEngine {
 	}
 
 	void EditorApplication::Shutdown() noexcept {
+		editPose_.reset();
 		if(workspace_) {
 			try { workspace_->Shutdown(); }
 			catch(...) { NEXUS_LOG_WARNING("Editor", "Failed to persist workspace during shutdown."); }
@@ -413,6 +536,13 @@ namespace NexusEngine {
 		const uint32_t	message,
 		const uintptr_t wParam,
 		const intptr_t	lParam) noexcept {
+		if(message == WM_DPICHANGED && workspace_) workspace_->SetDpiScale(static_cast<float>(HIWORD(wParam)) / 96.0f);
+		// Platformの既存購読口でWM_CLOSEを保留し、Menuと同じ保存確認を通す。
+		if(message == WM_CLOSE && workspace_) {
+			try { workspace_->RequestExit(); }
+			catch(...) { NEXUS_LOG_ERROR("Editor", "Failed to prepare editor close request."); }
+			return true;
+		}
 		return imguiRenderer_.HandleWindowMessage(window, message, wParam, lParam);
 	}
 

@@ -502,4 +502,46 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <None Include="Shaders\Lighting\DDGIUpdate.hlsl" />
     <None Include="Shaders\RayTracing\DDGIProbe.hlsli" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Editor\Services\SceneEditService.cpp" />
+    <ClCompile Include="Editor\Services\EditorDocumentService.cpp" />
+    <ClCompile Include="Editor\Gui\EditorChrome.cpp" />
+    <ClInclude Include="Editor\Services\SceneEditService.h" />
+    <ClInclude Include="Editor\Services\EditorDocumentService.h" />
+    <ClInclude Include="Editor\Services\EditorHistory.h" />
+    <ClInclude Include="Editor\Services\NotificationService.h" />
+    <ClInclude Include="Editor\Gui\EditorChrome.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Editor\Gui\ViewportTools.cpp" />
+    <ClInclude Include="Editor\Gui\ViewportTools.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Graphics\Model\ModelAssetLibrary.cpp" />
+    <ClCompile Include="Graphics\Model\ModelThumbnail.cpp" />
+    <ClCompile Include="Editor\Gui\Widgets\AssetPropertyWidget.cpp" />
+    <ClInclude Include="Graphics\Model\ModelAssetLibrary.h" />
+    <ClInclude Include="Graphics\Model\ModelThumbnail.h" />
+    <ClInclude Include="Editor\Gui\Widgets\AssetPropertyWidget.h" />
+    <None Include="Shaders\Primitive\Selection.PS.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ThirdParty\ImGuizmo\ImGuizmo.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClInclude Include="ThirdParty\ImGuizmo\ImGuizmo.h" />
+    <None Include="ThirdParty\ImGuizmo\LICENSE" />
+    <None Include="ThirdParty\ImGuizmo\UPSTREAM.md" />
+    <ClCompile Include="Editor\Services\TransformGizmoTransaction.cpp" />
+    <ClInclude Include="Editor\Services\TransformGizmoTransaction.h" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Selection\SelectionOutline.cpp" />
+    <ClInclude Include="Graphics\Selection\SelectionOutline.h" />
+    <None Include="Shaders\Primitive\SelectionComposite.VS.hlsl" />
+    <None Include="Shaders\Primitive\SelectionComposite.PS.hlsl" />
+  </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="Editor\Gui\ReflectedPropertyEditor.cpp" />
+    <ClCompile Include="Editor\Gui\Properties\PropertyCategoryRegistry.cpp" />
+    <ClCompile Include="Editor\Gui\Properties\PropertyPages.cpp" />
+    <ClCompile Include="Editor\Gui\Properties\MaterialPage.cpp" />
+    <ClCompile Include="Editor\Gui\Properties\PropertyCategoryView.cpp" />
+</ItemGroup>
 </Project>

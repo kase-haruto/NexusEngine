@@ -6,6 +6,14 @@ void BakedLightingCpuTests() {
         BakedLightingSettings quality;quality.samples=32;quality.probeCounts={3,3,3};
         auto dark=LightBaker{}.Bake(room,roomPose,closed,quality);Check(dark);
         for(const auto& p:dark->lightmap) Require(p[0]+p[1]+p[2]==0,"CPU bake leaked environment at a chart boundary.");
+        // Source材質は無発光のまま、Entityの天井Slotだけを発光させて間接光を得る。
+        auto& material = closed.primitives.front().material;
+        material.enabled=true; material.slot=3; material.emissive={2,0,0};
+        auto lit=LightBaker{}.Bake(room,roomPose,closed,quality);Check(lit);
+        double red=0,green=0;
+        for(const auto& p:lit->lightmap) {red+=p[0];green+=p[1];}
+        Require(red>1 && green==0,"CPU bake ignored per-instance material emission.");
+        Require(room.materials[3].emissiveFactor[0]==0,"CPU bake modified shared source material.");
     }
     auto asset=MakeGITestRoom(3);ModelInstance pose;Check(pose.Initialize(asset));
     RenderScene scene;scene.primitives.push_back({{1},Matrix4x4::Identity(),{1,1,1,1}});

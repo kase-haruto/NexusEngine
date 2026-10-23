@@ -1,5 +1,8 @@
 # Editor基盤調査（2026-10-16）
 
+> 以下は基盤実装前の調査記録です。Panel、Reflection、Settings等の現状は
+> [2026-10-20の設計レビュー](EditorArchitectureReview.md)を参照してください。
+
 ビルド・実行は依頼に従い実施しない。調査開始時の `git status --short` は空。
 既存コードはC++23 (`std::expected`) を使用しており、C++20への設定変更はしない。
 

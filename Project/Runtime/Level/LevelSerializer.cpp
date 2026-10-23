@@ -27,7 +27,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 4;
+		constexpr uint32_t kFormatVersion = 8;
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -51,8 +51,21 @@ namespace NexusEngine {
 
 		bool IsValid(const PrimitiveRenderComponent& primitive) {
 			for(float value : primitive.tint) if(!std::isfinite(value)) return false;
-			return true;
+            const auto valid = [](const std::string& path) {
+                return path.size() <= 4096 && path.find('\0') == path.npos && path.find('\n') == path.npos && path.find('\r') == path.npos;
+            };
+            return valid(primitive.meshAsset) && valid(primitive.baseColorTexture) && primitive.material.IsValid();
 		}
+
+        // v1〜7にはInstance材質がないため、既定のdisabledを保つ。
+        bool ReadMaterial(std::istream& input, MaterialOverride& material) {
+            input >> material.enabled >> material.slot;
+            for(float& value : material.baseColor) input >> value;
+            input >> material.metallic >> material.roughness >> material.normalScale;
+            for(float& value : material.emissive) input >> value;
+            input >> material.occlusionStrength;
+            return static_cast<bool>(input) && material.IsValid();
+        }
 
 		struct PendingParent {
 			EntityId child;       //< 新World内で生成された子Entity
@@ -61,6 +74,8 @@ namespace NexusEngine {
 	}
 
 	Result<void> LevelSerializer::Save(const std::filesystem::path& path, Level& level) {
+		if(level.Lighting() && !level.Lighting()->IsValid())
+			return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Level lighting is invalid."));
 		Scene* scene = level.GetScene();
 		if(scene == nullptr) {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Cannot serialize an unloaded level."));
@@ -105,6 +120,20 @@ namespace NexusEngine {
 		output << "NEXUS_LEVEL " << kFormatVersion << '\n';
 		output << "LEVEL " << std::quoted(level.GetName()) << '\n';
 		output << std::setprecision(9);
+		output << "LIGHTING " << level.Lighting().has_value();
+		if(const auto& lighting=level.Lighting()) {
+			for(float value:lighting->skyIrradiance) output << ' ' << value;
+			output << ' ' << lighting->probes.intensity;
+			for(float value:lighting->probes.origin) output << ' ' << value;
+			for(float value:lighting->probes.spacing) output << ' ' << value;
+			for(uint32_t value:lighting->probes.counts) output << ' ' << value;
+			output << ' ' << lighting->probes.raysPerProbe;
+		}
+		output << '\n';
+		const auto environment=level.Lighting()?level.Lighting()->environment:EnvironmentLightingData{};
+		const auto utf8=environment.imagePath.u8string();
+		output << "ENVIRONMENT " << std::quoted(std::string(reinterpret_cast<const char*>(utf8.data()),utf8.size()))
+			<< ' ' << environment.intensity << ' ' << environment.rotation << '\n';
 
 		// EntityIdは実行ごとに変わるため一切書かず、PersistentIdを参照の唯一の鍵にする。
 		scene->ForEach<PersistentIdComponent, NameComponent, TransformComponent>(
@@ -133,7 +162,14 @@ namespace NexusEngine {
 				}
 				if(const auto* primitive = entity.GetComponent<PrimitiveRenderComponent>()) {
 					output << "PRIMITIVE 1 " << primitive->tint[0] << ' ' << primitive->tint[1] << ' '
-					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << ' ' << primitive->staticLighting << '\n';
+					       << primitive->tint[2] << ' ' << primitive->tint[3] << ' ' << primitive->enabled << ' ' << primitive->nodeIndex << ' ' << primitive->staticLighting
+                           << ' ' << std::quoted(primitive->meshAsset) << ' ' << std::quoted(primitive->baseColorTexture);
+                    const auto& material = primitive->material;
+                    output << ' ' << material.enabled << ' ' << material.slot;
+                    for(float value : material.baseColor) output << ' ' << value;
+                    output << ' ' << material.metallic << ' ' << material.roughness << ' ' << material.normalScale;
+                    for(float value : material.emissive) output << ' ' << value;
+                    output << ' ' << material.occlusionStrength << '\n';
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
@@ -167,6 +203,33 @@ namespace NexusEngine {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Level header or version is invalid."));
 		}
 
+		std::optional<LevelLightingSettings> lighting;
+		if(version>=5) {
+			bool present=false;
+			if(!(input >> token >> present) || token!="LIGHTING")
+				return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Level lighting record is missing."));
+			if(present) {
+				lighting.emplace();
+				for(float& value:lighting->skyIrradiance) input >> value;
+				input >> lighting->probes.intensity;
+				for(float& value:lighting->probes.origin) input >> value;
+				for(float& value:lighting->probes.spacing) input >> value;
+				for(uint32_t& value:lighting->probes.counts) input >> value;
+				input >> lighting->probes.raysPerProbe;
+				if(!input || !lighting->IsValid()) return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Level lighting values are invalid."));
+			}
+		}
+		if(version>=6) {
+			std::string imagePath;float intensity=1,rotation=0;
+			if(!(input >> token >> std::quoted(imagePath) >> intensity >> rotation) || token!="ENVIRONMENT" ||
+				!std::isfinite(intensity) || intensity<0 || !std::isfinite(rotation))
+				return std::unexpected(Error(ErrorCategory::Scene,kInvalidFormat,"Invalid Level environment."));
+			if(!imagePath.empty()) {
+				if(!lighting) lighting.emplace();
+				lighting->environment.imagePath=std::filesystem::path{std::u8string(reinterpret_cast<const char8_t*>(imagePath.data()),imagePath.size())};
+				lighting->environment.intensity=intensity;lighting->environment.rotation=rotation;
+			}
+		}
 		auto loadedScene = std::make_unique<Scene>();
 		std::map<PersistentKey, EntityId> loadedEntities;
 		std::vector<PendingParent> pendingParents;
@@ -232,6 +295,9 @@ namespace NexusEngine {
 				if(!(input >> primitive.tint[0] >> primitive.tint[1] >> primitive.tint[2] >> primitive.tint[3] >> primitive.enabled) ||
 				   (version >= 2 && !(input >> primitive.nodeIndex)) ||
 				   (version >= 4 && !(input >> primitive.staticLighting)) ||
+                   (version >= 7 && !(input >> std::quoted(primitive.meshAsset) >> std::quoted(primitive.baseColorTexture))) ||
+                   (version >= 8 && !ReadMaterial(input, primitive.material)) ||
+                   primitive.meshAsset.size() > 4096 || primitive.baseColorTexture.size() > 4096 ||
 				   !IsValid(primitive) ||
 				   entity.AddComponent<PrimitiveRenderComponent>(primitive) == nullptr) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));
@@ -281,6 +347,7 @@ namespace NexusEngine {
 		// 完全に検証できたWorldだけを公開するため、失敗時は既存Levelを変更しない。
 		level.scene_ = std::move(loadedScene);
 		level.name_ = std::move(loadedName);
+		level.lighting_ = std::move(lighting);
 		level.state_ = LevelState::Loaded;
 		return {};
 	}

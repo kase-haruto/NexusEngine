@@ -18,6 +18,7 @@ public:
         float fontSize = 18; //< 論理フォントサイズ
         float uiScale = 1; //< UI倍率
         bool autoSaveLayout = true; //< 終了時に配置を保存する
+        std::string workspace = "General"; //< 個人の名前付き配置
         std::map<std::string, bool> panels; //< 安定Panel IDごとの表示状態
         std::vector<std::string> recentLevels; //< 個人の最近使ったLevel、最大10件
     } user;

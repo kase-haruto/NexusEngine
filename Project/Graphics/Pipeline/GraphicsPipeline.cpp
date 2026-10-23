@@ -97,8 +97,14 @@ namespace NexusEngine {
 		const D3D12_RENDER_TARGET_BLEND_DESC defaultBlend { FALSE, FALSE, D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD, D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD, D3D12_LOGIC_OP_NOOP, D3D12_COLOR_WRITE_ENABLE_ALL };
 		// 未使用slotも完全な既定値で初期化し、Debug Layerで未定義状態と解釈されないようにする。
 		for(auto& target : desc.BlendState.RenderTarget) target = defaultBlend;
+        if(pipelineDesc.alphaBlending) {
+            auto& blend = desc.BlendState.RenderTarget[0];
+            blend.BlendEnable = TRUE; blend.SrcBlend = D3D12_BLEND_SRC_ALPHA; blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+            blend.SrcBlendAlpha = D3D12_BLEND_ONE; blend.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+        }
 		desc.SampleMask = UINT_MAX;
 		desc.RasterizerState = { D3D12_FILL_MODE_SOLID, D3D12_CULL_MODE_BACK, FALSE, D3D12_DEFAULT_DEPTH_BIAS, D3D12_DEFAULT_DEPTH_BIAS_CLAMP, D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS, TRUE, FALSE, FALSE, 0, D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF };
+        if(pipelineDesc.doubleSided) desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 		desc.DepthStencilState.DepthEnable = pipelineDesc.depthStencil.depthTestEnabled;
 		desc.DepthStencilState.DepthWriteMask = pipelineDesc.depthStencil.depthWriteEnabled
 			? D3D12_DEPTH_WRITE_MASK_ALL

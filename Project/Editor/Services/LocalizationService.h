@@ -16,6 +16,7 @@ public:
     [[nodiscard]] bool Load(const std::filesystem::path& directory);
     /** \brief 辞書を再生成せず表示言語のみ切り替える */
     void SetLanguage(std::string_view language) { language_ = language == "ja" ? "ja" : "en"; }
+    std::string_view Language() const { return language_; }
     /** \brief 選択言語→英語→キーの順で解決する */
     [[nodiscard]] std::string Text(std::string_view key) const;
     /** \brief 表示文字列と言語非依存のImGui IDを結合する */

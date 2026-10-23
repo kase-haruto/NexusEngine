@@ -31,6 +31,8 @@ namespace NexusEngine {
 	struct GraphicsPipelineDesc {
 		// Scene pipelines use HDR; standalone/overlay pipelines keep the 8-bit default.
 		bool hdrRenderTarget = false;
+        bool doubleSided = false; //< 選択マスク等で表裏を問わず形状を描く
+        bool alphaBlending = false; //< 外周等の半透明Overlay合成
 		std::vector<VertexAttribute> vertexLayout; //< Vertex Shader inputと一致するCPU Vertex layout
 		DepthStencilFormat depthStencilFormat = DepthStencilFormat::None; //< PSOが接続するDepth Target format
 		DepthStencilStateDesc depthStencil; //< Depth TestとDepth Writeの動作

@@ -1,6 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <map>
+#include <memory>
+#include "ThirdParty/imgui/imgui.h"
+#include "Graphics/Resource/WicImageDecoder.h"
 
 #include "Graphics/Descriptor/DescriptorHandle.h"
 #include "Graphics/Renderer/GraphicsRenderExtension.h"
@@ -20,6 +24,10 @@ namespace NexusEngine {
 		static constexpr UI::TextureHandle SceneViewportTexture{1}; //< backend内だけで解決する安定token
 		/** \brief Graphics所有のViewport画像をImGuiの不透明画像参照へ変換する */
 		std::optional<UI::ResolvedTexture> Resolve(UI::TextureHandle texture) const noexcept override;
+        /** \brief Backend管理の動的TextureとしてPreview画像を登録する。GPU idle後のShutdownで解放 */
+        ImTextureRef CreatePreview(const std::string& key, const DecodedImage& image);
+        ImTextureRef FindPreview(const std::string& key) const;
+        bool CanCreatePreview() const { return previews_.size() < 256; }
 		/**
 		 * \brief ImGui ContextとWin32/DX12 backendを初期化する
 		 */
@@ -48,6 +56,7 @@ namespace NexusEngine {
 
 	private:
 		GraphicsSystem* graphicsSystem_ = nullptr; //< 画像解決先。資源を所有しない
+        std::map<std::string, std::unique_ptr<ImTextureData>> previews_; //< Backend停止まで安定した参照を保持
 		DescriptorAllocator*		  descriptors_ = nullptr; //< GraphicsSystem所有の共有Resource allocator
 		std::vector<DescriptorHandle> allocations_;			  //< Backendへ貸し出したDescriptor
 		bool						  initialized_ = false;	  //< Contextと両Backendの初期化完了状態

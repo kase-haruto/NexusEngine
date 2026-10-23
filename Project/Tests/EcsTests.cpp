@@ -234,6 +234,37 @@ namespace NexusEngine::Tests {
 			demoNodes[primitive.nodeIndex] = true;
 		}
 		assert(demoNodes[0] && demoNodes[1] && demoNodes[2]);
+		Level pbr;
+		assert(pbr.Load("Project/Resources/Assets/Levels/PBRTestLevel.json").has_value());
+		assert(pbr.Update(0).has_value());
+		RenderScene pbrSnapshot;
+		assert(extractor.ExtractInto(*pbr.GetScene(),16.f/9.f,pbrSnapshot).has_value());
+		assert(pbrSnapshot.camera && pbrSnapshot.primitives.size()==13 && pbrSnapshot.directionalLight.intensity>0);
+		for(const auto& primitive : pbrSnapshot.primitives) assert(primitive.nodeIndex>=3 && primitive.nodeIndex<16);
+		assert(pbr.Save(path).has_value());
+		Level pbrRestored;
+		assert(pbrRestored.Load(path).has_value());
+		assert(pbrRestored.GetName()=="PBRTestLevel");
+		assert(pbr.Lighting() && pbr.Lighting()->environment.imagePath=="Resources/Assets/Environments/PBRStudio.hdr");
+		assert(pbrRestored.Lighting()->environment.imagePath==pbr.Lighting()->environment.imagePath);
+		Level sponzaLevel;
+		assert(sponzaLevel.Load("Project/Resources/Assets/Levels/SponzaLevel.json").has_value());
+		assert(sponzaLevel.Lighting() && sponzaLevel.Lighting()->IsValid());
+		assert(sponzaLevel.Lighting()->skyIrradiance[0]==4 && sponzaLevel.Lighting()->probes.counts[0]==16);
+		assert(sponzaLevel.Lighting()->probes.raysPerProbe==64);
+		assert(sponzaLevel.Save(path).has_value());
+		Level restoredSponza;
+		assert(restoredSponza.Load(path).has_value());
+		assert(restoredSponza.Lighting()->probes.counts==sponzaLevel.Lighting()->probes.counts);
+		assert(restoredSponza.Lighting()->skyIrradiance==sponzaLevel.Lighting()->skyIrradiance);
+		assert(restoredSponza.Update(0).has_value());
+		RenderScene sponzaSnapshot;
+		assert(extractor.ExtractInto(*restoredSponza.GetScene(),16.f/9.f,sponzaSnapshot).has_value());
+		assert(sponzaSnapshot.camera && sponzaSnapshot.primitives.size()==3);
+		assert(sponzaSnapshot.directionalLight.intensity>0);
+		restoredSponza.Lighting()->skyIrradiance[0]=-1;
+		assert(!restoredSponza.Save(path).has_value());
+		std::filesystem::remove(path);
 	}
 
 } // namespace NexusEngine::Tests

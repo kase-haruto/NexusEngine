@@ -94,8 +94,8 @@ namespace NexusEngine {
 		[[nodiscard]] uint32_t GetRenderWidth() const noexcept { return renderWidth_; }
 		/** \brief 現在の描画先のpixel高さ */
 		[[nodiscard]] uint32_t GetRenderHeight() const noexcept { return renderHeight_; }
-		/** \brief Shadow等の独立Pass後にMain Color/Depth/Viewportを再設定する */
-		void RestoreMainRenderTargets() noexcept;
+        /** \brief Main Color/Viewportを再設定する。深度なし合成ではincludeDepth=false */
+        void RestoreMainRenderTargets(bool includeDepth = true) noexcept;
 		/**
 		 * \brief Native backendと直接接続するRender Extension用のCommand List参照
 		 * \note 通常のRendererはこの逃げ道を使用せず、GraphicsContextの意味ベースAPIを使用すること

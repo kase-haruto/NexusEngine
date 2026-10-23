@@ -88,7 +88,7 @@ float3 EvaluateDiffuseGI(Surface receiver, float3 position, float3 v, uint2 pixe
 float4 EvaluateGI(Surface receiver, float3 position, float3 v, uint2 pixel) {
     float3 diffuse = EvaluateDiffuseGI(receiver,position,v,pixel);
     float visibility = 1;
-    if(environment.options.y != 0) {
+    if(environment.options.y != 0 || any(ambientIrradiance.rgb > 0)) {
         float3 n = receiver.front != 0 ? receiver.normal : -receiver.normal;
         float3 ng = receiver.front != 0 ? receiver.geometricNormal : -receiver.geometricNormal;
         float3 r = reflect(-v,n);

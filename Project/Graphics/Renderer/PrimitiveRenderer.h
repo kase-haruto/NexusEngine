@@ -14,6 +14,7 @@
 #include "Graphics/Resource/ConstantBuffer.h"
 #include "Graphics/Resource/TextureResource.h"
 #include "Graphics/Descriptor/ShaderResourceRef.h"
+#include "Graphics/Resource/SamplerDesc.h"
 #include "Graphics/Material/PrimitiveDrawData.h"
 #include "GraphicsRenderer.h"
 #include "RenderScene.h"
@@ -23,6 +24,7 @@
 #include "Graphics/RayTracing/OpticalSystem.h"
 #include "Graphics/Meshlet/MeshShaderPipeline.h"
 #include "Graphics/Meshlet/MeshletResource.h"
+#include "Graphics/Selection/SelectionOutline.h"
 
 namespace NexusEngine {
 
@@ -76,6 +78,8 @@ namespace NexusEngine {
 		}
 
 	private:
+        Result<ShaderResourceRef> GetMaterialSampler(const SamplerDesc& description);
+        std::vector<std::pair<SamplerDesc, ShaderResourceRef>> materialSamplers_; //< 材質間で共有し、一度だけ退役するSamplerの所有者
 		struct MaterialGpuResource {
 			std::unique_ptr<TextureResource> texture;
 			ShaderResourceRef textureRef;
@@ -88,6 +92,8 @@ namespace NexusEngine {
 
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
+        SelectionOutline selectionOutline_; //< 独立Maskから深度なしで外周を合成
+        std::vector<SelectionOutlineDraw> selectionDraws_; //< 通常Drawの確定済みCBをFrame内だけ借用する
 		MeshShaderPipeline meshPipeline_; //< 独立 AS/MS/PS 経路
 		std::vector<std::unique_ptr<MeshletResource>> meshletResources_; //< 元 Mesh と同じ index の静的 Resource
 		MeshletDebugSettings meshletSettings_; //< Editor が変更する表示 / Culling 設定
@@ -102,10 +108,9 @@ namespace NexusEngine {
 		const ModelAssetData* modelAsset_ = nullptr; //< Sceneが選択・ロードしたCPU Asset（非所有）
 		const ModelInstance* modelPose_ = nullptr; //< Sceneが更新するCPU姿勢（非所有）
 		std::vector<MaterialGpuResource> materialResources_; //< Material slot別Texture/Sampler所有
-		std::vector<std::vector<std::unique_ptr<ConstantBuffer>>> meshDrawBuffers_; //< SubmeshごとのFrame安全なDraw Data
+        std::vector<std::unique_ptr<ConstantBuffer>> drawBuffers_; //< Nodeを共有するMeshもDrawごとに独立したFrame安全な転送領域
 		PrimitiveDrawData drawData_; //< 抽出済み行列とMaterial parameterのCPU側転送値
 		const RenderScene* renderScene_ = nullptr; //< Component参照を持たないApplication所有snapshot
-		std::vector<std::vector<std::vector<std::unique_ptr<ConstantBuffer>>>> extraDrawBuffers_; //< 2件目以降のframe安全なobject/mesh/submesh転送領域
 	};
 
 } // namespace NexusEngine

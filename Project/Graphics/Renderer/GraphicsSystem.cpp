@@ -446,6 +446,22 @@ namespace NexusEngine {
 		return {};
 	}
 
+    Result<void> GraphicsSystem::ReplaceRenderer(IGraphicsRenderer* renderer) {
+        if(!impl_ || !renderer || !impl_->renderer || renderer == impl_->renderer)
+            return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid renderer replacement."));
+        auto idle = impl_->commandQueue.WaitForIdle();
+        if(!idle) return idle;
+        auto result = renderer->Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
+        if(!result) {
+            auto waited = impl_->commandQueue.WaitForIdle();
+            if(!waited) return waited;
+            renderer->Shutdown();
+            return result;
+        }
+        impl_->renderer->Shutdown();
+        impl_->renderer = renderer;
+        return {};
+    }
 	Result<void> GraphicsSystem::AttachRenderExtension(IGraphicsRenderExtension* const extension) {
 		if(!impl_ || extension == nullptr || impl_->renderExtension != nullptr) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Render extension cannot be attached."));

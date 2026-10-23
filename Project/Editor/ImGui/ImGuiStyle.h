@@ -1,4 +1,5 @@
 #pragma once
+#include "Editor/Gui/Core/GuiTheme.h"
 
 namespace NexusEngine::UI {
 /*-----------------------------------------------------------------------------------------
@@ -17,4 +18,6 @@ struct EditorStyleOptions {
  * \note Context生成後、Widget描画前に呼ぶ。再適用しても寸法を重複拡大しない
  */
 void ApplyEditorStyle(const EditorStyleOptions& options = {}) noexcept;
+/** \brief 適用済みStyleを独自Widget用の意味ベースThemeへ変換する */
+Theme CurrentEditorTheme() noexcept;
 }

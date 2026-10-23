@@ -7,7 +7,10 @@
 #include "EditorSession.h"
 #include "Graphics/Model/ModelAssetData.h"
 #include "Graphics/Model/ModelInstance.h"
+#include "Graphics/Model/ModelAssetLibrary.h"
+#include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
+#include <set>
 
 namespace NexusEngine {
 	class ShadowSystem;
@@ -27,6 +30,8 @@ namespace NexusEngine {
 		[[nodiscard]] const ModelInstance&	GetModelPose() const noexcept { return modelPose_; }
 
 		void ShowGui();
+		/** \brief 初期化前に追加Panel/Commandの登録処理を接続する */
+		void AddEditorExtension(std::function<void(EditorWorkspace&)> extension) { editorExtensions_.push_back(std::move(extension)); }
 		/** \brief 既存Renderer診断画面を必要時だけ描く */
 		void ShowLegacyDiagnostics();
 		/** \brief Application所有Rendererの設定窓口を非所有接続する */
@@ -78,6 +83,11 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		size_t sceneGeneration_ = 0;
+        std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
+        std::unique_ptr<PrimitiveRenderer> replacementRenderer_; //< GraphicsSystem停止まで保持する交換Renderer
+        size_t uploadedAssetRevision_ = 1; //< GPUへ反映済みsnapshot
+        std::set<std::string> reportedAssetErrors_; //< 同じ欠損参照による毎Frameのログ連打を防ぐ
 		std::array<char, 1024> environmentPath_ {}; //< Editor入力。RendererはScene設定だけを参照する
 		std::array<char, 1024> bakedPath_ {}; //< ベイク成果物の入力パス。GPU参照は保持しない
 		GraphicsSystem* graphicsSystem_ = nullptr; //< Non-owning post-process controls.
@@ -97,7 +107,9 @@ namespace NexusEngine {
 
 		// panels
 		std::unique_ptr<EditorWorkspace> workspace_; //< PanelとEditorサービスの組立
+		std::vector<std::function<void(EditorWorkspace&)>> editorExtensions_; //< Workspace初期化時に一度呼ぶ機能登録
 		bool showLegacyDiagnostics_ = false; //< 既存描画診断の表示要求
+		std::optional<ModelInstance> editPose_; //< 再生中だけ保持する編集時のAnimation状態
 
 		// demo用モデル描画
 		ModelAssetData modelAsset_;									  //< Sceneで選択したCPU Asset。modelPose_より長く生存する

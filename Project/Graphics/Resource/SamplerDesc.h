@@ -32,5 +32,6 @@ namespace NexusEngine {
 		float minLod = 0.0f;
 		float maxLod = (std::numeric_limits<float>::max)();
 		uint32_t maxAnisotropy = 16; // Linear filtering uses anisotropy; 1 selects trilinear.
+        friend bool operator==(const SamplerDesc&, const SamplerDesc&) = default;
 	};
 } // namespace NexusEngine

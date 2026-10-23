@@ -17,6 +17,11 @@ float VisibilitySmith(float nv, float nl, float roughness) {
 }
 float3 FresnelSchlick(float vh, float3 f0) { return f0 + (1 - f0) * pow(1 - saturate(vh), 5); }
 float3 LambertDiffuse(float3 color) { return color / NexusPi; }
+// Disney/Burley diffuse angular response, as used in Microsoft's PBRCommon.fxh.
+float BurleyDiffuseFactor(float nl, float nv, float lh, float roughness) {
+    float fd90 = .5 + 2 * roughness * lh * lh;
+    return (1 + (fd90-1) * pow(1-saturate(nl),5)) * (1 + (fd90-1) * pow(1-saturate(nv),5));
+}
 float3 SpecularBRDF(float nh, float nv, float nl, float roughness, float3 fresnel) {
     return DistributionGGX(nh, roughness) * VisibilitySmith(nv, nl, roughness) * fresnel;
 }

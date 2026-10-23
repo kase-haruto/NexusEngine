@@ -29,6 +29,7 @@ namespace NexusEngine {
 		[[nodiscard]] ShaderResourceRef GetDiffuseGlobalIllumination() const noexcept { return giSrv_; }
 		[[nodiscard]] DDGIDrawData GetDDGIDrawData(float intensity) const noexcept {return ddgi_.GetDrawData(intensity);}
 		[[nodiscard]] uint32_t GetDDGIFrameCount() const noexcept {return ddgi_.FrameCount();}
+		[[nodiscard]] OpticalGpuTimings GetGpuTimings() const noexcept {return timings_;}
 	private:
 		struct GeometryViews {
 			Microsoft::WRL::ComPtr<ID3D12Resource> vertices, indices; //< Asset解放後もGPU入力を保持
@@ -57,9 +58,14 @@ namespace NexusEngine {
 			BakedLightingDrawData bakedLighting;
 			DDGIDrawData ddgi;
 			std::array<uint32_t,4> probeTrace {}; //< レイUAV・方向位相・フィードバック有効・予約
+			std::array<uint32_t,4> reflectionTargets {}; //< Specular UAV, guide UAV, reserved
 		};
-		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 144 && sizeof(Constants) == 400);
+		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 144 && sizeof(Constants) == 416);
 		[[nodiscard]] Result<void> CreatePipeline();
+		[[nodiscard]] Result<void> CreateReflectionFilter();
+		[[nodiscard]] Result<void> InitializeTimings(uint32_t frames);
+		void BeginTimings(ID3D12GraphicsCommandList*,uint32_t frame);
+		void ResolveTimings(ID3D12GraphicsCommandList*,uint32_t frame);
 		[[nodiscard]] Result<void> Resize(uint32_t, uint32_t);
 		[[nodiscard]] Result<GeometryViews*> GetViews(const MeshResource&);
 		void ReleaseViews(GeometryViews&) noexcept;
@@ -74,6 +80,10 @@ namespace NexusEngine {
 		ShaderResourceRef outputSrv_, outputUav_;
 		Microsoft::WRL::ComPtr<ID3D12Resource> giOutput_; //< 共通DXRパスが書き込む間接拡散の専用出力
 		ShaderResourceRef giSrv_, giUav_; //< 光学出力と同じ画面寸法・Fence寿命
+		Microsoft::WRL::ComPtr<ID3D12Resource> reflection_, reflectionGuide_;
+		ShaderResourceRef reflectionSrv_, reflectionUav_, guideSrv_, guideUav_;
+		Microsoft::WRL::ComPtr<ID3D12RootSignature> filterRoot_;
+		Microsoft::WRL::ComPtr<ID3D12PipelineState> filterPipeline_;
 		ConstantBuffer constants_;
 		ConstantBuffer probeConstants_; //< 同じFrame内の追跡と光学描画でCBを上書きしない
 		DDGIProcessor ddgi_; //< ASとは独立したGPUプローブ履歴の所有者
@@ -90,5 +100,10 @@ namespace NexusEngine {
 		D3D12_RESOURCE_STATES state_ = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		D3D12_RESOURCE_STATES initialState_ = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		bool supported_ = false, recording_ = false, warned_ = false, pipelineReady_ = false;
+		Microsoft::WRL::ComPtr<ID3D12QueryHeap> timingQueries_;
+		Microsoft::WRL::ComPtr<ID3D12Resource> timingReadback_;
+		std::vector<uint8_t> timingReady_,timingRecorded_;
+		uint64_t timestampFrequency_=0;
+		OpticalGpuTimings timings_;
 	};
 }

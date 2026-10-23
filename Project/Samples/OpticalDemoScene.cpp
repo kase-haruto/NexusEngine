@@ -2,6 +2,36 @@
 #include "Graphics/Model/PrimitiveMeshBuilder.h"
 
 namespace NexusEngine {
+	Result<void> AppendPBRTestScene(ModelAssetData& model) {
+		auto addMaterial = [&](const char* name, std::array<float,4> color, float metallic, float roughness) {
+			ModelMaterialAssetData material;
+			material.name = name; material.baseColorFactor = color;
+			material.metallicFactor = metallic; material.roughnessFactor = roughness;
+			model.materials.push_back(material);
+			return static_cast<uint32_t>(model.materials.size() - 1);
+		};
+		auto add = [&](const char* name, MeshAssetData mesh, Vector3 position, Vector3 scale) {
+			ModelNodeAssetData node; node.name = name;
+			node.meshIndices = {static_cast<uint32_t>(model.meshes.size())};
+			node.localTransform.translation = position; node.localTransform.scale = scale;
+			model.meshes.push_back(std::move(mesh)); model.nodes.push_back(std::move(node));
+		};
+		auto floor = addMaterial("PBR Neutral Floor", {.35f,.35f,.35f,1},0,.8f);
+		auto red = addMaterial("PBR Red Reference", {.8f,.03f,.02f,1},0,.8f);
+		auto blue = addMaterial("PBR Blue Reference", {.02f,.08f,.8f,1},0,.8f);
+		add("PBR Floor",PrimitiveMeshBuilder::Box(floor),{0,-.15f,2},{15,.3f,12});
+		add("PBR Red Wall",PrimitiveMeshBuilder::Box(red),{-6,2,2},{.2f,4,10});
+		add("PBR Blue Wall",PrimitiveMeshBuilder::Box(blue),{6,2,2},{.2f,4,10});
+		for(uint32_t row = 0; row < 2; ++row) for(uint32_t column = 0; column < 5; ++column) {
+			float roughness = .05f + .225f * static_cast<float>(column);
+			auto material = addMaterial(row == 0 ? "Gold" : "Dielectric", row == 0 ? std::array<float,4>{1,.71f,.29f,1} : std::array<float,4>{.5f,.5f,.5f,1}, row == 0 ? 1.f : 0.f, roughness);
+			auto sphere = PrimitiveMeshBuilder::Sphere(.7f,32,64,material);
+			if(!sphere) return std::unexpected(std::move(sphere.error()));
+			add(row == 0 ? "Metallic Roughness" : "Dielectric Roughness",std::move(*sphere),
+				{-4.f + 2.f * static_cast<float>(column),.75f,static_cast<float>(row) * 2.5f},{1,1,1});
+		}
+		return {};
+	}
 	Result<OpticalSphereMaterialSlots> AppendSponzaOpticalSpheres(ModelAssetData& model) {
 		const uint32_t firstMaterial = static_cast<uint32_t>(model.materials.size());
 		auto mirror = PrimitiveMeshBuilder::Sphere(0.7f, 32, 64, firstMaterial);
