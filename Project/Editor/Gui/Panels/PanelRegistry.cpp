@@ -27,7 +27,7 @@ void PanelRegistry::Clear() {
     if(drawing_) { for(const auto& entry : entries_) removed_.push_back(entry.id); }
     else { entries_.clear(); removed_.clear(); }
 }
-void PanelRegistry::Draw(const EditorContext& context) {
+void PanelRegistry::Draw(const EditorContext& context, bool disableEditing) {
     drawing_ = true;
     for(auto& entry : entries_) if(entry.isOpen) {
         if(!entry.panel && entry.factory) entry.panel = entry.factory();
@@ -36,7 +36,13 @@ void PanelRegistry::Draw(const EditorContext& context) {
         // 保存済み配置にない新規Panelも、Empty Stateの折返しで極小幅にならないようにする。
         // FirstUseEverなので既存のDock配置や利用者が変更したサイズは維持する。
         ImGui::SetNextWindowSize({360, 480}, ImGuiCond_FirstUseEver);
-        if(ImGui::Begin(title.c_str(), &entry.isOpen)) entry.panel->Draw(context);
+        if(ImGui::Begin(title.c_str(), &entry.isOpen)) {
+            // DisabledAlpha also dims Image vertices. Keep the runtime viewport at full
+            // brightness while preventing edits in the other panels during Play.
+            ImGui::BeginDisabled(disableEditing && entry.Id() != "Viewport");
+            entry.panel->Draw(context);
+            ImGui::EndDisabled();
+        }
         ImGui::End();
     }
     drawing_ = false;

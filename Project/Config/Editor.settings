@@ -1,3 +1,4 @@
-grid "true"
+giMode "DDGI"
 gizmo "true"
+grid "true"
 viewport "true"

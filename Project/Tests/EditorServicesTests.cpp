@@ -581,6 +581,22 @@ void CacheAndWorkspaceIntegration() {
     // 個人設定はテスト専用ディレクトリへ隔離する。実利用者の設定は変更しない。
     wchar_t* previous = nullptr; size_t length = 0; _wdupenv_s(&previous,&length,L"LOCALAPPDATA");
     const auto user = std::filesystem::absolute("Generated/EditorTests/User").wstring(); _wputenv_s(L"LOCALAPPDATA",user.c_str());
+    // GI defaults, persistence and invalid values use a disposable project configuration.
+    const auto settingsRoot = std::filesystem::absolute("Generated/EditorTests/GIPreferences");
+    std::filesystem::create_directories(settingsRoot / "Config");
+    std::ofstream(settingsRoot / "Config/Editor.settings", std::ios::trunc).close();
+    EditorSettingsStore giSettings; giSettings.Load(settingsRoot);
+    assert(giSettings.editor.giMode == "Off");
+    for(const char* mode : {"Off", "DDGI", "RTGI", "Baked"}) {
+        giSettings.editor.giMode = mode;
+        giSettings.editor.gizmo = false;
+        assert(giSettings.SaveEditor());
+        EditorSettingsStore restored; restored.Load(settingsRoot);
+        assert(restored.editor.giMode == mode && !restored.editor.gizmo);
+    }
+    std::ofstream(settingsRoot / "Config/Editor.settings", std::ios::trunc) << "giMode \"Invalid\"\n";
+    giSettings.Load(settingsRoot);
+    assert(giSettings.editor.giMode == "Off");
     // 旧Propertiesだけを表示していた設定を、Sceneや他の個人設定を変えずDetailsへ移行する。
     EditorSettingsStore legacySettings; legacySettings.Load(std::filesystem::absolute("Project"));
     legacySettings.user.panels["Details"] = false; legacySettings.user.panels["Properties"] = true;
@@ -590,6 +606,7 @@ void CacheAndWorkspaceIntegration() {
     ImGui::CreateContext(); auto& io = ImGui::GetIO(); io.DisplaySize = {1600,1000}; io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     unsigned char* pixels; int width,height; io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+    io.Fonts->SetTexID(2); // Keep the font distinct from the fake viewport texture (1).
     {
         EditorWorkspace workspace(f.session); workspace.Initialize(std::filesystem::absolute("Project"));
         class TestTextures final : public UI::ITextureProvider {
@@ -625,8 +642,22 @@ void CacheAndWorkspaceIntegration() {
         ImGui::ActivateItemByID(modal->GetID("###cancel")); frame(); frame();
         assert(f.session.GetLevel()->GetScene()->GetEntityCount() == 10001);
         assert(workspace.Commands().Execute("play.start")); frame(); assert(f.session.IsPlaying());
+        const auto assertViewportOpaque = [&] {
+            auto* viewport = ImGui::FindWindowByName("###Viewport"); assert(viewport && viewport->Active);
+            bool imageFound = false;
+            for(const auto& command : viewport->DrawList->CmdBuffer) if(command.GetTexID() == 1 && command.ElemCount > 0) {
+                for(unsigned int i = command.IdxOffset; i < command.IdxOffset + command.ElemCount; ++i) {
+                    const auto& vertex = viewport->DrawList->VtxBuffer[command.VtxOffset + viewport->DrawList->IdxBuffer[i]];
+                    assert((vertex.col & IM_COL32_A_MASK) == IM_COL32_A_MASK);
+                }
+                imageFound = true;
+            }
+            assert(imageFound);
+        };
+        assertViewportOpaque();
         assert(!workspace.Commands().Execute("file.save"));
         assert(workspace.Commands().Execute("play.pause")); assert(f.session.IsPaused());
+        frame(); assertViewportOpaque();
         assert(workspace.Commands().Execute("play.stop")); frame(); assert(!f.session.IsPlaying());
         const auto basePadding = ImGui::GetStyle().FramePadding;
         UI::ApplyEditorStyle({true,18,2}); const auto scaled = ImGui::GetStyle().FramePadding;

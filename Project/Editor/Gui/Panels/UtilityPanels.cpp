@@ -226,19 +226,44 @@ void ContentBrowserPanel::Draw(const EditorContext& context) {
 }
 void PreferencesPanel::Draw(const EditorContext& context) {
     bool changed = false;
-    int language = settings_.user.language == "ja" ? 1 : 0;
-    const auto languages = context.text.Text("language.english") + '\0' + context.text.Text("language.japanese") + '\0';
-    if(ImGui::Combo(context.text.Label("settings.language", "language").c_str(), &language, languages.c_str())) {
-        settings_.user.language = language == 1 ? "ja" : "en"; changed = true;
+    if(!ImGui::BeginTable("PreferencesLayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) return;
+    ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, 180);
+    ImGui::TableSetupColumn("Settings", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+    const char* categories[] = {"settings.general", "settings.levelEditor", "settings.rendering"};
+    for(int i = 0; i < 3; ++i)
+        if(ImGui::Selectable(context.text.Label(categories[i], categories[i]).c_str(), category_ == i)) category_ = i;
+    ImGui::TableSetColumnIndex(1);
+    ImGui::BeginChild("PreferencesContent");
+    ImGui::SeparatorText(context.text.Text(categories[category_]).c_str());
+    if(category_ == 0) {
+        int language = settings_.user.language == "ja" ? 1 : 0;
+        const auto languages = context.text.Text("language.english") + '\0' + context.text.Text("language.japanese") + '\0';
+        if(ImGui::Combo(context.text.Label("settings.language", "language").c_str(), &language, languages.c_str())) {
+            settings_.user.language = language == 1 ? "ja" : "en"; changed = true;
+        }
+        int theme = settings_.user.theme == "Light" ? 1 : 0;
+        const auto themes = context.text.Text("theme.dark") + '\0' + context.text.Text("theme.light") + '\0';
+        if(ImGui::Combo(context.text.Label("settings.theme", "theme").c_str(), &theme, themes.c_str())) {
+            settings_.user.theme = theme ? "Light" : "Dark"; changed = true;
+        }
+        changed |= ImGui::SliderFloat(context.text.Label("settings.font", "font").c_str(), &settings_.user.fontSize, 10, 40);
+        changed |= ImGui::SliderFloat(context.text.Label("settings.scale", "scale").c_str(), &settings_.user.uiScale, 0.5f, 3);
+        changed |= ImGui::Checkbox(context.text.Label("settings.layout", "layout").c_str(), &settings_.user.autoSaveLayout);
+    } else if(category_ == 1) {
+        changed |= ImGui::Checkbox(context.text.Label("settings.gizmo", "gizmo").c_str(), &settings_.editor.gizmo);
+        changed |= ImGui::Checkbox(context.text.Label("settings.viewportStartup", "viewportStartup").c_str(), &settings_.editor.viewport);
+    } else {
+        const char* modes[] = {"Off", "DDGI", "RTGI", "Baked"};
+        int mode = 0;
+        for(int i = 0; i < 4; ++i) if(settings_.editor.giMode == modes[i]) mode = i;
+        const auto labels = context.text.Text("settings.giOff") + '\0' + "DDGI" + '\0' + "RTGI" + '\0' + context.text.Text("settings.giBaked") + '\0';
+        if(ImGui::Combo(context.text.Label("settings.giMode", "giMode").c_str(), &mode, labels.c_str())) {
+            settings_.editor.giMode = modes[mode]; changed = true;
+        }
+        ImGui::TextWrapped("%s", context.text.Text("settings.giHelp").c_str());
     }
-    int theme = settings_.user.theme == "Light" ? 1 : 0;
-    const auto themes = context.text.Text("theme.dark") + '\0' + context.text.Text("theme.light") + '\0';
-    if(ImGui::Combo(context.text.Label("settings.theme", "theme").c_str(), &theme, themes.c_str())) {
-        settings_.user.theme = theme ? "Light" : "Dark"; changed = true;
-    }
-    changed |= ImGui::SliderFloat(context.text.Label("settings.font", "font").c_str(), &settings_.user.fontSize, 10, 40);
-    changed |= ImGui::SliderFloat(context.text.Label("settings.scale", "scale").c_str(), &settings_.user.uiScale, 0.5f, 3);
-    changed |= ImGui::Checkbox(context.text.Label("settings.layout", "layout").c_str(), &settings_.user.autoSaveLayout);
+    ImGui::EndChild(); ImGui::EndTable();
     if(changed) changed_();
 }
 void ViewportPanel::Draw(const EditorContext& context) {

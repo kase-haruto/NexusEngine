@@ -61,7 +61,7 @@ namespace NexusEngine {
 		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // HDR未指定時の遠方環境の照度
 		renderScene_.globalIllumination.enabled = false;
 		renderScene_.bakedLighting.enabled = false;
-		renderScene_.ddgi.enabled = true;
+		renderScene_.ddgi.enabled = bootSettings.editor.giMode == "DDGI";
 		renderScene_.bakedLighting.cachePath = "Generated/Lighting/DemoLevel.nxgi";
 		constexpr char bakedPath[] = "Generated/Lighting/DemoLevel.nxgi";
 		std::copy_n(bakedPath, sizeof(bakedPath), bakedPath_.begin());
@@ -246,7 +246,7 @@ namespace NexusEngine {
 				auto& baked = renderScene_.bakedLighting;
 				auto& ddgi=renderScene_.ddgi;
 				ImGui::SeparatorText("DDGI / Dynamic Irradiance Field");
-				ImGui::Checkbox("DDGI Enabled",&ddgi.enabled);
+				ImGui::TextUnformatted("GI mode: Edit > Preferences > Rendering");
 				ImGui::Checkbox("Freeze DDGI",&ddgi.freeze);
 				ImGui::Text("Probe updates: %u",optics_?optics_->GetDDGIFrameCount():0);
 				ImGui::TextUnformatted(optics_ && optics_->IsDDGIActive()?"DDGI Active":"DDGI Inactive / requires DXR and valid geometry");
@@ -272,7 +272,7 @@ namespace NexusEngine {
 				ImGui::TextUnformatted("DDGI requires DXR. Fixed rays + history reduce flicker; lighting changes need convergence.");
 				ImGui::TextUnformatted("Priority: DDGI > Baked GI > RTGI. Diffuse GI Only displays the selected result.");
 				ImGui::SeparatorText("Baked GI / Light Probes");
-				ImGui::Checkbox("Baked GI Enabled", &baked.enabled);
+				ImGui::Text("Baked GI Enabled: %s", baked.enabled ? "Yes" : "No");
 				ImGui::InputText("Baked GI Cache",bakedPath_.data(),bakedPath_.size());
 				ImGui::TextWrapped("%s", materialRenderer_ ? materialRenderer_->GetBakedLightingStatus().c_str() : "Renderer unavailable");
 				ImGui::TextUnformatted("Missing cache uses ambient. Bake explicitly after static scene/light changes.");
@@ -303,7 +303,7 @@ namespace NexusEngine {
 				}
 				ImGui::TextUnformatted("CPU bake pauses editing. Runtime samples saved lighting without GI rays.");
 				ImGui::BeginDisabled(baked.enabled || ddgi.enabled);
-				ImGui::Checkbox("Diffuse RTGI Enabled", &gi.enabled);
+				ImGui::Text("Diffuse RTGI Enabled: %s", gi.enabled ? "Yes" : "No");
 				ImGui::Text("RTGI output (last frame): %s", materialRenderer_ && materialRenderer_->IsGlobalIlluminationActive()
 					? "Available" : "Inactive / fallback");
 				int giSamples = static_cast<int>(gi.samplesPerPixel), giBounces = static_cast<int>(gi.maxBounces);
@@ -445,6 +445,12 @@ namespace NexusEngine {
 				auto path = AssetCatalog::Utf8(renderScene_.bakedLighting.cachePath);
 				std::snprintf(bakedPath_.data(),bakedPath_.size(),"%s",path.c_str());
 			}
+		}
+		if(workspace_) {
+			const auto& mode = workspace_->EditorPreferences().giMode;
+			renderScene_.ddgi.enabled = mode == "DDGI";
+			renderScene_.globalIllumination.enabled = mode == "RTGI";
+			renderScene_.bakedLighting.enabled = mode == "Baked";
 		}
 		uint32_t sceneWidth = width, sceneHeight = height;
 		if(graphicsSystem_) {

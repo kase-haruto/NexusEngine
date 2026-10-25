@@ -41,6 +41,7 @@ public:
     /** \brief Context破棄前に設定と配置を保存する */
     void Shutdown();
     PanelRegistry& Panels() { return panels_; }
+    const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
     MainMenuBar& Menu() { return menu_; }
     EditorCommandRegistry& Commands() { return commands_; }
     ViewportSession& Viewport() { return viewport_; }

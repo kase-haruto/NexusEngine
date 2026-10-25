@@ -32,6 +32,7 @@ public:
     void DrawOverlay(float x, float y, float width, float height);
     /** \brief ImGuizmoの操作中はWorkspaceの自動確定・Shortcutを抑止する */
     bool IsManipulating() const { return gizmo_.IsActive(); }
+    void SetGizmoVisible(bool visible) { gizmoVisible_ = visible; }
     /** \brief Panelが閉じられた場合もrelease/cancelを完了する */
     void CompleteInteraction();
 private:
@@ -59,6 +60,7 @@ private:
     size_t generation_ = static_cast<size_t>(-1); //< Document変更時にCameraを初期化する
     int mode_ = 0; //< 0:移動、1:回転、2:拡縮
     bool navigating_ = false; //< RMB dragのcapture状態
+    bool gizmoVisible_ = true;
     TransformGizmoTransaction gizmo_; //< ImGuizmoの一操作とLocal TRS履歴の接続
     bool blockedUntilRelease_ = false; //< Escape取消直後の同じmouse pressで再開しない
     bool gizmoRejected_ = false; //< TRSで表せない操作をViewportへ通知する

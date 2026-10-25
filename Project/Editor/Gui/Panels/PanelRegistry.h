@@ -30,7 +30,7 @@ public:
     /** \brief サービス破棄前に全PanelとFactoryを解放する。描画中はEnd後へ延期する */
     void Clear();
     /** \brief 開いているPanelのみ描画する */
-    void Draw(const EditorContext& context);
+    void Draw(const EditorContext& context, bool disableEditing = false);
     auto& Entries() { return entries_; }
     const auto& Entries() const { return entries_; }
     /** \brief 安定IDでPanelを開く */
