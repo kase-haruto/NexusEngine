@@ -73,7 +73,7 @@ private:
 };
 /*-----------------------------------------------------------------------------------------
  * PreferencesPanel
- * - User設定UIのみを担当する。保存処理はStore/hostへ委譲する
+ * - カテゴリ別のUser/Editor設定UI。保存処理はStore/hostへ委譲する
  *---------------------------------------------------------------------------------------*/
 class PreferencesPanel final : public IEditorPanel {
 public:
@@ -82,6 +82,7 @@ public:
     std::string_view TitleKey() const noexcept override { return "edit.preferences"; }
     void Draw(const EditorContext& context) override;
 private:
+    int category_ = 0;
     EditorSettingsStore& settings_; //< host所有
     std::function<void()> changed_; //< 次frameのstyle適用と保存要求
 };

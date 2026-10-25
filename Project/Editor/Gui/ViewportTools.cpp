@@ -421,7 +421,7 @@ void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
     }
     if(!ImGui::IsMouseDown(0)) blockedUntilRelease_ = false;
     bool gizmoHovered = false;
-    if(auto pivot = GetSelectionPivot()) {
+    if(auto pivot = GetSelectionPivot(); gizmoVisible_ && pivot) {
         ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
         ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
         ImGuizmo::SetRect(x,y,width,height);

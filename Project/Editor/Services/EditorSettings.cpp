@@ -55,6 +55,8 @@ void EditorSettingsStore::Load(const std::filesystem::path& root) {
     const auto p = Read(projectDirectory_ / "Project.settings");
     String(p, "name", project.name); String(p, "startupLevel", project.startupLevel); String(p, "assetPath", project.assetPath);
     const auto e = Read(projectDirectory_ / "Editor.settings");
+    String(e, "giMode", editor.giMode);
+    if(editor.giMode != "DDGI" && editor.giMode != "RTGI" && editor.giMode != "Baked") editor.giMode = "Off";
     if(e.contains("grid")) editor.grid = e.at("grid") == "true";
     if(e.contains("gizmo")) editor.gizmo = e.at("gizmo") == "true";
     if(e.contains("viewport")) editor.viewport = e.at("viewport") == "true";
@@ -86,6 +88,6 @@ bool EditorSettingsStore::SaveProject() const {
 }
 bool EditorSettingsStore::SaveEditor() const {
     return Write(projectDirectory_ / "Editor.settings", {{"grid", editor.grid ? "true" : "false"},
-        {"gizmo", editor.gizmo ? "true" : "false"}, {"viewport", editor.viewport ? "true" : "false"}});
+        {"gizmo", editor.gizmo ? "true" : "false"}, {"viewport", editor.viewport ? "true" : "false"}, {"giMode", editor.giMode}});
 }
 }

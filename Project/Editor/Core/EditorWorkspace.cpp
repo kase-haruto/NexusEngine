@@ -51,7 +51,10 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
         });
     });
     panels_.RegisterFactory("Preferences", "edit.preferences", [this] {
-        return std::make_unique<PreferencesPanel>(settings_, [this] { settingsChanged_ = true; });
+        return std::make_unique<PreferencesPanel>(settings_, [this] {
+            settingsChanged_ = true;
+            if(!settings_.SaveEditor()) notifications_.Push(text_.Text("settings.saveFailed"), true);
+        });
     }, false);
     RegisterCommands();
     // 新規Panel/Commandは外部の機能登録から追加でき、中央の具象型一覧を変更しない。
@@ -161,6 +164,7 @@ void EditorWorkspace::RegisterCommands() {
     commands_.Bind("viewport.focus", ImGuiKey_F, false, false, false, "F");
 }
 void EditorWorkspace::ApplyUserSettings() {
+    viewportTools_.SetGizmoVisible(settings_.editor.gizmo);
     text_.SetLanguage(settings_.user.language);
     UI::ApplyEditorStyle({settings_.user.theme == "Light", settings_.user.fontSize, settings_.user.uiScale * dpiScale_});
     if(!settings_.SaveUser()) notifications_.Push(text_.Text("settings.saveFailed"), true);
@@ -222,7 +226,7 @@ void EditorWorkspace::Draw() {
         documents_.IsDirty(), session_.IsPlaying(), session_.IsPaused());
     layout_.Draw();
     const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_};
-    ImGui::BeginDisabled(session_.IsPlaying()); panels_.Draw(context); ImGui::EndDisabled();
+    panels_.Draw(context, session_.IsPlaying());
     viewportTools_.CompleteInteraction();
     if(previousSelection_ != session_.GetSelection()) { properties_.Commit(); previousSelection_ = session_.GetSelection(); }
     if(!ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating()) properties_.Commit();

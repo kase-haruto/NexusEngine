@@ -23,8 +23,9 @@ public:
         std::vector<std::string> recentLevels; //< 個人の最近使ったLevel、最大10件
     } user;
     struct Editor {
+        std::string giMode = "Off"; //< Off / DDGI / RTGI / Baked
         bool grid = true; //< Grid表示
-        bool gizmo = true; //< 将来のGizmo表示設定
+        bool gizmo = true; //< トランスフォームGizmo表示
         bool viewport = true; //< Viewport初期表示
     } editor;
     struct Project {
