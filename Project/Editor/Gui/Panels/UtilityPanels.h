@@ -97,6 +97,10 @@ public:
         : session_(session), tools_(tools), logs_(std::move(logs)) {}
     std::string_view Id() const noexcept override { return "Viewport"; }
     std::string_view TitleKey() const noexcept override { return "panel.viewport"; }
+    /** 映像は表示領域へ合わせるため、パネル自体のスクロールは使用しない。 */
+    bool IsScrollable() const noexcept override {
+        return false;
+    }
     void Draw(const EditorContext& context) override;
 private:
     ViewportSession& session_; //< host所有

@@ -32,6 +32,10 @@ public:
     virtual ~IEditorPanel() = default;
     virtual std::string_view Id() const noexcept = 0;
     virtual std::string_view TitleKey() const noexcept = 0;
+    /** 内容のスクロールを許可するか返す。通常の設定パネルは既定で許可する。 */
+    virtual bool IsScrollable() const noexcept {
+        return true;
+    }
     /** \brief Panelの内容を描画する \param context 非所有Editorサービス */
     virtual void Draw(const EditorContext& context) = 0;
 };

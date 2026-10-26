@@ -163,6 +163,8 @@ void WorkspaceLifecycle() {
     auto& camera = std::get<ReflectionValue::Object>(viewportState.data).at("camera");
     camera = CaptureReflection(std::array<float, 5>{3, 4, 5, .6f, .7f});
     workspace->ViewportEditor().RestoreAfterReinstancing(viewportState);
+    // 配置は描画コールバックの寿命と分離し、再生成後の同じセクションIDへ引き継ぐ。
+    assert(workspace->Toolbar().SetOffset("viewport.tools", {32, 16}));
     auto workspaceState = workspace->CaptureForReinstancing();
     ComponentReflection registry; RegisterGeneratedComponents(registry);
     const auto edit = registry.Capture(*editScene), play = registry.Capture(*playScene);
@@ -171,6 +173,7 @@ void WorkspaceLifecycle() {
     registry.Restore(*editScene, edit); registry.Restore(*playScene, play); session.NotifyReinstanced();
     workspace = std::make_unique<EditorWorkspace>(session); workspace->Initialize(std::filesystem::absolute("Project"));
     workspace->RestoreAfterReinstancing(workspaceState);
+    assert((workspace->Toolbar().GetOffset("viewport.tools") == ToolbarOffset{32, 16}));
     assert(session.IsDirty() && session.GetSelection() == id && session.IsPlaying() && session.IsPaused());
     assert(session.GetLevel()->GetScene() == editScene && session.GetPlayLevel()->GetScene() == playScene);
     assert(session.GetSelectedEntity().GetId() == entity.GetId());

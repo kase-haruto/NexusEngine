@@ -81,6 +81,8 @@ namespace NexusEngine {
 		[[nodiscard]] ViewportImage GetSceneViewportImage() const noexcept;
 		/** 独立したカメラプレビュー。作成・交換は描画命令の記録開始前に行う。 */
 		[[nodiscard]] Result<void> ReplaceCameraPreviewRenderer(IGraphicsRenderer* renderer);
+		/** GPU idle後にプレビュー資源を解放する。モデル差し替え時の旧Asset保持を防ぐ。 */
+		[[nodiscard]] Result<void> ReleaseCameraPreviewRenderer();
 		void SetCameraPreviewActive(bool active) noexcept;
 		[[nodiscard]] ViewportImage GetCameraPreviewImage() const noexcept;
 

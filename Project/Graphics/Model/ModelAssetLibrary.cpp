@@ -5,6 +5,8 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#include <set>
+#include <type_traits>
 
 namespace NexusEngine {
 namespace {
@@ -13,11 +15,39 @@ std::string Utf8(const std::filesystem::path& path) {
     auto text = path.generic_u8string(); return {reinterpret_cast<const char*>(text.data()), text.size()};
 }
 std::filesystem::path Path(const std::string& text) { return std::filesystem::path(reinterpret_cast<const char8_t*>(text.c_str())); }
+std::string MeshKey(PrimitiveShape shape, const std::string& mesh) {
+    return shape == PrimitiveShape::Asset ? mesh : ":primitive/" + std::to_string(static_cast<uint32_t>(shape));
+}
 }
 ModelAssetLibrary::ModelAssetLibrary(std::filesystem::path root, const ModelAssetData& initial)
-    : root_(std::filesystem::weakly_canonical(root)), aggregate_(initial) {
-    models_.emplace(kStartupModelAssetReference, initial);
-    ranges_[{kStartupModelAssetReference, ""}] = {0, static_cast<uint32_t>(initial.nodes.size())};
+    : ModelAssetLibrary(std::make_shared<ModelAssetData>(initial), std::move(root)) {}
+ModelAssetLibrary::ModelAssetLibrary(std::shared_ptr<ModelAssetData> initial, std::filesystem::path root, ReloadStartup reloadStartup)
+    : root_(std::filesystem::weakly_canonical(root)), aggregate_(std::move(initial)), reloadStartup_(std::move(reloadStartup)) {
+    models_.emplace(kStartupModelAssetReference, aggregate_);
+    ranges_[{kStartupModelAssetReference, ""}] = {0, static_cast<uint32_t>(aggregate_->nodes.size())};
+}
+void ModelAssetLibrary::Retain(std::span<const Request> requests) {
+    std::set<std::pair<std::string, std::string>> active;
+    std::set<std::string> meshes, textures;
+    for(const auto& request : requests) {
+        if(!IsValidPrimitiveShape(request.shape)) continue;
+        auto mesh = MeshKey(request.shape, request.mesh);
+        if(mesh.empty()) continue;
+        active.emplace(mesh, request.texture);
+        meshes.insert(std::move(mesh));
+        if(!request.texture.empty()) textures.insert(request.texture);
+    }
+    if(std::ranges::any_of(ranges_, [&](const auto& entry) { return !active.contains(entry.first); })) {
+        // Rebuild ranges before the caller resolves them; offsets cannot be compacted mid-frame.
+        aggregate_ = std::make_shared<ModelAssetData>();
+        ranges_.clear();
+        ++revision_;
+    }
+    // Synthetic sources without a reload callback must remain available for legacy references.
+    std::erase_if(models_, [&](const auto& entry) {
+        return (entry.first != kStartupModelAssetReference || reloadStartup_) && !meshes.contains(entry.first);
+    });
+    std::erase_if(textures_, [&](const auto& entry) { return !textures.contains(entry.first); });
 }
 Result<std::string> ModelAssetLibrary::Reference(const std::filesystem::path& path) const {
     std::error_code error;
@@ -30,7 +60,12 @@ Result<std::string> ModelAssetLibrary::Reference(const std::filesystem::path& pa
 }
 Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& reference) {
     if(reference.empty()) return std::unexpected(Invalid("No mesh is assigned."));
-    if(auto found = models_.find(reference); found != models_.end()) return &found->second;
+    if(auto found = models_.find(reference); found != models_.end()) return found->second.get();
+    if(reference == kStartupModelAssetReference && reloadStartup_) {
+        auto loaded = reloadStartup_();
+        if(!loaded) return std::unexpected(loaded.error());
+        return models_.emplace(reference, std::make_shared<ModelAssetData>(std::move(*loaded))).first->second.get();
+    }
     auto canonical = Reference(Path(reference));
     if(!canonical) return std::unexpected(canonical.error());
     auto extension = Utf8(Path(*canonical).extension());
@@ -41,7 +76,7 @@ Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& refere
     if(loaded->nodes.empty() || loaded->meshes.empty()) return std::unexpected(Invalid("Model contains no meshes."));
     // OBJのように材質を持たないSourceにも、Variantを適用できる既定slotを用意する。
     if(loaded->materials.empty()) loaded->materials.emplace_back();
-    return &models_.emplace(reference, std::move(*loaded)).first->second;
+    return models_.emplace(reference, std::make_shared<ModelAssetData>(std::move(*loaded))).first->second.get();
 }
 Result<const std::vector<uint8_t>*> ModelAssetLibrary::Texture(const std::string& reference) {
     if(auto found = textures_.find(reference); found != textures_.end()) return &found->second;
@@ -70,10 +105,10 @@ Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& m
         if(!image) return std::unexpected(image.error());
         for(auto& material : addition.materials) material.baseColorImageData = **image;
     }
-    const auto nodeOffset = static_cast<uint32_t>(aggregate_.nodes.size());
-    const auto meshOffset = static_cast<uint32_t>(aggregate_.meshes.size());
-    const auto skinOffset = static_cast<uint32_t>(aggregate_.skins.size());
-    const auto materialOffset = static_cast<uint32_t>(aggregate_.materials.size());
+    const auto nodeOffset = static_cast<uint32_t>(aggregate_->nodes.size());
+    const auto meshOffset = static_cast<uint32_t>(aggregate_->meshes.size());
+    const auto skinOffset = static_cast<uint32_t>(aggregate_->skins.size());
+    const auto materialOffset = static_cast<uint32_t>(aggregate_->materials.size());
     for(auto& node : addition.nodes) {
         if(node.parentIndex != ModelNodeAssetData::kNoParent) node.parentIndex += nodeOffset;
         for(auto& index : node.meshIndices) index += meshOffset;
@@ -84,25 +119,34 @@ Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& m
     }
     for(auto& skin : addition.skins) for(auto& joint : skin.joints) joint += nodeOffset;
     for(auto& clip : addition.animations) for(auto& channel : clip.channels) channel.nodeIndex += nodeOffset;
-    // 追加を全て検証してからsnapshotを交換し、失敗時に半端な範囲を公開しない。
-    ModelAssetData next = aggregate_;
+    // Only published snapshots require a copy. Reserve every destination before committing
+    // so an allocation failure cannot expose a partly appended range.
+    if(aggregate_.use_count() != 1) aggregate_ = std::make_shared<ModelAssetData>(*aggregate_);
+    auto& next = *aggregate_;
+    next.nodes.reserve(next.nodes.size() + addition.nodes.size());
+    next.meshes.reserve(next.meshes.size() + addition.meshes.size());
+    next.skins.reserve(next.skins.size() + addition.skins.size());
+    next.materials.reserve(next.materials.size() + addition.materials.size());
+    next.animations.reserve(next.animations.size() + addition.animations.size());
+    Range range{nodeOffset, nodeOffset + static_cast<uint32_t>(addition.nodes.size()), materialOffset};
+    ranges_.emplace(key, range);
     const auto append = [](auto& target, auto& values) {
+        static_assert(std::is_nothrow_move_constructible_v<typename std::decay_t<decltype(target)>::value_type>);
         target.insert(target.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
     };
     append(next.nodes, addition.nodes); append(next.meshes, addition.meshes); append(next.skins, addition.skins);
     append(next.materials, addition.materials); append(next.animations, addition.animations);
-    aggregate_ = std::move(next);
-    Range range{nodeOffset, static_cast<uint32_t>(aggregate_.nodes.size()), materialOffset};
-    ranges_.emplace(key, range); return range;
+    ++revision_;
+    return range;
 }
 Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(PrimitiveShape shape, const std::string& mesh, const std::string& texture) {
     if(!IsValidPrimitiveShape(shape)) return std::unexpected(Invalid("Invalid primitive shape."));
     if(shape == PrimitiveShape::Asset) return Resolve(mesh, texture);
-    const auto key = ":primitive/" + std::to_string(static_cast<uint32_t>(shape));
+    const auto key = MeshKey(shape, mesh);
     if(!models_.contains(key)) {
         auto generated = PrimitiveMeshBuilder::Build(shape);
         if(!generated) return std::unexpected(generated.error());
-        models_.emplace(key, std::move(*generated));
+        models_.emplace(key, std::make_shared<ModelAssetData>(std::move(*generated)));
     }
     return Resolve(key, texture);
 }

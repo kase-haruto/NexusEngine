@@ -683,6 +683,7 @@ void CacheAndWorkspaceIntegration() {
 #include "EntityConsoleTests.inl"
 #include "ViewportSceneGuidesTests.inl"
 #include "ViewportPreviewTests.inl"
+#include "EditorToolbarTests.inl"
 // Composite axis controls must forward activation and release even on frames
 // without a value change; the property service uses these to bound one undo step.
 void AxisWidgetInteraction() {
@@ -728,6 +729,8 @@ int main() {
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     RunReinstancingTests();
+    EditorToolbarTests();
+    EditorToolbarSettingsTests();
     AxisWidgetInteraction();
     ComponentAndAssetEditing();
     EntityConsoleTests();

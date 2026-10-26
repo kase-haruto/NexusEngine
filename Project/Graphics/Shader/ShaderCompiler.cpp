@@ -12,6 +12,10 @@
 #include <Unknwn.h>
 #include <dxcapi.h>
 #include <wrl/client.h>
+#include <wrl/implements.h>
+#include <map>
+#include <mutex>
+#include <tuple>
 
 #include "Foundation/Logging/Logger.h"
 
@@ -21,6 +25,51 @@ namespace NexusEngine {
 		constexpr int32_t kSourceLoadFailed = 2;
 		constexpr int32_t kCompileFailed = 3;
 		constexpr int32_t kObjectAcquisitionFailed = 4;
+
+		struct SourceStamp {
+			std::filesystem::path path;
+			std::filesystem::file_time_type modified;
+			uintmax_t size;
+		};
+		bool Stamp(const std::filesystem::path& path, SourceStamp& stamp) {
+			std::error_code error;
+			stamp.path = std::filesystem::weakly_canonical(path, error);
+			if(error) return false;
+			stamp.modified = std::filesystem::last_write_time(stamp.path, error);
+			if(error) return false;
+			stamp.size = std::filesystem::file_size(stamp.path, error);
+			return !error;
+		}
+		struct CachedShader {
+			std::vector<uint8_t> bytecode;
+			std::vector<SourceStamp> sources;
+			bool IsCurrent() const {
+				for(const auto& source : sources) {
+					SourceStamp current;
+					if(!Stamp(source.path, current) || current.modified != source.modified || current.size != source.size) return false;
+				}
+				return true;
+			}
+		};
+		// DXC reports every include it actually opens, including transitive includes.
+		// Keep using its default resolver so relative include semantics stay unchanged.
+		class TrackingIncludes final : public Microsoft::WRL::RuntimeClass<
+			Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IDxcIncludeHandler> {
+		public:
+			Microsoft::WRL::ComPtr<IDxcIncludeHandler> fallback;
+			std::vector<SourceStamp> sources;
+			bool cacheable = true;
+			HRESULT STDMETHODCALLTYPE LoadSource(LPCWSTR filename, IDxcBlob** source) override {
+				SourceStamp stamp;
+				const bool stamped = Stamp(filename, stamp);
+				const HRESULT result = fallback->LoadSource(filename, source);
+				if(SUCCEEDED(result)) {
+					if(stamped) sources.push_back(std::move(stamp));
+					else cacheable = false;
+				}
+				return result;
+			}
+		};
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -28,6 +77,22 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<std::vector<uint8_t>> ShaderCompiler::Compile(const ShaderCompileDesc& desc) const {
 		using Microsoft::WRL::ComPtr;
+		// Renderer replacement and camera previews reuse the same device-independent DXIL.
+		// Failed compiles are never cached; source/include edits invalidate successful ones.
+		using CacheKey = std::tuple<std::filesystem::path, std::wstring, std::wstring, bool>;
+		static std::mutex cacheMutex;
+		static std::map<CacheKey, CachedShader> cache;
+		static size_t cachedBytes = 0;
+		constexpr size_t kCacheByteBudget = 64 * 1024 * 1024;
+		const std::lock_guard lock(cacheMutex);
+		SourceStamp sourceStamp;
+		const bool cacheable = Stamp(desc.sourcePath, sourceStamp);
+		const CacheKey key{cacheable ? sourceStamp.path : desc.sourcePath, desc.entryPoint, desc.targetProfile, desc.optimize};
+		if(auto found = cache.find(key); found != cache.end()) {
+			if(found->second.IsCurrent()) return found->second.bytecode;
+			cachedBytes -= found->second.bytecode.size();
+			cache.erase(found);
+		}
 
 		// Compilerとファイル読込UtilityはCompile処理だけで使用し、Shaderへ所有権を持ち越さない。
 		ComPtr<IDxcUtils> utils;
@@ -70,8 +135,10 @@ namespace NexusEngine {
 		if(FAILED(result)) {
 			return std::unexpected(MakeDirectXError(kDxcCreationFailed, result, "Failed to create DXC include handler."));
 		}
+		auto trackingIncludes = Microsoft::WRL::Make<TrackingIncludes>();
+		trackingIncludes->fallback = std::move(includeHandler);
 		ComPtr<IDxcResult> compileResult;
-		result = compiler->Compile(&sourceBuffer, arguments.data(), static_cast<uint32_t>(arguments.size()), includeHandler.Get(), IID_PPV_ARGS(&compileResult));
+		result = compiler->Compile(&sourceBuffer, arguments.data(), static_cast<uint32_t>(arguments.size()), trackingIncludes.Get(), IID_PPV_ARGS(&compileResult));
 		if(FAILED(result)) {
 			return std::unexpected(MakeDirectXError(kCompileFailed, result, "DXC invocation failed."));
 		}
@@ -93,7 +160,18 @@ namespace NexusEngine {
 			return std::unexpected(MakeDirectXError(kObjectAcquisitionFailed, result, "Failed to acquire compiled DXIL."));
 		}
 		const auto* begin = static_cast<const uint8_t*>(object->GetBufferPointer());
-		return std::vector<uint8_t>(begin, begin + object->GetBufferSize());
+		std::vector<uint8_t> bytecode(begin, begin + object->GetBufferSize());
+		if(cacheable && trackingIncludes->cacheable && bytecode.size() <= kCacheByteBudget) {
+			trackingIncludes->sources.push_back(std::move(sourceStamp));
+			// Bound process memory even when an editor session opens many shader variants.
+			if(cache.size() >= 256 || cachedBytes + bytecode.size() > kCacheByteBudget) {
+				cache.clear();
+				cachedBytes = 0;
+			}
+			cache.emplace(key, CachedShader{bytecode, std::move(trackingIncludes->sources)});
+			cachedBytes += bytecode.size();
+		}
+		return bytecode;
 	}
 
 } // namespace NexusEngine

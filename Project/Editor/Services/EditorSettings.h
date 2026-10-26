@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "ToolbarLayout.h"
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
@@ -21,6 +22,8 @@ public:
         std::string workspace = "General"; //< 個人の名前付き配置
         std::map<std::string, bool> panels; //< 安定Panel IDごとの表示状態
         std::vector<std::string> recentLevels; //< 個人の最近使ったLevel、最大10件
+        // セクションの安定IDをキーとして、個人用のツールバー配置を保存する。
+        ToolbarOffsets toolbarOffsets;
     } user;
     struct Editor {
         std::string giMode = "Off"; //< Off / DDGI / RTGI / Baked

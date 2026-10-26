@@ -70,6 +70,28 @@ void EditorSettingsStore::Load(const std::filesystem::path& root) {
     user.uiScale = Number(u, "uiScale", 1, 0.5f, 3);
     if(u.contains("autoSaveLayout")) user.autoSaveLayout = u.at("autoSaveLayout") == "true";
     for(const auto& [key, value] : u) if(key.starts_with("panel.")) user.panels[key.substr(6)] = value == "true";
+
+    // セクションのIDは拡張機能が定義するため、未登録のIDも個人設定として保持する。
+    // 2つの有限な数値だけを受け入れ、設定ファイルが壊れていてもUI座標へ非数を渡さない。
+    constexpr std::string_view offsetPrefix = "toolbar.offset.";
+    for(const auto& [key, value] : u) {
+        if(!key.starts_with(offsetPrefix) || key.size() == offsetPrefix.size()) {
+            continue;
+        }
+        ToolbarOffset offset{};
+        std::istringstream stream(value);
+        if(!(stream >> offset[0] >> offset[1]) || !IsValidToolbarOffset(offset)) {
+            continue;
+        }
+        stream >> std::ws;
+        if(!stream.eof()) {
+            continue;
+        }
+        const auto normalized = ClampToolbarOffset(offset);
+        if(normalized != ToolbarOffset{}) {
+            user.toolbarOffsets[key.substr(offsetPrefix.size())] = normalized;
+        }
+    }
     user.recentLevels.clear();
     for(size_t i = 0; i < 10; ++i) {
         auto it = u.find("recent." + std::to_string(i));
@@ -81,6 +103,18 @@ bool EditorSettingsStore::SaveUser() const {
         {"uiScale", std::to_string(user.uiScale)}, {"autoSaveLayout", user.autoSaveLayout ? "true" : "false"}};
     for(const auto& [key, open] : user.panels) values["panel." + key] = open ? "true" : "false";
     for(size_t i = 0; i < std::min<size_t>(user.recentLevels.size(), 10); ++i) values["recent." + std::to_string(i)] = user.recentLevels[i];
+
+    // 初期位置と不正値は書き込まない。リセットした項目は次回起動でも初期位置になる。
+    for(const auto& [id, offset] : user.toolbarOffsets) {
+        if(id.empty() || !IsValidToolbarOffset(offset)) {
+            continue;
+        }
+        const auto normalized = ClampToolbarOffset(offset);
+        if(normalized == ToolbarOffset{}) {
+            continue;
+        }
+        values["toolbar.offset." + id] = std::to_string(normalized[0]) + " " + std::to_string(normalized[1]);
+    }
     return Write(userDirectory_ / "User.settings", values);
 }
 bool EditorSettingsStore::SaveProject() const {

@@ -8,6 +8,8 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include <chrono>
+#include "Graphics/Shader/ShaderCompiler.h"
 #include "Samples/OpticalDemoScene.h"
 #include "Graphics/Model/ModelLoader.h"
 #include "Graphics/Model/PrimitiveMeshBuilder.h"
@@ -69,6 +71,70 @@ namespace {
 		if(!result) throw std::runtime_error(result.error().GetMessageText());
 	}
 	void Native(HRESULT result) { if(FAILED(result)) throw std::runtime_error("Native DX12 operation failed: " + std::to_string(result)); }
+
+	void ShaderCacheTests() {
+		const auto directory = std::filesystem::absolute(std::filesystem::path("Generated/ShaderCacheTests") /
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+		std::filesystem::create_directories(directory);
+		const auto write = [](const std::filesystem::path& path, const char* contents) {
+			std::ofstream file(path); file << contents; file.close();
+			Require(bool(file), "Cannot write shader cache test source.");
+		};
+		const auto source = directory / "Cache.PS.hlsl";
+		const auto include = directory / "Value.hlsli";
+		const auto nested = directory / "Nested.hlsli";
+		write(source, "#include \"Value.hlsli\"\nfloat4 main() : SV_Target { return Value(); }\n");
+		write(include, "#include \"Nested.hlsli\"\nfloat4 Value() { return Nested(); }\n");
+		write(nested, "float4 Nested() { return float4(1,0,0,1); }\n");
+		ShaderCompiler compiler;
+		ShaderCompileDesc desc{source, L"main", L"ps_6_6"};
+		const auto start = std::chrono::steady_clock::now();
+		auto first = compiler.Compile(desc); Check(first);
+		const auto compiled = std::chrono::steady_clock::now();
+		auto repeated = compiler.Compile(desc); Check(repeated);
+		const auto reused = std::chrono::steady_clock::now();
+		Require(*first == *repeated, "Repeated shader compilation changed bytecode.");
+		std::cout << "Shader compile: " << std::chrono::duration<double, std::milli>(compiled-start).count()
+			<< " ms; cached: " << std::chrono::duration<double, std::milli>(reused-compiled).count() << " ms\n";
+		const auto edit = [&](const std::filesystem::path& path, const char* contents) {
+			const auto previous = std::filesystem::last_write_time(path);
+			write(path, contents);
+			std::filesystem::last_write_time(path, previous + std::chrono::seconds(2));
+		};
+		edit(nested, "float4 Nested() { return float4(0,1,0,1); }\n");
+		auto nestedEdit = compiler.Compile(desc); Check(nestedEdit);
+		Require(*nestedEdit != *first, "Transitive include edit did not invalidate DXIL.");
+		edit(include, "float4 Value() { return float4(0,0,1,1); }\n");
+		auto includeEdit = compiler.Compile(desc); Check(includeEdit);
+		Require(*includeEdit != *nestedEdit, "Direct include edit did not invalidate DXIL.");
+		edit(source, "float4 main() : SV_Target { return float4(1,1,0,1); }\n");
+		auto sourceEdit = compiler.Compile(desc); Check(sourceEdit);
+		Require(*sourceEdit != *includeEdit, "Source edit did not invalidate DXIL.");
+		desc.entryPoint = L"missing";
+		Require(!compiler.Compile(desc), "Entry point was omitted from shader cache key.");
+		desc.entryPoint = L"main";
+		desc.targetProfile = L"vs_6_6";
+		Require(!compiler.Compile(desc), "Profile was omitted from shader cache key.");
+		desc.targetProfile = L"ps_6_6";
+		desc.optimize = false;
+		auto unoptimized = compiler.Compile(desc); Check(unoptimized);
+		Require(*unoptimized != *sourceEdit, "Optimization flag was omitted from shader cache key.");
+		edit(source, "invalid HLSL\n");
+		Require(!compiler.Compile(desc), "Invalid edited source returned stale DXIL.");
+		edit(source, "float4 main() : SV_Target { return float4(1,0,1,1); }\n");
+		Check(compiler.Compile(desc));
+		std::filesystem::remove_all(directory);
+		// Measure the actual material shader used when a mesh assignment rebuilds a renderer.
+		desc = {"Project/Shaders/Primitive/Primitive.PS.hlsl", L"main", L"ps_6_6"};
+		const auto materialStart = std::chrono::steady_clock::now();
+		auto material = compiler.Compile(desc); Check(material);
+		const auto materialCompiled = std::chrono::steady_clock::now();
+		auto materialReused = compiler.Compile(desc); Check(materialReused);
+		const auto materialEnd = std::chrono::steady_clock::now();
+		Require(*material == *materialReused, "Cached material shader differs from compiled shader.");
+		std::cout << "Material shader compile: " << std::chrono::duration<double, std::milli>(materialCompiled-materialStart).count()
+			<< " ms; cached: " << std::chrono::duration<double, std::milli>(materialEnd-materialCompiled).count() << " ms\n";
+	}
 
 	struct Fixture {
 		GraphicsDevice device;
@@ -194,6 +260,18 @@ namespace {
 			commands.Reset(); allocator.Reset(); bindless.Shutdown(); descriptors.Shutdown(); queue.Shutdown();
 		}
 	};
+	void EmptyModelInitializationTest() {
+		Fixture test(true);
+		ModelAssetData empty;
+		ModelInstance pose; Check(pose.Initialize(empty));
+		RenderScene scene;
+		PrimitiveRenderer renderer;
+		renderer.SetModelInput(&empty, &pose); renderer.SetRenderScene(&scene);
+		Check(renderer.Initialize({test.factory, L"Project/Shaders", L"Project/Resources/Assets"}));
+		Check(test.queue.WaitForIdle());
+		renderer.Shutdown(); test.Validate();
+		std::cout << "PASS: clearing all meshes initializes an empty renderer without retaining old geometry\n";
+	}
 	void Visibility(const std::vector<float>& pixels) {
 		Require(std::any_of(pixels.begin(), pixels.end(), [](float v) { return v < 0.5f; }), "No shadow pixels were produced.");
 		Require(std::any_of(pixels.begin(), pixels.end(), [](float v) { return v > 0.99f; }), "No lit pixels were produced.");
@@ -846,6 +924,8 @@ int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+		if(argc == 2 && std::strcmp(argv[1], "--shader-cache") == 0) { ShaderCacheTests(); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--empty-model") == 0) { EmptyModelInitializationTest(); return 0; }
         if(argc == 2 && std::strcmp(argv[1], "--viewport-preview") == 0) {
             ViewportRenderingTests(false); ViewportRenderingTests(true); return 0;
         }

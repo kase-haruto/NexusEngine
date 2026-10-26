@@ -59,8 +59,13 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
         });
     }, false);
     RegisterCommands();
+    RegisterToolbar();
     // 新規Panel/Commandは外部の機能登録から追加でき、中央の具象型一覧を変更しない。
     for(const auto& extension : extensions) extension(*this);
+
+    // 拡張機能のセクションを登録した後、同じ安定IDへ保存済みの位置調整を適用する。
+    toolbar_.SetOffsets(settings_.user.toolbarOffsets);
+    toolbarLayoutRevision_ = toolbar_.LayoutRevision();
     for(auto& entry : panels_.Entries()) {
         auto it = settings_.user.panels.find(std::string(entry.Id()));
         if(it != settings_.user.panels.end()) entry.isOpen = it->second;
@@ -119,6 +124,39 @@ void EditorWorkspace::RememberLevel(const std::filesystem::path& path) {
 void EditorWorkspace::RequestExit() {
     session_.StopPlay(); documents_.Request(EditorDocumentService::Action::Exit);
 }
+void EditorWorkspace::RegisterToolbar() {
+    // 機能の実行処理はRegisterCommandsで登録する。ここでは表示名と配置順だけを接続する。
+    toolbar_.RegisterButton("file.save", "file.save", "file.save", 10);
+    toolbar_.RegisterButton("edit.undo", "edit.undo", "edit.undo", 20);
+    toolbar_.RegisterButton("edit.redo", "edit.redo", "edit.redo", 30);
+    toolbar_.RegisterButton("scene.entity", "edit.create", "scene.entity", 40);
+    toolbar_.RegisterButton("play.start", "play.start", "play.start", 100);
+
+    // Pauseは現在状態に応じて表示名が変わるため、専用セクションとして登録する。
+    // 実行可否と実行処理は、通常のボタンと同じCommandを使用する。
+    toolbar_.RegisterSection({"play.pause", 110, 7, [this](const auto& text, const auto& commands) {
+        const auto label = session_.IsPaused() ? "play.resume" : "play.pause";
+        ImGui::BeginDisabled(!commands.CanExecute("play.pause"));
+        if(ImGui::Button(text.Label(label, "button").c_str())) {
+            commands.Execute("play.pause");
+        }
+        ImGui::EndDisabled();
+
+        if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("%s", text.Text(label).c_str());
+        }
+    }});
+    toolbar_.RegisterButton("play.stop", "play.stop", "play.stop", 120);
+
+    // Viewportの設定UIもPlay/Stopと同じ描画領域へ登録する。
+    // ツールバー自体はViewportToolsの型やカメラ・ギズモの内部状態を参照しない。
+    toolbar_.RegisterSection({"viewport.tools", 300, 24, [this](const auto& text, const auto&) {
+        ImGui::BeginDisabled(!viewport_.IsLocalPreview());
+        viewportTools_.DrawToolbar(text);
+        ImGui::EndDisabled();
+    }});
+}
+
 void EditorWorkspace::RegisterCommands() {
     const auto editing = [this] { return !session_.IsPlaying() && !documents_.ConfirmationRequired() && !documents_.NeedsSaveAs(); };
     const auto sceneResult = [this](bool result) { if(!result) notifications_.Push(text_.Text("edit.rejected"), true); };
@@ -225,7 +263,17 @@ void EditorWorkspace::Draw() {
             return levels;
         }, activeLevel);
     DrawEditorToolbar(text_, commands_, activeLevel.empty() ? text_.Text("file.untitled") : activeLevel,
-        documents_.IsDirty(), session_.IsPlaying(), session_.IsPaused());
+        documents_.IsDirty(), session_.IsPlaying(), session_.IsPaused(), toolbar_);
+
+    // ドラッグの途中はメモリ上の位置だけを更新し、操作が終わってから設定を書き込む。
+    // 変更番号で判定するため、操作していないフレームではディスクへアクセスしない。
+    if(toolbarLayoutRevision_ != toolbar_.LayoutRevision() && !ImGui::IsAnyItemActive()) {
+        settings_.user.toolbarOffsets = toolbar_.GetOffsets();
+        if(!settings_.SaveUser()) {
+            notifications_.Push(text_.Text("settings.saveFailed"), true);
+        }
+        toolbarLayoutRevision_ = toolbar_.LayoutRevision();
+    }
     layout_.Draw();
     const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_};
     viewport_.SetCameraPreviewVisible(false);
@@ -251,8 +299,17 @@ void EditorWorkspace::Shutdown() {
     if(!initialized_) return;
     properties_.Commit();
     for(const auto& entry : panels_.Entries()) settings_.user.panels[std::string(entry.Id())] = entry.isOpen;
+
+    // 編集中に終了した場合も、最後に表示したオフセットを保存対象へ反映する。
+    settings_.user.toolbarOffsets = toolbar_.GetOffsets();
     if(!settings_.SaveUser()) NEXUS_LOG_WARNING("Editor", "Failed to save user settings.");
-    layout_.Save(settings_.user.autoSaveLayout); panels_.Clear(); viewport_.Detach(); properties_.Reset(nullptr);
+    layout_.Save(settings_.user.autoSaveLayout);
+
+    // 借用先のサービスを切断する前に、ツールバーの描画コールバックを解除する。
+    toolbar_.Clear();
+    panels_.Clear();
+    viewport_.Detach();
+    properties_.Reset(nullptr);
     if(logSink_) { Logger::Get().RemoveSink(logSink_); logSink_ = nullptr; }
     initialized_ = false;
 }

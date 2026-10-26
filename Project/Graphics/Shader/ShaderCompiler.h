@@ -26,7 +26,7 @@ namespace NexusEngine {
 		 * \brief HLSLをDXCでCompileしDXIL Binaryへ変換する
 		 * \param desc Source、entry point、target profile
 		 * \return Compile済みDXIL。警告または失敗時は診断をLogger/Errorへ渡す
-		 * \note ReflectionやShader cacheは担当しない
+		 * \note 成功したDXILはプロセス内で再利用し、SourceとIncludeの変更で無効化する。Reflectionは担当しない。
 		 */
 		[[nodiscard]] Result<std::vector<uint8_t>> Compile(const ShaderCompileDesc& desc) const;
 	};

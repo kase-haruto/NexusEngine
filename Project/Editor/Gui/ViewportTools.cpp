@@ -259,27 +259,51 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
     if(!toggle) session_.Selection().Clear(); return false;
 }
 void ViewportTools::DrawToolbar(const LocalizationService& text) {
+    // ギズモの操作中はモード変更を止め、進行中の編集トランザクションを保護する。
     ImGui::BeginDisabled(IsManipulating());
     const float toolbarRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
     static constexpr const char* keys[]{"viewport.translate","viewport.rotate","viewport.scale"};
-    static constexpr const char* labels[]{"W", "E", "R"};
+    static constexpr const char* labels[]{"T", "R", "S"};
     for(int i = 0; i < 3; ++i) {
-        if(i) ImGui::SameLine();
+        if(i != 0) {
+            ImGui::SameLine();
+        }
+
+        // 有効な操作だけを強調する。ボタンのクリックでモードが変わってもStyleの対応を保つ。
         const bool active = mode_ == i;
-        if(active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive));
-        if(ImGui::Button(labels[i], {ImGui::GetFrameHeight()*1.25f, 0})) { properties_.Commit(); mode_ = i; }
-        if(active) ImGui::PopStyleColor();
-        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text.Text(keys[i]).c_str());
+        if(active) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive));
+        }
+        if(ImGui::Button(labels[i], {ImGui::GetFrameHeight()*1.25f, 0})) {
+            properties_.Commit();
+            mode_ = i;
+        }
+        if(active) {
+            ImGui::PopStyleColor();
+        }
+        if(ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", text.Text(keys[i]).c_str());
+        }
     }
+
+    // セクション内も利用可能な幅に応じて折り返し、狭いウィンドウで操作を失わないようにする。
     const auto next = [&](const std::string& label) {
         const float spacing = ImGui::GetStyle().ItemSpacing.x*2;
         const float buttonWidth = ImGui::CalcTextSize(label.c_str()).x + ImGui::GetStyle().FramePadding.x*2;
-        if(ImGui::GetItemRectMax().x + spacing + buttonWidth <= toolbarRight) ImGui::SameLine(0, spacing);
+        if(ImGui::GetItemRectMax().x + spacing + buttonWidth <= toolbarRight) {
+            ImGui::SameLine(0, spacing);
+        }
     };
     next(text.Text(localSpace_ ? "viewport.local" : "viewport.world"));
-    if(ImGui::Button(text.Text(localSpace_ ? "viewport.local" : "viewport.world").c_str())) localSpace_ = !localSpace_;
+    if(ImGui::Button(text.Text(localSpace_ ? "viewport.local" : "viewport.world").c_str())) {
+        localSpace_ = !localSpace_;
+    }
+
+    // スナップの有効状態と刻みは、ギズモの入力処理が参照する同じ値を編集する。
     next(text.Text("viewport.snap"));
-    if(ImGui::Button(text.Text("viewport.snap").c_str())) ImGui::OpenPopup("ViewportSnap");
+    if(ImGui::Button(text.Text("viewport.snap").c_str())) {
+        ImGui::OpenPopup("ViewportSnap");
+    }
     if(ImGui::BeginPopup("ViewportSnap")) {
         ImGui::Checkbox(text.Text("viewport.snapEnabled").c_str(), &snapping_);
         for(int i=0;i<3;++i) {
@@ -289,31 +313,48 @@ void ViewportTools::DrawToolbar(const LocalizationService& text) {
         }
         ImGui::EndPopup();
     }
+
+    // 主Viewportの編集用カメラに対する設定であり、プレビュー対象のCameraComponentは変更しない。
     next(text.Text("viewport.cameraTools"));
-    if(ImGui::Button(text.Text("viewport.cameraTools").c_str())) ImGui::OpenPopup("ViewportCamera");
+    if(ImGui::Button(text.Text("viewport.cameraTools").c_str())) {
+        ImGui::OpenPopup("ViewportCamera");
+    }
     if(ImGui::BeginPopup("ViewportCamera")) {
         ImGui::SetNextItemWidth(ImGui::GetFontSize()*12);
         ImGui::SliderFloat(text.Text("viewport.cameraSpeed").c_str(), &cameraSpeed_, .1f, 100, "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
         ImGui::SetNextItemWidth(ImGui::GetFontSize()*12);
         ImGui::SliderFloat(text.Text("viewport.fov").c_str(), &fieldOfView_, 10, 150, "%.0f", ImGuiSliderFlags_AlwaysClamp);
-        if(ImGui::MenuItem(text.Text("viewport.focus").c_str(), "F")) FocusSelection();
+        if(ImGui::MenuItem(text.Text("viewport.focus").c_str(), "F")) {
+            FocusSelection();
+        }
         ImGui::EndPopup();
     }
+
+    // オーバーレイの表示状態も共通ツールバーから編集する。描画自体はViewportPanelが担当する。
     next(text.Text("viewport.show"));
-    if(ImGui::Button(text.Text("viewport.show").c_str())) ImGui::OpenPopup("ViewportShow");
+    if(ImGui::Button(text.Text("viewport.show").c_str())) {
+        ImGui::OpenPopup("ViewportShow");
+    }
     if(ImGui::BeginPopup("ViewportShow")) {
         ImGui::Checkbox(text.Text("settings.gizmo").c_str(), &gizmoVisible_);
         ImGui::Checkbox(text.Text("viewport.guides").c_str(), &guidesVisible_);
         ImGui::Checkbox(text.Text("viewport.diagnostics").c_str(), &showDiagnostics_);
         ImGui::SeparatorText(text.Text("viewport.previewSize").c_str());
         static constexpr const char* sizeKeys[]{"viewport.small", "viewport.medium", "viewport.large"};
-        for(int i=0;i<3;++i) if(ImGui::RadioButton(text.Text(sizeKeys[i]).c_str(), previewSize_ == i)) previewSize_ = i;
+        for(int i = 0; i < 3; ++i) {
+            if(ImGui::RadioButton(text.Text(sizeKeys[i]).c_str(), previewSize_ == i)) {
+                previewSize_ = i;
+            }
+        }
         ImGui::EndPopup();
     }
     ImGui::EndDisabled();
-    if(gizmoRejected_) session_.Diagnostics().Set("gizmo", text.Text("viewport.gizmoRejected"));
-    else session_.Diagnostics().Resolve("gizmo");
-    ImGui::Separator();
+    // 表示先が変わっても、ギズモの診断はViewport内で解消されるまで確認できる。
+    if(gizmoRejected_) {
+        session_.Diagnostics().Set("gizmo", text.Text("viewport.gizmoRejected"));
+    } else {
+        session_.Diagnostics().Resolve("gizmo");
+    }
 }
 std::optional<ViewportTools::Bounds> ViewportTools::GetEntityLocalBounds(Entity entity) const {
     if(frame_ && model_ && pose_ && entity.IsAlive()) {

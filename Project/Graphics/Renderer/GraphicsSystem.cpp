@@ -493,6 +493,20 @@ namespace NexusEngine {
 		impl_->cameraPreviewRenderer = renderer;
 		return {};
 	}
+	Result<void> GraphicsSystem::ReleaseCameraPreviewRenderer() {
+		if(!impl_ || !impl_->cameraPreviewRenderer) return {};
+		auto idle = impl_->commandQueue.WaitForIdle();
+		if(!idle) return idle;
+		impl_->cameraPreviewActive = false;
+		impl_->cameraPreviewRenderer->Shutdown();
+		impl_->cameraPreviewRenderer = nullptr;
+		impl_->cameraPreviewPost.Shutdown();
+		impl_->cameraPreviewTarget.Shutdown();
+		impl_->cameraPreviewDepth.Shutdown();
+		impl_->cameraPreviewDescriptors.Shutdown();
+		impl_->cameraPreviewDescriptorsInitialized = false;
+		return {};
+	}
 	void GraphicsSystem::SetCameraPreviewActive(bool active) noexcept {
 		if(impl_) impl_->cameraPreviewActive = active && impl_->cameraPreviewRenderer;
 	}

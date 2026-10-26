@@ -21,6 +21,18 @@
 #include "Foundation/Reflection/ReinstancingService.h"
 
 namespace NexusEngine {
+	namespace {
+		Result<ModelAssetData> LoadStartupAsset(const std::filesystem::path& directory, OpticalSphereMaterialSlots* slots = nullptr) {
+			auto asset = ModelLoader{}.LoadGltf(directory / L"Models/Sponza/Sponza.gltf");
+			if(!asset) return std::unexpected(std::move(asset.error()));
+			auto spheres = AppendSponzaOpticalSpheres(*asset);
+			if(!spheres) return std::unexpected(std::move(spheres.error()));
+			if(slots) *slots = *spheres;
+			auto testScene = AppendPBRTestScene(*asset);
+			if(!testScene) return std::unexpected(std::move(testScene.error()));
+			return asset;
+		}
+	}
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
 		editPose_.reset();
         reportedAssetErrors_.clear();
@@ -29,28 +41,25 @@ namespace NexusEngine {
 		session_.Close();
 
 		// モデル読み込み
-		auto asset = ModelLoader{}.LoadGltf(assetDirectory / L"Models/Sponza/Sponza.gltf");
+		OpticalSphereMaterialSlots sphereMaterials;
+		auto asset = LoadStartupAsset(assetDirectory, &sphereMaterials);
 		if(!asset) {
 			// 読み込みに失敗したらエラーを返す
 			return std::unexpected(std::move(asset.error()));
 		}
 
 		// モデルアセットに所有権を移動
-		modelAsset_		= std::move(*asset);
-		auto sphereMaterials = AppendSponzaOpticalSpheres(modelAsset_);
-		if(!sphereMaterials) {
-			return std::unexpected(std::move(sphereMaterials.error()));
-		}
-		mirrorMaterialSlot_ = sphereMaterials->mirror;
-		glassMaterialSlot_ = sphereMaterials->glass;
-		auto testScene = AppendPBRTestScene(modelAsset_);
-		if(!testScene) return testScene;
-		auto poseResult = modelPose_.Initialize(modelAsset_);
-        modelLibrary_ = std::make_unique<ModelAssetLibrary>(assetDirectory, modelAsset_);
+		auto startupAsset = std::make_shared<ModelAssetData>(std::move(*asset));
+		modelAsset_ = startupAsset;
+		mirrorMaterialSlot_ = sphereMaterials.mirror;
+		glassMaterialSlot_ = sphereMaterials.glass;
+		auto poseResult = modelPose_.Initialize(*modelAsset_);
+        modelLibrary_ = std::make_unique<ModelAssetLibrary>(std::move(startupAsset), assetDirectory,
+            [assetDirectory] { return LoadStartupAsset(assetDirectory); });
         uploadedAssetRevision_ = modelLibrary_->Revision();
 		if(!poseResult) return poseResult;
 
-		if(!modelAsset_.animations.empty()) {
+		if(!modelAsset_->animations.empty()) {
 			poseResult = modelPose_.Play(0, true);
 			if(!poseResult) {
 				return poseResult;
@@ -377,7 +386,7 @@ namespace NexusEngine {
 		workspace_ = std::make_unique<EditorWorkspace>(session_);
 		workspace_->Initialize(std::filesystem::current_path(), editorExtensions_);
 		workspace_->SetDpiScale(dpiScale);
-		workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
+		workspace_->ViewportEditor().SetModel(*modelAsset_, modelPose_);
         workspace_->AssetEditor().Configure(modelLibrary_->Root(),
             [this](const std::filesystem::path& path, bool texture) -> Result<std::string> {
                 auto reference = modelLibrary_->Reference(path);
@@ -479,6 +488,10 @@ namespace NexusEngine {
 		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_, session_.IsPlaying());
 		size_t missingAssets = 0;
 		if(extracted && modelLibrary_) {
+            std::vector<ModelAssetLibrary::Request> requests;
+            requests.reserve(renderScene_.primitives.size());
+            for(const auto& item : renderScene_.primitives) requests.push_back({item.shape, item.meshAsset, item.baseColorTexture});
+            modelLibrary_->Retain(requests);
             for(auto& item : renderScene_.primitives) {
                 auto range = modelLibrary_->Resolve(item.shape, item.meshAsset, item.baseColorTexture);
                 if(!range) {
@@ -502,22 +515,33 @@ namespace NexusEngine {
                 }
             }
             if(graphicsSystem_ && uploadedAssetRevision_ != modelLibrary_->Revision()) {
+                auto released = graphicsSystem_->ReleaseCameraPreviewRenderer();
+                if(!released) return released;
+                cameraPreviewRenderer_.reset();
+                previewInitializationFailed_ = false;
                 auto previousAsset = std::move(modelAsset_);
                 auto previousPose = modelPose_;
-                modelAsset_ = modelLibrary_->Snapshot();
+                modelAsset_ = modelLibrary_->SharedSnapshot();
                 modelPose_.Shutdown();
-                auto initialized = modelPose_.Initialize(modelAsset_);
+                auto initialized = modelPose_.Initialize(*modelAsset_);
                 if(!initialized) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return initialized; }
                 auto renderer = std::make_unique<PrimitiveRenderer>();
-                renderer->SetRenderScene(&renderScene_); renderer->SetModelInput(&modelAsset_, &modelPose_);
+                renderer->SetRenderScene(&renderScene_); renderer->SetModelInput(modelAsset_.get(), &modelPose_);
                 // 初期化はCommandList記録前。旧GPU資源はidle後にだけ解放する。
                 auto replaced = graphicsSystem_->ReplaceRenderer(renderer.get());
                 if(!replaced) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return replaced; }
                 replacementRenderer_ = std::move(renderer);
+                editPose_.reset();
+                // Compaction changes global material offsets, including the demo diagnostics slots.
+                mirrorMaterialSlot_ = glassMaterialSlot_ = UINT32_MAX;
+                for(uint32_t slot = 0; slot < modelAsset_->materials.size(); ++slot) {
+                    if(modelAsset_->materials[slot].name == "Mirror Sphere") mirrorMaterialSlot_ = slot;
+                    if(modelAsset_->materials[slot].name == "Glass Sphere") glassMaterialSlot_ = slot;
+                }
                 materialRenderer_ = replacementRenderer_.get(); shadows_ = &materialRenderer_->GetShadows(); optics_ = &materialRenderer_->GetOptics();
                 uploadedAssetRevision_ = modelLibrary_->Revision();
                 NEXUS_LOG_INFO("Assets", "Uploaded model and material asset snapshot.");
-                if(workspace_) workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
+                if(workspace_) workspace_->ViewportEditor().SetModel(*modelAsset_, modelPose_);
             }
         }
 		if(missingAssets) session_.Diagnostics().Set("assets", std::to_string(missingAssets) + " asset references could not be loaded. See Output Log.", true);
@@ -540,7 +564,7 @@ namespace NexusEngine {
 					if(previewAssetRevision_ != uploadedAssetRevision_) previewInitializationFailed_ = false;
 					if((!cameraPreviewRenderer_ || previewAssetRevision_ != uploadedAssetRevision_) && !previewInitializationFailed_) {
 						auto renderer = std::make_unique<PrimitiveRenderer>();
-						renderer->SetRenderScene(&cameraPreviewScene_); renderer->SetModelInput(&modelAsset_, &modelPose_);
+						renderer->SetRenderScene(&cameraPreviewScene_); renderer->SetModelInput(modelAsset_.get(), &modelPose_);
 						auto result = graphicsSystem_->ReplaceCameraPreviewRenderer(renderer.get());
 						previewAssetRevision_ = uploadedAssetRevision_;
 						if(result) { cameraPreviewRenderer_ = std::move(renderer); session_.Diagnostics().Resolve("preview.renderer"); }

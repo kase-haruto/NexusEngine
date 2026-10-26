@@ -538,6 +538,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Editor\Services\EditorHistory.h" />
     <ClInclude Include="Editor\Services\NotificationService.h" />
     <ClInclude Include="Editor\Gui\EditorChrome.h" />
+    <ClInclude Include="Editor\Gui\EditorToolbarRegistry.h" />
+    <ClInclude Include="Editor\Services\ToolbarLayout.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Editor\Gui\ViewportTools.cpp" />

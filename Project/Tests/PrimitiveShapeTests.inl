@@ -1,7 +1,9 @@
 #include "Graphics/Model/PrimitiveMeshBuilder.h"
 #include <cstring>
+#include "AssetMemoryTests.inl"
 
 void PrimitiveShapeTests() {
+    AssetMemoryTests();
     using namespace NexusEngine;
     // Registering models must never give an unassigned renderer geometry.
     ModelAssetData startup; startup.nodes.resize(3);

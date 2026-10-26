@@ -66,10 +66,18 @@ void ViewportRenderingTests(bool warp) {
     Check(graphics.ReplaceCameraPreviewRenderer(&replacement)); Check(graphics.RenderFrame()); Check(graphics.WaitForIdle());
     Require(preview.shutdowns == 1 && replacement.renders == 1 && replacement.submissions == 1,
         "Preview replacement did not retire the old renderer safely.");
+    Check(graphics.ReleaseCameraPreviewRenderer());
+    Require(replacement.shutdowns == 1 && !graphics.GetCameraPreviewImage().backendReference,
+        "Releasing the preview did not free its renderer or disable its image.");
+    Check(graphics.ReleaseCameraPreviewRenderer()); // Repeated release is harmless.
+    Check(graphics.ReplaceCameraPreviewRenderer(&replacement));
+    graphics.SetCameraPreviewActive(true);
+    Check(graphics.RenderFrame()); Check(graphics.WaitForIdle());
+    Require(replacement.renders == 2, "Released preview could not recreate its resources.");
     // GPU検証を有効にして、深度・HDR・出力先の状態遷移と解放順序も確認する。
     auto info = main.info;
     graphics.Shutdown();
-    Require(main.shutdowns == 1 && replacement.shutdowns == 1, "Preview shutdown lifecycle is incorrect.");
+    Require(main.shutdowns == 1 && replacement.shutdowns == 2, "Preview shutdown lifecycle is incorrect.");
     bool validationFailed = false;
     for(uint64_t i=0;i<info->GetNumStoredMessages();++i) {
         SIZE_T bytes = 0; Native(info->GetMessage(i,nullptr,&bytes));

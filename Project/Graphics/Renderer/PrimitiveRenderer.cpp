@@ -90,12 +90,9 @@ namespace NexusEngine {
 			Shutdown();
 			return std::unexpected(Error(ErrorCategory::Resource, 1, "Scene model input is not connected."));
 		}
-		// 共有CPUモデルを変更せず、独立UV付きGPU形状を生成する。材質UVとSkinningは維持する。
-		ModelAssetData prepared = *modelAsset_;
-		result = GenerateLightmapGeometry(prepared);
-		if(!result) { Shutdown(); return result; }
-		const ModelAssetData* asset = &prepared;
-		result						= context.resources.CreateModelResource(model_, *asset);
+		// Prepare/upload one mesh at a time; never clone the entire scene and its encoded images.
+		const ModelAssetData* asset = modelAsset_;
+		result = asset->meshes.empty() ? Result<void>{} : context.resources.CreateModelResource(model_, *asset, true);
 		if(!result) {
 			Shutdown();
 			return std::unexpected(std::move(result.error()));
@@ -196,7 +193,9 @@ namespace NexusEngine {
 			if(!meshStatus) NEXUS_LOG_WARNING("Meshlet", meshStatus.error().GetMessageText());
 			else for(uint32_t i = 0; i < model_.GetMeshCount(); ++i) {
 				if(asset->meshes[i].skinIndex != MeshAssetData::kNoSkin) continue;
-				auto data = MeshletBuilder{}.Build(asset->meshes[i]);
+				auto prepared = BuildLightmapGeometry(asset->meshes[i]);
+				if(!prepared) { NEXUS_LOG_WARNING("Meshlet", prepared.error().GetMessageText()); continue; }
+				auto data = MeshletBuilder{}.Build(*prepared);
 				if(!data) { NEXUS_LOG_WARNING("Meshlet", data.error().GetMessageText()); continue; }
 				auto resource = std::make_unique<MeshletResource>();
 				meshStatus = resources_->CreateMeshletResource(*resource, *data, *model_.GetMesh(i));

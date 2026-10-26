@@ -10,7 +10,14 @@ ReflectionValue EditorWorkspace::CaptureForReinstancing() {
     for(const auto& entry : panels_.Entries()) panels.emplace(entry.id, CaptureReflection(entry.isOpen));
     size_t iniSize = 0;
     const char* ini = ImGui::GetCurrentContext() ? ImGui::SaveIniSettingsToMemory(&iniSize) : "";
+
+    // 描画コールバックは持ち越さず、セクションIDに対応するオフセット値だけを保存する。
+    ReflectionValue::Object toolbarOffsets;
+    for(const auto& [id, offset] : toolbar_.GetOffsets()) {
+        toolbarOffsets.emplace(id, CaptureReflection(offset));
+    }
     return ReflectionValue(ReflectionValue::Object{
+        {"toolbarOffsets", ReflectionValue(std::move(toolbarOffsets))},
         {"dirty", CaptureReflection(documents_.IsDirty())}, {"panels", ReflectionValue(std::move(panels))},
         {"viewport", std::move(viewport)}, {"dpi", CaptureReflection(dpiScale_)},
         {"layout", CaptureReflection(std::string(ini, iniSize))},
@@ -23,10 +30,28 @@ ReflectionValue EditorWorkspace::CaptureForReinstancing() {
 }
 void EditorWorkspace::ReleaseForReinstancing() noexcept {
     // ここでは設定ファイルを保存せず、破棄前に非所有参照と操作履歴を切断する。
-    panels_.Clear(); viewport_.Detach(); properties_.Reset(nullptr);
+    // Toolbarのコールバックは旧コードの関数を参照するため、再登録できるよう破棄する。
+    toolbar_.Clear();
+    panels_.Clear();
+    viewport_.Detach();
+    properties_.Reset(nullptr);
     if(ImGui::GetCurrentContext()) ImGui::ClearActiveID();
 }
 void EditorWorkspace::RestoreAfterReinstancing(const ReflectionValue& snapshot) {
+    // 古いコードで取得したスナップショットには配置情報がないため、存在する場合だけ復元する。
+    const auto& fields = std::get<ReflectionValue::Object>(snapshot.data);
+    if(auto found = fields.find("toolbarOffsets"); found != fields.end()) {
+        ToolbarOffsets offsets;
+        const auto& values = std::get<ReflectionValue::Object>(found->second.data);
+        for(const auto& [id, value] : values) {
+            ToolbarOffset offset{};
+            RestoreReflection(value, offset);
+            offsets.emplace(id, offset);
+        }
+        toolbar_.SetOffsets(offsets);
+        settings_.user.toolbarOffsets = toolbar_.GetOffsets();
+        toolbarLayoutRevision_ = toolbar_.LayoutRevision();
+    }
     bool dirty = false; RestoreReflection(snapshot.At("dirty"), dirty);
     if(dirty) session_.MarkDirty();
     const auto& panels = std::get<ReflectionValue::Object>(snapshot.At("panels").data);

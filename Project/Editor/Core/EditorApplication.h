@@ -26,7 +26,7 @@ namespace NexusEngine {
 	public:
 		/** \brief GPU初期化前にデモSceneとCPUモデルを作成する。モデル選択の編集箇所はこの実装 */
 		[[nodiscard]] Result<void>			CreateScene(const std::filesystem::path& assetDirectory);
-		[[nodiscard]] const ModelAssetData& GetModelAsset() const noexcept { return modelAsset_; }
+		[[nodiscard]] const ModelAssetData& GetModelAsset() const noexcept { return *modelAsset_; }
 		[[nodiscard]] const ModelInstance&	GetModelPose() const noexcept { return modelPose_; }
 
 		void ShowGui();
@@ -120,7 +120,7 @@ namespace NexusEngine {
 		std::optional<ModelInstance> editPose_; //< 再生中だけ保持する編集時のAnimation状態
 
 		// demo用モデル描画
-		ModelAssetData modelAsset_;									  //< Sceneで選択したCPU Asset。modelPose_より長く生存する
+		std::shared_ptr<const ModelAssetData> modelAsset_; //< Libraryと共有するCPU snapshot。modelPose_より長く生存する
 		ModelInstance  modelPose_;									  //< GPUを参照しないScene固有のAnimation再生状態
 	};
 } // namespace NexusEngine
