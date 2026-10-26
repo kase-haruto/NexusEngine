@@ -713,4 +713,28 @@
     <ClInclude Include="Graphics\Backend\DirectX12\Lighting\DDGIProcessor.h"><Filter>Graphics</Filter></ClInclude>
     <ClInclude Include="Graphics\Lighting\DDGISettings.h"><Filter>Graphics</Filter></ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Platform\Development" />
+    <Filter Include="Foundation\Reflection" />
+    <Filter Include="Runtime\Reflection\Generated" />
+    <ClCompile Include="Foundation\Reflection\ReflectionArchive.cpp"><Filter>Foundation\Reflection</Filter></ClCompile>
+    <ClCompile Include="Foundation\Reflection\ReinstancingService.cpp"><Filter>Foundation\Reflection</Filter></ClCompile>
+    <ClCompile Include="Runtime\Reflection\ComponentReflection.cpp"><Filter>Runtime\Reflection</Filter></ClCompile>
+    <ClCompile Include="Runtime\Reflection\Generated\GeneratedReflection.cpp"><Filter>Runtime\Reflection\Generated</Filter></ClCompile>
+    <ClCompile Include="Editor\Core\EditorReinstancing.cpp"><Filter>Editor\Core</Filter></ClCompile>
+    <ClCompile Include="Editor\Core\EditorWorkspaceReinstancing.cpp"><Filter>Editor\Core</Filter></ClCompile>
+    <ClInclude Include="Foundation\Reflection\ReflectionMarkers.h"><Filter>Foundation\Reflection</Filter></ClInclude>
+    <ClInclude Include="Foundation\Reflection\ReflectionValue.h"><Filter>Foundation\Reflection</Filter></ClInclude>
+    <ClInclude Include="Foundation\Reflection\ReflectionArchive.h"><Filter>Foundation\Reflection</Filter></ClInclude>
+    <ClInclude Include="Foundation\Reflection\ReinstancingService.h"><Filter>Foundation\Reflection</Filter></ClInclude>
+    <ClInclude Include="Runtime\Reflection\ComponentReflection.h"><Filter>Runtime\Reflection</Filter></ClInclude>
+    <ClInclude Include="Runtime\Reflection\ReflectedInspector.h"><Filter>Runtime\Reflection</Filter></ClInclude>
+    <ClInclude Include="Runtime\Reflection\Generated\GeneratedReflection.h"><Filter>Runtime\Reflection\Generated</Filter></ClInclude>
+    <None Include="Reflection.props" />
+    <None Include="Tools\Reflection\Generate-Reflection.ps1" />
+    <ClCompile Include="Platform\Development\LiveCodingAgent.cpp"><Filter>Platform\Development</Filter></ClCompile>
+    <ClInclude Include="Platform\Development\LiveCodingAgent.h"><Filter>Platform\Development</Filter></ClInclude>
+    <None Include="LivePP.props" />
+    <None Include="Docs\LiveCoding.md"><Filter>Docs</Filter></None>
+  </ItemGroup>
 </Project>

@@ -83,6 +83,10 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		[[nodiscard]] Result<void> CreateWorkspace(float dpiScale);
+		ReflectionValue CaptureReinstancing();
+		void ReleaseReinstancing() noexcept;
+		void RestoreReinstancing(const ReflectionValue& snapshot);
 		size_t sceneGeneration_ = 0;
         std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
         std::unique_ptr<PrimitiveRenderer> replacementRenderer_; //< GraphicsSystem停止まで保持する交換Renderer

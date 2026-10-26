@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_VALUE(Quaternion, "Quaternion", x, y, z, w)
 
 // c++
 #include <cmath>

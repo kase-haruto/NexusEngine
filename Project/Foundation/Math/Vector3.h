@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_VALUE(Vector3, "Vector3", x, y, z)
 
 // c++
 #include <cmath>

@@ -7,6 +7,7 @@
 #include "Graphics/Renderer/RenderScene.h"
 #include "Editor/Services/TransformGizmoTransaction.h"
 #include <optional>
+#include "Foundation/Reflection/ReflectionValue.h"
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
@@ -35,6 +36,8 @@ public:
     void SetGizmoVisible(bool visible) { gizmoVisible_ = visible; }
     /** \brief Panelが閉じられた場合もrelease/cancelを完了する */
     void CompleteInteraction();
+    ReflectionValue CaptureForReinstancing();
+    void RestoreAfterReinstancing(const ReflectionValue& snapshot);
 private:
     struct CameraGuide {
         EntityId entity;

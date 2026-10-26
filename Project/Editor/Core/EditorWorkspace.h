@@ -40,6 +40,10 @@ public:
     void Draw();
     /** \brief Context破棄前に設定と配置を保存する */
     void Shutdown();
+    /** 編集値と表示状態だけを保存し、旧レイアウトのクロージャは持ち越さない。 */
+    ReflectionValue CaptureForReinstancing();
+    void ReleaseForReinstancing() noexcept;
+    void RestoreAfterReinstancing(const ReflectionValue& snapshot);
     PanelRegistry& Panels() { return panels_; }
     const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
     MainMenuBar& Menu() { return menu_; }

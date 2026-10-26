@@ -37,6 +37,9 @@ namespace NexusEngine {
 		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
 		/** \brief 描画・更新用World。再生中は編集Worldの複製を返す */
 		Level* GetPreviewLevel() noexcept { return playLevel_ ? playLevel_.get() : GetLevel(); }
+		Level* GetPlayLevel() noexcept { return playLevel_.get(); }
+		/** World の同一性を保った再生成後、UI キャッシュだけを無効化する。 */
+		void NotifyReinstanced() noexcept { ++generation_; }
 		/** \brief 編集Worldを変更せずに再生Worldを作る */
 		bool StartPlay();
 		void StopPlay() noexcept { playLevel_.reset(); paused_ = false; }

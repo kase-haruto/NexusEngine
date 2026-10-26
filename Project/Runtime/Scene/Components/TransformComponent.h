@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_COMPONENT(TransformComponent, "Transform", "component.transform", translation, rotation, scale)
 
 // engine
 #include "Foundation/Math/Matrix4x4.h"

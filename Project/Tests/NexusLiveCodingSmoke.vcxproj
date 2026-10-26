@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{D784F873-9763-45F7-863B-FA841E517DF5}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)..\..\Generated\Outputs\LiveCodingSmoke\</OutDir>
+    <IntDir>$(ProjectDir)..\..\Generated\obj\LiveCodingSmoke\</IntDir>
+    <NexusLivePPEnabled>true</NexusLivePPEnabled>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><LanguageStandard>stdcpp23</LanguageStandard>
+      <PreprocessorDefinitions>_DEBUG;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link><SubSystem>Console</SubSystem></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="LiveCodingSmoke.cpp" />
+    <ClCompile Include="..\Platform\Development\LiveCodingAgent.cpp" />
+    <ClCompile Include="..\Foundation\Reflection\ReflectionArchive.cpp" />
+    <ClCompile Include="..\Foundation\Reflection\ReinstancingService.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\Generated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
+    <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\DebugOutputLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\LogTextFormatter.cpp" />
+    <ClCompile Include="..\Foundation\Utility\String\ConvertString.cpp" />
+  </ItemGroup>
+  <Import Project="..\LivePP.props" />
+  <Import Project="..\Reflection.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

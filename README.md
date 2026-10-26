@@ -110,6 +110,9 @@ chore: ビルド設定を更新
 
 エディタの起動、編集操作、拡張方法、検証と制限は[Editor利用ガイド](Project/Docs/EditorUserGuide.md)を参照してください。
 
+Live++ の導入・操作、Reflection の自動生成と Reinstancing による状態移行は
+[ライブコーディング](Project/Docs/LiveCoding.md)を参照してください。
+
 設計方針や各機能の仕様は、`Project/Docs`ディレクトリに記録します。
 
 エディタの構成、問題点、改善優先順位、設計案、実装ロードマップは

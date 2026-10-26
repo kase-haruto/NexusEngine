@@ -49,8 +49,25 @@ void DrawReflectedProperty(const EditorContext& context, std::string_view typeId
     options.enabled = static_cast<bool>(found->set);
     options.size.x = std::max(40.0f, ImGui::GetContentRegionAvail().x * .54f);
     const bool asset = descriptor.kind == PropertyKind::MeshAsset || descriptor.kind == PropertyKind::TextureAsset || descriptor.kind == PropertyKind::MeshNode;
+    // Stable columns align labels across independently drawn reflected properties.
+    // Asset cards keep their full-width layout for previews and drop targets.
+    const bool propertyRow = !asset && ImGui::BeginTable("##PropertyRow", 2,
+        ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings);
+    if(propertyRow) {
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.36f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.64f);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label.c_str());
+        if(ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) ImGui::SetTooltip("%s", label.c_str());
+        ImGui::TableSetColumnIndex(1);
+        options.label = {};
+        options.size.x = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+    }
     const auto result = asset && context.assets ? context.assets->Draw(options, *value, descriptor, context.text, mesh, node) :
         context.drawers.Draw(options, *value, descriptor, context.text);
+    if(propertyRow) ImGui::EndTable();
     if(result.Changed() && descriptor.kind == PropertyKind::MeshAsset && !nodeProperty.empty()) {
         std::vector<PropertyValue> values(handles.size(), *value);
         const auto original = handles;

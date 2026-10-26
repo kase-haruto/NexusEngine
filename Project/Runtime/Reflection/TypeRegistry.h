@@ -33,6 +33,15 @@ class TypeRegistry final {
 public:
     /** \brief 型を登録する。既存のIDは上書きしない */
     bool Register(TypeDescriptor type) { auto id = type.id; return types_.emplace(std::move(id), std::move(type)).second; }
+    /** 生成情報を補完する。専用 UI の同一 ID の getter/setter は置換しない。 */
+    void MergeGenerated(TypeDescriptor type) {
+        auto found = types_.find(type.id);
+        if(found == types_.end()) { Register(std::move(type)); return; }
+        for(auto& property : type.properties) {
+            const bool exists = std::ranges::any_of(found->second.properties, [&](const auto& current) { return current.id == property.id; });
+            if(!exists) found->second.properties.push_back(std::move(property));
+        }
+    }
     /** \brief 安定IDで型情報を取得する */
     const TypeDescriptor* Find(std::string_view id) const {
         auto it = types_.find(id); return it == types_.end() ? nullptr : &it->second;

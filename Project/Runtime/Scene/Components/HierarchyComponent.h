@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_COMPONENT(HierarchyComponent, "Hierarchy", "", parent)
 
 // engine
 #include "Runtime/Scene/EntityId.h"

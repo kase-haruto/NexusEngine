@@ -17,6 +17,7 @@
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "Editor/ImGui/ImGuiStyle.h"
+#include "Foundation/Reflection/ReinstancingService.h"
 
 namespace NexusEngine {
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
@@ -361,9 +362,20 @@ namespace NexusEngine {
 			return guiResult;
 		}
 
+		graphicsSystem_ = context.graphicsSystem;
+		auto workspaceResult = CreateWorkspace(static_cast<float>(GetDpiForWindow(static_cast<HWND>(context.nativeWindow))) / 96.0f);
+		if(!workspaceResult) { Shutdown(); return workspaceResult; }
+		ReinstancingService::Get().Register({"Editor", this,
+			[](void* context) { return static_cast<EditorApplication*>(context)->CaptureReinstancing(); },
+			[](void* context) noexcept { static_cast<EditorApplication*>(context)->ReleaseReinstancing(); },
+			[](void* context, const ReflectionValue& snapshot) { static_cast<EditorApplication*>(context)->RestoreReinstancing(snapshot); }});
+		return {};
+	}
+
+	Result<void> EditorApplication::CreateWorkspace(float dpiScale) {
 		workspace_ = std::make_unique<EditorWorkspace>(session_);
 		workspace_->Initialize(std::filesystem::current_path(), editorExtensions_);
-		workspace_->SetDpiScale(static_cast<float>(GetDpiForWindow(static_cast<HWND>(context.nativeWindow))) / 96.0f);
+		workspace_->SetDpiScale(dpiScale);
 		workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
         workspace_->AssetEditor().Configure(modelLibrary_->Root(),
             [this](const std::filesystem::path& path, bool texture) -> Result<std::string> {
@@ -395,14 +407,12 @@ namespace NexusEngine {
                 return imguiRenderer_.CreatePreview(key, *image);
             });
 		if(!workspace_->Viewport().AttachLocalPreview(imguiRenderer_, ImGuiRenderer::SceneViewportTexture,
-			[graphics = context.graphicsSystem](uint32_t width, uint32_t height) { return graphics->RequestSceneViewportSize(width, height); })) {
-			workspace_->Shutdown(); workspace_.reset(); guiContext_.Shutdown(); imguiRenderer_.Shutdown();
+			[graphics = graphicsSystem_](uint32_t width, uint32_t height) { return graphics->RequestSceneViewportSize(width, height); })) {
 			return std::unexpected(Error(ErrorCategory::Graphics, 103, "Failed to connect local scene viewport."));
 		}
 		workspace_->Commands().Register("tools.rendererDiagnostics", {
 			[this] { showLegacyDiagnostics_ = !showLegacyDiagnostics_; }, {}});
 		workspace_->Menu().RegisterTool({"tools.rendererDiagnostics", "tools.rendererDiagnostics"});
-		graphicsSystem_ = context.graphicsSystem;
 
 		return {};
 	}
@@ -525,6 +535,7 @@ namespace NexusEngine {
 	}
 
 	void EditorApplication::Shutdown() noexcept {
+		ReinstancingService::Get().Unregister(this);
 		editPose_.reset();
 		if(workspace_) {
 			try { workspace_->Shutdown(); }

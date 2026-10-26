@@ -27,7 +27,8 @@ Panelには登録と開閉状態を管理するための最小契約`IEditorPane
 
 ## Styleと共通部品
 
-既存の黒基調とOrange Accentを`Editor/ImGui/ImGuiStyle.cpp`へ集約しました。
+グレーの面階層と控えめなOrange Accentを`Editor/ImGui/ImGuiStyle.cpp`へ集約しています。
+タブ・パネル・入力欄を明度で分け、入力欄はコンパクトな余白と共通の角丸を使います。
 Renderer初期化とPreferencesは共通`UI::ApplyEditorStyle`を呼び、ImGui標準themeで上書きしません。
 寸法は元の基準値へ戻してから倍率を適用し、拡大を累積させません。
 設定変更は次のImGui NewFrame前に適用します。Lightは同じアクセントを持つ明色派生です。
@@ -36,6 +37,10 @@ Renderer初期化とPreferencesは共通`UI::ApplyEditorStyle`を呼び、ImGui�
 `Widgets/PropertyWidgets`はbool/int/float/string/vector/enumの共通入力を提供し、
 `PropertyDrawerRegistry`はReflection値との変換だけを担当します。
 DetailsはWidgetが返す`ItemResult`で編集区間を判断し、popup描画後のImGui最終Itemへ依存しません。
+Reflectionの通常プロパティは左ラベル・右入力の2列に揃え、Assetはプレビュー用の全幅表示を維持します。
+VectorとRotationは共通の軸入力を使い、XYZWの文字とThemeの軸色で成分を識別します。
+幅が不足すると成分を縦に並べ、各入力の編集状態を集約してUndoへ渡します。
+数値編集は標準DragFloatを使うため、ドラッグ・Ctrl+クリックの直接入力・キーボード操作を継承します。
 新しい再利用可能な部品もWidgetsへ定義してPanelから使います。
 標準Button/Menu/Tree/Tableを意味なくラップする必要はありません。
 

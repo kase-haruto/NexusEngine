@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_COMPONENT(NameComponent, "Name", "component.name", name)
 
 // c++
 #include <string>

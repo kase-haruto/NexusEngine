@@ -8,6 +8,7 @@
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "Runtime/Reflection/ReflectedInspector.h"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -32,7 +33,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     }
     if(!text_.Load(root / "Resources/Editor/Localization")) NEXUS_LOG_WARNING("Editor", "Localization dictionary unavailable.");
     text_.SetLanguage(settings_.user.language);
-    RegisterSceneTypes(types_); drawers_.RegisterDefaults();
+    RegisterSceneTypes(types_); RegisterGeneratedInspectorTypes(types_); drawers_.RegisterDefaults();
     RegisterPropertyPages(categories_);
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     assets_ = std::make_unique<AssetCatalog>(root / std::filesystem::path{ConvertString(settings_.project.assetPath)});

@@ -68,6 +68,11 @@ namespace NexusEngine {
 	GraphicsSystem::GraphicsSystem() noexcept = default;
 	GraphicsSystem::~GraphicsSystem() noexcept { Shutdown(); }
 
+	Result<void> GraphicsSystem::WaitForIdle() {
+		if(!impl_) return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "GraphicsSystem is not initialized."));
+		return impl_->commandQueue.WaitForIdle();
+	}
+
 	GraphicsCapabilities GraphicsSystem::GetCapabilities() const noexcept {
 		return impl_ ? impl_->device.GetCapabilities() : GraphicsCapabilities {};
 	}

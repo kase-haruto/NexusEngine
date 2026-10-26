@@ -43,6 +43,8 @@ namespace NexusEngine {
 		 * \return フレーム描画結果
 		 */
 		[[nodiscard]] Result<void> RenderFrame();
+		/** ライブコーディング前のフレーム境界で、投入済み GPU 処理の完了を待つ。 */
+		[[nodiscard]] Result<void> WaitForIdle();
 		/**
 		 * \brief SwapChain BackBufferを新しいWindowサイズへ変更する
 		 * \param width 新しい描画幅

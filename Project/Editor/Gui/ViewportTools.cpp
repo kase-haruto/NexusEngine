@@ -8,6 +8,19 @@
 #include <limits>
 
 namespace NexusEngine {
+ReflectionValue ViewportTools::CaptureForReinstancing() {
+    gizmo_.Commit();
+    ImGuizmo::Enable(false); ImGuizmo::Enable(true);
+    return ReflectionValue(ReflectionValue::Object{
+        {"camera", CaptureReflection(std::array<float, 5>{position_.x, position_.y, position_.z, yaw_, pitch_})},
+        {"mode", CaptureReflection(mode_)}, {"gizmo", CaptureReflection(gizmoVisible_)}});
+}
+void ViewportTools::RestoreAfterReinstancing(const ReflectionValue& snapshot) {
+    std::array<float, 5> camera{}; RestoreReflection(snapshot.At("camera"), camera);
+    position_ = {camera[0], camera[1], camera[2]}; yaw_ = camera[3]; pitch_ = camera[4];
+    RestoreReflection(snapshot.At("mode"), mode_); RestoreReflection(snapshot.At("gizmo"), gizmoVisible_);
+    generation_ = session_.Generation();
+}
 namespace {
 constexpr float kIconRadius = 14;
 struct ClipPoint { float x, y, z, w; };
