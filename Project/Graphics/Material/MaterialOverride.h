@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_VALUE(MaterialOverride, "MaterialOverride", enabled, slot, baseColor, metallic, roughness, normalScale, emissive, occlusionStrength)
 #include <array>
 #include <cmath>
 #include <cstdint>

@@ -26,7 +26,7 @@ namespace NexusEngine {
 	public:
 		/** \brief GPU初期化前にデモSceneとCPUモデルを作成する。モデル選択の編集箇所はこの実装 */
 		[[nodiscard]] Result<void>			CreateScene(const std::filesystem::path& assetDirectory);
-		[[nodiscard]] const ModelAssetData& GetModelAsset() const noexcept { return modelAsset_; }
+		[[nodiscard]] const ModelAssetData& GetModelAsset() const noexcept { return *modelAsset_; }
 		[[nodiscard]] const ModelInstance&	GetModelPose() const noexcept { return modelPose_; }
 
 		void ShowGui();
@@ -83,9 +83,17 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		[[nodiscard]] Result<void> CreateWorkspace(float dpiScale);
+		ReflectionValue CaptureReinstancing();
+		void ReleaseReinstancing() noexcept;
+		void RestoreReinstancing(const ReflectionValue& snapshot);
 		size_t sceneGeneration_ = 0;
         std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
         std::unique_ptr<PrimitiveRenderer> replacementRenderer_; //< GraphicsSystem停止まで保持する交換Renderer
+        std::unique_ptr<PrimitiveRenderer> cameraPreviewRenderer_; //< プレビュー専用GPU資源。GraphicsSystem停止まで保持する
+        RenderScene cameraPreviewScene_;
+        size_t previewAssetRevision_ = 0;
+        bool previewInitializationFailed_ = false;
         size_t uploadedAssetRevision_ = 1; //< GPUへ反映済みsnapshot
         std::set<std::string> reportedAssetErrors_; //< 同じ欠損参照による毎Frameのログ連打を防ぐ
 		std::array<char, 1024> environmentPath_ {}; //< Editor入力。RendererはScene設定だけを参照する
@@ -112,7 +120,7 @@ namespace NexusEngine {
 		std::optional<ModelInstance> editPose_; //< 再生中だけ保持する編集時のAnimation状態
 
 		// demo用モデル描画
-		ModelAssetData modelAsset_;									  //< Sceneで選択したCPU Asset。modelPose_より長く生存する
+		std::shared_ptr<const ModelAssetData> modelAsset_; //< Libraryと共有するCPU snapshot。modelPose_より長く生存する
 		ModelInstance  modelPose_;									  //< GPUを参照しないScene固有のAnimation再生状態
 	};
 } // namespace NexusEngine

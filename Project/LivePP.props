@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildThisFileDirectory)LivePP.local.props" Condition="Exists('$(MSBuildThisFileDirectory)LivePP.local.props')" />
+  <PropertyGroup>
+    <NexusLivePPDir Condition="'$(NexusLivePPDir)'==''">$(MSBuildThisFileDirectory)ThirdParty\LivePP</NexusLivePPDir>
+    <NexusLivePPDir>$([System.IO.Path]::GetFullPath('$(NexusLivePPDir)'))</NexusLivePPDir>
+    <NexusLivePPEnabled Condition="'$(NexusLivePPEnabled)'=='' and ('$(Configuration)'=='Debug' or '$(Configuration)'=='Develop') and Exists('$(NexusLivePPDir)\API\x64\LPP_API_x64_CPP.h')">true</NexusLivePPEnabled>
+    <NexusLivePPEnabled Condition="'$(NexusLivePPEnabled)'==''">false</NexusLivePPEnabled>
+    <NexusLivePPCompilerPath>$([System.String]::Copy('$(NexusLivePPDir)').Replace('\', '/').TrimEnd('/'))</NexusLivePPCompilerPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(NexusLivePPEnabled)'=='true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(NexusLivePPDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NEXUS_WITH_LIVEPP=1;NEXUS_LIVEPP_DIRECTORY=L&quot;$(NexusLivePPCompilerPath)&quot;;NEXUS_PROJECT_DIRECTORY=&quot;$([System.String]::Copy('$(MSBuildThisFileDirectory)').Replace('\', '/').TrimEnd('/'))&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <MinimalRebuild>false</MinimalRebuild>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <AdditionalOptions>/Gw %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <CreateHotPatchableImage>Enabled</CreateHotPatchableImage>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateLivePP" BeforeTargets="PrepareForBuild" Condition="'$(NexusLivePPEnabled)'=='true'">
+    <Error Condition="'$(Platform)'!='x64' or ('$(Configuration)'!='Debug' and '$(Configuration)'!='Develop')" Text="Live++ is supported only in Debug/Develop x64. Set NexusLivePPEnabled=false for other configurations." />
+    <Error Condition="!Exists('$(NexusLivePPDir)\API\x64\LPP_API_x64_CPP.h')" Text="Live++ SDK is missing. Extract LivePP to Project/ThirdParty/LivePP or set NexusLivePPDir. See Docs/LiveCoding.md." />
+  </Target>
+</Project>

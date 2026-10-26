@@ -2,6 +2,37 @@
 
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/CameraComponent.h"
+
+bool NexusEngine::EditorSession::SetCameraPreview(PersistentId id) {
+	auto* level = GetLevel();
+	auto entity = level ? level->FindEntity(id) : Entity{};
+	if(!entity.GetComponent<CameraComponent>() || !entity.GetComponent<TransformComponent>()) return false;
+	previewCamera_ = id;
+	return true;
+}
+
+NexusEngine::Result<NexusEngine::RenderCamera> NexusEngine::EditorSession::ResolveCameraPreview(float aspect) {
+	auto* level = GetPreviewLevel();
+	auto entity = level ? level->FindEntity(previewCamera_) : Entity{};
+	const auto* camera = entity.GetComponent<CameraComponent>();
+	const auto* transform = entity.GetComponent<TransformComponent>();
+	if(!camera || !transform) {
+		// 対象が削除された場合は解除し、別のカメラへ自動的に切り替えない。
+		ClearCameraPreview();
+		return std::unexpected(Error(ErrorCategory::Scene, 20, "Preview camera is no longer available."));
+	}
+	if(!std::isfinite(aspect) || aspect <= 0 || !std::isfinite(camera->verticalFieldOfViewRadians) ||
+		camera->verticalFieldOfViewRadians <= 0 || camera->verticalFieldOfViewRadians >= 3.14159265f ||
+		!std::isfinite(camera->nearClip) || !std::isfinite(camera->farClip) ||
+		camera->nearClip <= 0 || camera->farClip <= camera->nearClip)
+		return std::unexpected(Error(ErrorCategory::Scene, 21, "Preview camera projection settings are invalid."));
+	const auto view = TryInverse(transform->worldMatrix);
+	if(!view) return std::unexpected(Error(ErrorCategory::Scene, 22, "Preview camera transform is not invertible."));
+	const auto projection = MakePerspectiveFovMatrix(camera->verticalFieldOfViewRadians, aspect, camera->nearClip, camera->farClip);
+	const auto local = entity.GetId();
+	return RenderCamera{{(static_cast<uint64_t>(local.generation) << 32) | local.index}, *view, projection, Multiply(*view, projection)};
+}
 
 bool NexusEngine::EditorSession::SetStaticLighting(PersistentId id, bool enabled) {
 	auto* level=GetLevel();
@@ -27,6 +58,7 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
 void NexusEngine::EditorSession::Close() noexcept {
 	StopPlay();
 	selection_.Clear();
+	ClearCameraPreview(); diagnostics_.Clear();
 	++generation_;
 	dirty_	  = false;
 	levelDocument_.reset();

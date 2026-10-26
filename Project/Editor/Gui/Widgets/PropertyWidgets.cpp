@@ -1,4 +1,5 @@
 #include "PropertyWidgets.h"
+#include "Editor/ImGui/ImGuiStyle.h"
 #include "ThirdParty/imgui/imgui.h"
 #include <algorithm>
 #include <climits>
@@ -74,10 +75,44 @@ ItemResult PropertyText(const ItemOptions& options, std::string& value, size_t m
     });
 }
 ItemResult PropertyVector(const ItemOptions& options, std::span<float> values, float speed) {
-    if(values.size() < 2 || values.size() > 4) return {};
-    return DrawProperty(options, [&](const char* label) {
-        return ImGui::DragScalarN(label, ImGuiDataType_Float, values.data(), static_cast<int>(values.size()), speed);
-    });
+    if(values.size() < 2 || values.size() > 4 || !options.visible || !options.id.IsValid()) return {};
+    PropertyScope scope(options);
+    const auto theme = CurrentEditorTheme();
+    const Color axes[] = {theme.axisX, theme.axisY, theme.axisZ, theme.axisW};
+    const char* formats[] = {"X: %.3f", "Y: %.3f", "Z: %.3f", "W: %.3f"};
+    const auto& style = ImGui::GetStyle();
+    const float width = ImGui::CalcItemWidth();
+    const float count = static_cast<float>(values.size());
+    // Keep values readable in narrow docked panels by stacking the components.
+    const bool stacked = width < count * ImGui::GetFontSize() * 4.5f;
+    const float fieldWidth = stacked ? width : (width - style.ItemInnerSpacing.x * (count - 1)) / count;
+    ItemResult result;
+    ImGui::BeginGroup();
+    for(size_t index = 0; index < values.size(); ++index) {
+        ImGui::PushID(static_cast<int>(index));
+        if(index && !stacked) ImGui::SameLine(0, style.ItemInnerSpacing.x);
+        ImGui::SetNextItemWidth(fieldWidth);
+        const bool changed = ImGui::DragFloat("##axis", &values[index], speed, 0, 0, formats[index]);
+        // Capture each real input before decoration/grouping changes LastItemData.
+        result.status = result.status | Capture(changed).status;
+        if(ImGui::IsItemVisible()) {
+            const auto min = ImGui::GetItemRectMin();
+            const auto max = ImGui::GetItemRectMax();
+            const auto& axis = axes[index];
+            const float thickness = std::max(1.0f, ImGui::GetFontSize() / 9.0f);
+            ImGui::GetWindowDrawList()->AddRectFilled({min.x + style.FrameRounding, max.y - thickness},
+                {max.x - style.FrameRounding, max.y},
+                ImGui::GetColorU32(ImVec4(axis.red, axis.green, axis.blue, axis.alpha)));
+        }
+        Tooltip(options);
+        ImGui::PopID();
+    }
+    ImGui::EndGroup();
+    if(!options.label.empty()) {
+        ImGui::SameLine(0, style.ItemInnerSpacing.x);
+        ImGui::TextUnformatted(options.label.data(), options.label.data() + options.label.size());
+    }
+    return result;
 }
 ItemResult PropertyEnum(const ItemOptions& options, int& value, std::span<const EnumOption> choices) {
     if(!options.visible || !options.id.IsValid()) return {};
@@ -108,11 +143,12 @@ ItemResult PropertyRotation(const ItemOptions& options, std::array<float, 4>& va
         std::atan2(2*(q.w*q.x + q.y*q.z), 1 - 2*(q.x*q.x + q.y*q.y)) * degrees,
         std::asin(std::clamp(2*(q.w*q.y - q.z*q.x), -1.0f, 1.0f)) * degrees,
         std::atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z)) * degrees};
-    return DrawProperty(options, [&](const char* label) {
-        if(!ImGui::DragFloat3(label, angles.data(), 0.25f)) return false;
+    const auto result = PropertyVector(options, angles, 0.25f);
+    if(result.Changed()) {
         const auto rotation = Quaternion::FromEulerRadians({angles[0]/degrees, angles[1]/degrees, angles[2]/degrees});
-        value = {rotation.x, rotation.y, rotation.z, rotation.w}; return true;
-    });
+        value = {rotation.x, rotation.y, rotation.z, rotation.w};
+    }
+    return result;
 }
 ItemResult PropertyColor(const ItemOptions& options, std::array<float, 4>& value) {
     return DrawProperty(options, [&](const char* label) { return ImGui::ColorEdit4(label, value.data()); });

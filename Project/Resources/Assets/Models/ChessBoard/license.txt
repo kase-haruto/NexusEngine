@@ -1,0 +1,11 @@
+Model Information:
+* title:	Marble Chess Board
+* source:	https://sketchfab.com/3d-models/marble-chess-board-1d06ba8ef476420094ec09e818bbebb7
+* author:	Foggy_123 (https://sketchfab.com/foggy_123)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Marble Chess Board" (https://sketchfab.com/3d-models/marble-chess-board-1d06ba8ef476420094ec09e818bbebb7) by Foggy_123 (https://sketchfab.com/foggy_123) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

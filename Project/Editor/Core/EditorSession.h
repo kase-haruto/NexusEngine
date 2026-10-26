@@ -7,6 +7,8 @@
 // c++ standard
 #include <cmath>
 #include "Editor/Services/SelectionService.h"
+#include "Editor/Services/ViewportDiagnostics.h"
+#include "Graphics/Renderer/RenderScene.h"
 
 namespace NexusEngine {
 
@@ -28,6 +30,12 @@ namespace NexusEngine {
 
 		[[nodiscard]] PersistentId GetSelection() const noexcept { return selection_.Primary(); }
 		SelectionService& Selection() noexcept { return selection_; }
+		// エディタ専用の表示状態。プレビュー指定でLevelや選択を変更しない。
+		bool SetCameraPreview(PersistentId id);
+		void ClearCameraPreview() noexcept { previewCamera_ = {}; }
+		PersistentId GetCameraPreview() const noexcept { return previewCamera_; }
+		Result<RenderCamera> ResolveCameraPreview(float aspect);
+		ViewportDiagnostics& Diagnostics() noexcept { return diagnostics_; }
 		/** \brief サービス経由の編集を変更状態へ反映する */
 		void MarkDirty() noexcept { dirty_ = true; }
 		void MarkSaved() noexcept { dirty_ = false; }
@@ -37,6 +45,9 @@ namespace NexusEngine {
 		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
 		/** \brief 描画・更新用World。再生中は編集Worldの複製を返す */
 		Level* GetPreviewLevel() noexcept { return playLevel_ ? playLevel_.get() : GetLevel(); }
+		Level* GetPlayLevel() noexcept { return playLevel_.get(); }
+		/** World の同一性を保った再生成後、UI キャッシュだけを無効化する。 */
+		void NotifyReinstanced() noexcept { ++generation_; }
 		/** \brief 編集Worldを変更せずに再生Worldを作る */
 		bool StartPlay();
 		void StopPlay() noexcept { playLevel_.reset(); paused_ = false; }
@@ -56,6 +67,8 @@ namespace NexusEngine {
 		bool paused_ = false; //< 再生更新を停止して描画は維持する
 
 		SelectionService selection_; //< 全Panel共通の永続ID集合
+		PersistentId previewCamera_;
+		ViewportDiagnostics diagnostics_;
 		size_t generation_ = 0; //< documentの再生成を履歴サービスへ通知する
 		bool		 dirty_ = false; //< 編集操作が適用されたか
 	};

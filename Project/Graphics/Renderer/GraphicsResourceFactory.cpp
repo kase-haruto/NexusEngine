@@ -22,6 +22,7 @@
 #include "Graphics/Resource/IndexBufferUploader.h"
 #include "Graphics/Resource/MeshResource.h"
 #include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Lighting/LightmapGeometry.h"
 #include "Graphics/Model/ModelResource.h"
 #include "Graphics/Resource/SamplerDesc.h"
 #include "Graphics/Resource/TextureFormatDx12.h"
@@ -172,7 +173,7 @@ namespace NexusEngine {
 
 	Result<void> GraphicsResourceFactory::CreateModelResource(
 		ModelResource& model,
-		const ModelAssetData& assetData) const {
+		const ModelAssetData& assetData, const bool generateLightmapUV) const {
 		if(model.IsInitialized() || assetData.meshes.empty()) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
 				"Model resource state or asset data is invalid."));
@@ -261,10 +262,18 @@ namespace NexusEngine {
 		}
 		meshes.reserve(assetData.meshes.size());
 		for(const MeshAssetData& source : assetData.meshes) {
+			MeshAssetData prepared;
+			const MeshAssetData* geometry = &source;
+			if(generateLightmapUV && source.skinIndex == MeshAssetData::kNoSkin) {
+				auto result = BuildLightmapGeometry(source);
+				if(!result) return std::unexpected(std::move(result.error()));
+				prepared = std::move(*result);
+				geometry = &prepared;
+			}
 			auto mesh = std::make_unique<MeshResource>();
 			auto result = CreateMeshResource(
-				*mesh, source.vertexData, source.vertexStride,
-				source.indexData, source.indexFormat, source.submeshes);
+				*mesh, geometry->vertexData, geometry->vertexStride,
+				geometry->indexData, geometry->indexFormat, geometry->submeshes);
 			if(!result) return result;
 			meshes.push_back(std::move(mesh));
 		}

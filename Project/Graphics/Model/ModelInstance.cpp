@@ -98,9 +98,10 @@ namespace NexusEngine {
 	} // namespace
 
 	Result<void> ModelInstance::Initialize(const ModelAssetData& resource) {
-		if(resource_ != nullptr || resource.nodes.empty()) {
+		if(resource_ != nullptr || (resource.nodes.empty() &&
+			(!resource.meshes.empty() || !resource.skins.empty() || !resource.animations.empty()))) {
 			return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance,
-				"Model instance requires a nonempty CPU asset and must not be initialized twice."));
+				"Model instance requires valid CPU asset nodes and must not be initialized twice."));
 		}
 
 		// GPU生成に依存せず姿勢を評価するため、CPU階層とSkinの参照範囲をここで検証する。

@@ -22,6 +22,7 @@ namespace NexusEngine {
 		public IGraphicsRenderExtension, public UI::ITextureProvider {
 	public:
 		static constexpr UI::TextureHandle SceneViewportTexture{1}; //< backend内だけで解決する安定token
+		static constexpr UI::TextureHandle CameraPreviewTexture{2}; //< カメラプレビュー専用の安定token
 		/** \brief Graphics所有のViewport画像をImGuiの不透明画像参照へ変換する */
 		std::optional<UI::ResolvedTexture> Resolve(UI::TextureHandle texture) const noexcept override;
         /** \brief Backend管理の動的TextureとしてPreview画像を登録する。GPU idle後のShutdownで解放 */

@@ -110,10 +110,11 @@ namespace NexusEngine {
 		/**
 		 * \brief CPU Model Assetから複数GPU MeshとNode hierarchyを所有するResourceを生成する
 		 * \note 1 Meshでも失敗した場合はModel全体をrollbackする
+		 * \param generateLightmapUV 専用UVの生成・転送をMesh単位で行い、Scene全体の一時複製を避ける
 		 */
 		[[nodiscard]] Result<void> CreateModelResource(
 			ModelResource& model,
-			const ModelAssetData& assetData) const;
+			const ModelAssetData& assetData, bool generateLightmapUV = false) const;
 
 		/**
 		 * \brief 全FrameContextに独立sliceを持つConstant Bufferを初期化する

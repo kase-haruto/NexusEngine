@@ -18,9 +18,12 @@ Result<MeshletData> MeshletBuilder::Build(const MeshAssetData& mesh) const {
     const size_t vertexCount = mesh.vertexData.size() / sizeof(ModelVertex);
     const size_t indexCount = mesh.indexData.size() / indexSize;
     if(vertexCount > UINT32_MAX || indexCount > UINT32_MAX) return invalid();
-    std::vector<ModelVertex> input(vertexCount);
-    std::memcpy(input.data(), mesh.vertexData.data(), mesh.vertexData.size());
-    for(const auto& v : input) for(float p : v.position) if(!std::isfinite(p)) return invalid();
+    // Bounds only need positions; copying full skinned/material vertices wastes 92 bytes per vertex.
+    std::vector<std::array<float, 3>> input(vertexCount);
+    for(size_t i = 0; i < vertexCount; ++i) {
+        std::memcpy(input[i].data(), mesh.vertexData.data() + i * sizeof(ModelVertex), sizeof(input[i]));
+        for(float p : input[i]) if(!std::isfinite(p)) return invalid();
+    }
     MeshletData output;
     uint64_t totalIndices = 0;
     for(const auto& submesh : mesh.submeshes) totalIndices += submesh.indexCount;
@@ -39,16 +42,16 @@ Result<MeshletData> MeshletBuilder::Build(const MeshAssetData& mesh) const {
             ////////////////////////////////////////////////////////////////////////////
             MeshletBounds b;
             std::array<double, 3> lo, hi;
-            for(size_t axis = 0; axis < 3; ++axis) lo[axis] = hi[axis] = input[remap.front()].position[axis];
+            for(size_t axis = 0; axis < 3; ++axis) lo[axis] = hi[axis] = input[remap.front()][axis];
             for(uint32_t i : remap) for(size_t axis = 0; axis < 3; ++axis) {
-                lo[axis] = (std::min)(lo[axis], double(input[i].position[axis]));
-                hi[axis] = (std::max)(hi[axis], double(input[i].position[axis]));
+                lo[axis] = (std::min)(lo[axis], double(input[i][axis]));
+                hi[axis] = (std::max)(hi[axis], double(input[i][axis]));
             }
             for(size_t axis = 0; axis < 3; ++axis) b.center[axis] = float((lo[axis] + hi[axis]) * 0.5);
             double radius = 0;
             for(uint32_t i : remap) {
                 double d2 = 0;
-                for(size_t axis = 0; axis < 3; ++axis) { const double d = double(input[i].position[axis]) - b.center[axis]; d2 += d * d; }
+                for(size_t axis = 0; axis < 3; ++axis) { const double d = double(input[i][axis]) - b.center[axis]; d2 += d * d; }
                 radius = (std::max)(radius, std::sqrt(d2));
             }
             b.radius = std::nextafter(float(radius), (std::numeric_limits<float>::infinity)());

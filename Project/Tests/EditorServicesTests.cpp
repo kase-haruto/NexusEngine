@@ -3,6 +3,7 @@
 #include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Gui/Panels/PanelRegistry.h"
 #include "Editor/Gui/PropertyDrawerRegistry.h"
+#include "Editor/Gui/Widgets/PropertyWidgets.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Gui/ViewportTools.h"
 #include "Editor/Services/TransformGizmoTransaction.h"
@@ -17,6 +18,7 @@
 #include "Editor/Core/EditorWorkspace.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
+#include "Editor/Gui/Panels/UtilityPanels.h"
 #include "Editor/Gui/Properties/MaterialPage.h"
 #include "Editor/Gui/Properties/MaterialSlots.h"
 #include "Runtime/Level/LevelSerializer.h"
@@ -680,10 +682,56 @@ void CacheAndWorkspaceIntegration() {
 #include "StartupPathTests.inl"
 #include "EntityConsoleTests.inl"
 #include "ViewportSceneGuidesTests.inl"
+#include "ViewportPreviewTests.inl"
+#include "EditorToolbarTests.inl"
+// Composite axis controls must forward activation and release even on frames
+// without a value change; the property service uses these to bound one undo step.
+void AxisWidgetInteraction() {
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO(); io.DisplaySize = {800,600}; io.DeltaTime = 1.0f/60;
+    io.IniFilename = nullptr;
+    unsigned char* pixels; int width, height;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height); io.Fonts->SetTexID(1);
+    UI::ApplyEditorStyle();
+    for(float fieldWidth : {360.0f, 95.0f}) {
+        std::array<float,3> values{1,2,3};
+        UI::ItemOptions options; options.id = UI::ItemId::FromString("axis-test"); options.size.x = fieldWidth;
+        bool enabled = true;
+        ImVec2 origin;
+        const auto frame = [&](ImVec2 mouse, bool down) {
+            io.AddMousePosEvent(mouse.x, mouse.y); io.AddMouseButtonEvent(0, down);
+            ImGui::NewFrame(); ImGui::SetNextWindowPos({0,0}); ImGui::SetNextWindowSize({500,500});
+            ImGui::Begin("Axis test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            origin = ImGui::GetCursorScreenPos(); options.enabled = enabled;
+            auto result = UI::PropertyVector(options, values, 0.1f);
+            ImGui::End(); ImGui::Render(); return result;
+        };
+        frame({-100,-100}, false); frame({-100,-100}, false);
+        const ImVec2 target{origin.x + 35, origin.y + ImGui::GetFrameHeight() * .5f};
+        frame(target, false);
+        assert(UI::HasStatus(frame(target, true).status, UI::ItemStatus::Activated));
+        const ImVec2 moved{target.x + 30, target.y};
+        const auto dragged = frame(moved, true);
+        assert(dragged.Changed() && !dragged.EditFinished());
+        assert(values[0] != 1 && values[1] == 2 && values[2] == 3);
+        assert(frame(moved, false).EditFinished());
+        enabled = false;
+        const auto before = values;
+        frame(target, false); frame(target, true);
+        assert(!frame(moved, true).Changed() && values == before);
+        frame(moved, false);
+    }
+    ImGui::DestroyContext();
+}
+void RunReinstancingTests();
 int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    RunReinstancingTests();
+    EditorToolbarTests();
+    EditorToolbarSettingsTests();
+    AxisWidgetInteraction();
     ComponentAndAssetEditing();
     EntityConsoleTests();
     TerminalSuggestionTests();
@@ -696,6 +744,7 @@ int main() {
     PropertyTransactions(); StructuralHistory(); DocumentsAndPlay(); HistoryBoundsAndCommands(); LazyPanelLifecycle();
     ViewportPickingAndValidation();
     ViewportSceneGuidesTests();
+    ViewportPreviewTests(); ViewportPreviewOverlayTests();
     CameraFarPlaneWorldProjectionTests();
     CacheAndWorkspaceIntegration();
     std::cout << "PASS: unified Details categories/header, component fallback/extensions, material source/undo/save, selection lifetime, offset-mesh pivot/rotation/scale, gizmo click capture over background, ImGuizmo mouse interaction, parent/multi-selection transforms, gizmo undo/cancel, component addition, asset round-trip/undo, model/texture variants, thumbnails, property transactions, rollback, structural undo, save protection, play isolation, history bounds, shortcuts, lazy panels, viewport picking, rotation/camera/light validation\n";

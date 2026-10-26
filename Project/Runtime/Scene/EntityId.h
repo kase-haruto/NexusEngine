@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_VALUE(EntityId, "EntityId", index, generation)
 
 // c++
 #include <cstdint>

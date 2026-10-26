@@ -15,6 +15,10 @@ imgui.ini
 # Build output (ENGINE)
 ###############################################################################
 generated/
+# 型登録の生成コードはレビューとクリーンビルドの入力として管理する。
+!Project/Runtime/Reflection/Generated/
+!Project/Runtime/Reflection/Generated/*.h
+!Project/Runtime/Reflection/Generated/*.cpp
 # Initial standalone ECS builds used these local intermediate directories.
 Project/Tests/NexusEcsTests/
 Project/Tests/x64/
@@ -48,6 +52,8 @@ ipch/
 ###############################################################################
 # External libraries (ignore build outputs only)
 ###############################################################################
+Project/ThirdParty/LivePP/
+Project/LivePP.local.props
 project/externals/**/bin/
 project/externals/**/build/
 

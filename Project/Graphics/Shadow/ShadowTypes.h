@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_VALUE(DirectionalLightData, "DirectionalLightData", direction, angularRadius, color, intensity)
 
 #include <array>
 #include <cstdint>

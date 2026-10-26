@@ -11,7 +11,7 @@
 
 namespace NexusEngine::UI {
     namespace {
-        constexpr float kHeight = 32.0f;
+        constexpr float kHeight = 16.0f;
         constexpr float kLeftPadding = 10.0f;
         constexpr float kIconSize = 14.0f;
         constexpr float kIconGap = 8.0f;

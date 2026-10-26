@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <stdexcept>
 #include <tuple>
 #include <typeindex>
 #include <type_traits>
@@ -59,6 +60,20 @@ namespace NexusEngine {
 			return IsAlive(id) ? Entity(this, id) : Entity {};
 		}
 		[[nodiscard]] size_t GetEntityCount() const noexcept { return livingEntityCount_; }
+
+		/** 再インスタンス化専用。Entity の配置と世代を保ち、旧コードで全 Component を破棄する。 */
+		void ReleaseComponentStorages() {
+			if(iterationDepth_ != 0) throw std::logic_error("Cannot reinstance during scene iteration");
+			componentStorages_.clear();
+		}
+		struct EntityLayout {
+			std::vector<uint32_t> generations;
+			std::vector<uint8_t> alive;
+			std::vector<uint32_t> freeIndices;
+		};
+		[[nodiscard]] EntityLayout CaptureEntityLayout() const;
+		/** 空の Storage を持つホストへ Entity 配置を復元し、回復ファイルからの復元にも利用する。 */
+		void RestoreEntityLayout(const EntityLayout& layout);
 
 		/** \brief 型と要素数のmetadataを列挙する。Storageへの変更権限は公開しない */
 		template<typename Function>

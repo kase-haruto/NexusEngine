@@ -458,6 +458,29 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ItemGroup><EditorConfig Include="$(ProjectDir)Config\*.settings" /></ItemGroup>
     <Copy SourceFiles="@(EditorConfig)" DestinationFolder="$(OutDir)Config" SkipUnchangedFiles="true" />
   </Target>
+  <Import Project="LivePP.props" />
+  <Import Project="Reflection.props" />
+  <ItemGroup>
+    <ClCompile Include="Foundation\Reflection\ReflectionArchive.cpp" />
+    <ClCompile Include="Foundation\Reflection\ReinstancingService.cpp" />
+    <ClCompile Include="Runtime\Reflection\ComponentReflection.cpp" />
+    <ClCompile Include="Runtime\Reflection\Generated\GeneratedReflection.cpp" />
+    <ClCompile Include="Editor\Core\EditorReinstancing.cpp" />
+    <ClCompile Include="Editor\Core\EditorWorkspaceReinstancing.cpp" />
+    <ClCompile Include="Platform\Development\LiveCodingAgent.cpp" />
+    <ClInclude Include="Platform\Development\LiveCodingAgent.h" />
+    <None Include="LivePP.props" />
+    <None Include="Docs\LiveCoding.md" />
+    <None Include="Reflection.props" />
+    <None Include="Tools\Reflection\Generate-Reflection.ps1" />
+    <ClInclude Include="Foundation\Reflection\ReflectionMarkers.h" />
+    <ClInclude Include="Foundation\Reflection\ReflectionValue.h" />
+    <ClInclude Include="Foundation\Reflection\ReflectionArchive.h" />
+    <ClInclude Include="Foundation\Reflection\ReinstancingService.h" />
+    <ClInclude Include="Runtime\Reflection\ComponentReflection.h" />
+    <ClInclude Include="Runtime\Reflection\ReflectedInspector.h" />
+    <ClInclude Include="Runtime\Reflection\Generated\GeneratedReflection.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
@@ -515,6 +538,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Editor\Services\EditorHistory.h" />
     <ClInclude Include="Editor\Services\NotificationService.h" />
     <ClInclude Include="Editor\Gui\EditorChrome.h" />
+    <ClInclude Include="Editor\Gui\EditorToolbarRegistry.h" />
+    <ClInclude Include="Editor\Services\ToolbarLayout.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Editor\Gui\ViewportTools.cpp" />

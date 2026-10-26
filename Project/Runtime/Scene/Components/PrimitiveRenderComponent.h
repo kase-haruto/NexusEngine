@@ -1,4 +1,6 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_COMPONENT(PrimitiveRenderComponent, "PrimitiveRender", "component.primitive", tint, enabled, nodeIndex, staticLighting, meshAsset, baseColorTexture, material, shape)
 
 // c++
 #include <array>

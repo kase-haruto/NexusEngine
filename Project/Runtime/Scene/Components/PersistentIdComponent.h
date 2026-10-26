@@ -1,4 +1,7 @@
 #pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+NEXUS_REFLECT_VALUE(PersistentId, "PersistentId", high, low)
+NEXUS_REFLECT_COMPONENT(PersistentIdComponent, "PersistentIdComponent", "", value)
 
 // c++
 #include <cstdint>

@@ -6,6 +6,7 @@
 
 // engine
 #include "Foundation/Logging/Logger.h"
+#include "Platform/Development/LiveCodingAgent.h"
 
 namespace NexusEngine {
 	namespace {
@@ -42,6 +43,7 @@ namespace NexusEngine {
 		Logger::Get().InitializeDefaultSinks();
 
 		try {
+			LiveCodingAgent liveCoding(desc.mode == FrameworkMode::Editor);
 			// 初期化エラーは例外に変換せずResultのまま扱い、終了コード1へ統一する。
 			auto initializeResult = Initialize(desc);
 			if(!initializeResult) {
@@ -54,6 +56,19 @@ namespace NexusEngine {
 			// Runはフレームの順序だけを定義し、個別機能の詳細は各段階へ委譲する。
 			// 将来EditorとGameで処理が分岐しても、このライフサイクル自体は維持する。
 			while(IsRunning()) {
+				// Editor・UI・更新処理から戻ったフレーム境界でのみパッチを適用する。
+				// 将来ワーカーを追加する場合は、移行対象を破棄する前にそちらも停止する。
+				if(liveCoding.WantsReload()) {
+					auto idle = graphicsSystem_.WaitForIdle();
+					if(!idle) {
+						NEXUS_LOG_CRITICAL("Live++", DescribeError(idle.error()));
+						state_ = FrameworkState::Failed;
+						Shutdown();
+						return kRuntimeFailureExitCode;
+					}
+					liveCoding.Reload();
+					previousFrameTime_ = std::chrono::steady_clock::now();
+				}
 				BeginFrame();
 				auto eventResult = ProcessEvents();
 				if(!eventResult) {

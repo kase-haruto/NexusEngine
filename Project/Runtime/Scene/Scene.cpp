@@ -5,6 +5,35 @@
 #include <stdexcept>
 
 namespace NexusEngine {
+	Scene::EntityLayout Scene::CaptureEntityLayout() const {
+		EntityLayout result;
+		for(const auto& slot : entitySlots_) {
+			result.generations.push_back(slot.generation); result.alive.push_back(slot.alive ? uint8_t{1} : uint8_t{0});
+		}
+		result.freeIndices = freeEntityIndices_;
+		return result;
+	}
+	void Scene::RestoreEntityLayout(const EntityLayout& layout) {
+		if(iterationDepth_ || !componentStorages_.empty()) throw std::logic_error("Entity layout requires empty component storages");
+		if(layout.generations.size() != layout.alive.size() || layout.generations.size() >= EntityId::kInvalidIndex)
+			throw std::runtime_error("Invalid reinstanced entity layout");
+		std::vector<EntitySlot> slots; slots.reserve(layout.generations.size());
+		std::vector<bool> free(layout.generations.size(), false);
+		for(auto index : layout.freeIndices) {
+			if(index >= free.size() || free[index] || layout.alive[index])
+				throw std::runtime_error("Invalid reinstanced entity free list");
+			free[index] = true;
+		}
+		size_t living = 0;
+		for(size_t i = 0; i < layout.generations.size(); ++i) {
+			if(layout.generations[i] == 0 || layout.alive[i] > 1 ||
+				(!layout.alive[i] && layout.generations[i] != UINT32_MAX && !free[i]))
+				throw std::runtime_error("Invalid reinstanced entity slot");
+			slots.push_back({layout.generations[i], layout.alive[i] != 0}); living += layout.alive[i];
+		}
+		auto freeIndices = layout.freeIndices;
+		entitySlots_ = std::move(slots); freeEntityIndices_ = std::move(freeIndices); livingEntityCount_ = living;
+	}
 	std::unique_ptr<Scene> Scene::Clone() const {
 		if(iterationDepth_ != 0) return {};
 		auto copy = std::make_unique<Scene>();
@@ -44,7 +73,8 @@ namespace NexusEngine {
 		const EntityId id { entityIndex, slot.generation };
 
 		try {
-			static_cast<void>(AddComponent<NameComponent>(id, NameComponent { std::move(name) }));
+			auto* nameComponent = AddComponent<NameComponent>(id);
+			nameComponent->name = std::move(name);
 			static_cast<void>(AddComponent<TransformComponent>(id));
 		} catch(...) {
 			// Component構築失敗時にEntityだけを公開状態へ残さない。

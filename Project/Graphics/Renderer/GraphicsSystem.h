@@ -43,6 +43,8 @@ namespace NexusEngine {
 		 * \return フレーム描画結果
 		 */
 		[[nodiscard]] Result<void> RenderFrame();
+		/** ライブコーディング前のフレーム境界で、投入済み GPU 処理の完了を待つ。 */
+		[[nodiscard]] Result<void> WaitForIdle();
 		/**
 		 * \brief SwapChain BackBufferを新しいWindowサイズへ変更する
 		 * \param width 新しい描画幅
@@ -77,6 +79,12 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> PrepareSceneViewport();
 		/** \brief UI backend専用の不透明画像参照。UIは資源を生成・解放しない */
 		[[nodiscard]] ViewportImage GetSceneViewportImage() const noexcept;
+		/** 独立したカメラプレビュー。作成・交換は描画命令の記録開始前に行う。 */
+		[[nodiscard]] Result<void> ReplaceCameraPreviewRenderer(IGraphicsRenderer* renderer);
+		/** GPU idle後にプレビュー資源を解放する。モデル差し替え時の旧Asset保持を防ぐ。 */
+		[[nodiscard]] Result<void> ReleaseCameraPreviewRenderer();
+		void SetCameraPreviewActive(bool active) noexcept;
+		[[nodiscard]] ViewportImage GetCameraPreviewImage() const noexcept;
 
 	private:
 		class Impl;

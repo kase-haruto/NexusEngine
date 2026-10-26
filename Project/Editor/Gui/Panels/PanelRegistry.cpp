@@ -36,7 +36,13 @@ void PanelRegistry::Draw(const EditorContext& context, bool disableEditing) {
         // 保存済み配置にない新規Panelも、Empty Stateの折返しで極小幅にならないようにする。
         // FirstUseEverなので既存のDock配置や利用者が変更したサイズは維持する。
         ImGui::SetNextWindowSize({360, 480}, ImGuiCond_FirstUseEver);
-        if(ImGui::Begin(title.c_str(), &entry.isOpen)) {
+        // パネルが宣言したスクロール方針を、Windowを開く前にフラグへ反映する。
+        // ホイールのパネルスクロールだけを止めるため、Viewport側のカメラ操作は継続できる。
+        ImGuiWindowFlags flags = ImGuiWindowFlags_None;
+        if(!entry.panel->IsScrollable()) {
+            flags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        }
+        if(ImGui::Begin(title.c_str(), &entry.isOpen, flags)) {
             // DisabledAlpha also dims Image vertices. Keep the runtime viewport at full
             // brightness while preventing edits in the other panels during Play.
             ImGui::BeginDisabled(disableEditing && entry.Id() != "Viewport");

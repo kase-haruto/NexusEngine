@@ -93,12 +93,20 @@ private:
  *---------------------------------------------------------------------------------------*/
 class ViewportPanel final : public IEditorPanel {
 public:
-    ViewportPanel(ViewportSession& session, ViewportTools& tools) : session_(session), tools_(tools) {}
+    ViewportPanel(ViewportSession& session, ViewportTools& tools, std::shared_ptr<BufferedLogBuffer> logs = {})
+        : session_(session), tools_(tools), logs_(std::move(logs)) {}
     std::string_view Id() const noexcept override { return "Viewport"; }
     std::string_view TitleKey() const noexcept override { return "panel.viewport"; }
+    /** 映像は表示領域へ合わせるため、パネル自体のスクロールは使用しない。 */
+    bool IsScrollable() const noexcept override {
+        return false;
+    }
     void Draw(const EditorContext& context) override;
 private:
     ViewportSession& session_; //< host所有
     ViewportTools& tools_; //< host所有。GPUへ直接アクセスしない
+    std::shared_ptr<BufferedLogBuffer> logs_;
+    uint64_t logRevision_ = 0;
+    std::vector<OwnedLogRecord> records_;
 };
 }

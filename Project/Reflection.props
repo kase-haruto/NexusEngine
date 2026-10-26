@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NexusReflectionRoot>$(MSBuildThisFileDirectory)</NexusReflectionRoot>
+  </PropertyGroup>
+  <Target Name="GenerateNexusReflection" BeforeTargets="ClCompile">
+    <Exec Command="&quot;$(SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusReflectionRoot)Tools\Reflection\Generate-Reflection.ps1&quot; -ProjectRoot &quot;$(NexusReflectionRoot).&quot;" />
+  </Target>
+</Project>

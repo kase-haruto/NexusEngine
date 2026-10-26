@@ -72,7 +72,16 @@ void RegisterPropertyPages(PropertyCategoryRegistry& registry) {
     registry.Register({"Material", "properties.material", 300, MaterialPage::IsAvailable, MaterialPage::Draw, MaterialIcon, {"PrimitiveRender"}});
     registry.Register({"Camera", "properties.camera", 400,
         [](const auto& context) { return HasType(context, "Camera"); },
-        [](const auto& context) { DrawType(context, "Camera"); }, CameraIcon, {"Camera"}});
+        [](const auto& context) {
+            DrawType(context, "Camera");
+            const auto id = context.session.GetSelection();
+            const bool active = context.session.GetCameraPreview() == id;
+            if(ImGui::Button(context.text.Label(active ? "viewport.previewStop" : "viewport.previewStart", "CameraPreview").c_str())) {
+                if(active) context.session.ClearCameraPreview();
+                else context.session.SetCameraPreview(id);
+            }
+            ImGui::TextWrapped("%s", context.text.Text("viewport.previewHelp").c_str());
+        }, CameraIcon, {"Camera"}});
     registry.Register({"Light", "properties.light", 500,
         [](const auto& context) { return HasType(context, "DirectionalLight"); },
         [](const auto& context) { DrawType(context, "DirectionalLight"); }, LightIcon, {"DirectionalLight"}});
