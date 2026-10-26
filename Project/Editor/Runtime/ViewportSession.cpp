@@ -28,6 +28,7 @@ void ViewportSession::Detach() noexcept {
     frame_.reset(); connection_ = nullptr; frames_ = nullptr; textures_ = nullptr;
     width_ = height_ = 0; generation_ = 0;
     localTextures_ = nullptr; localTexture_ = {}; localResize_ = {};
+    cameraPreviewTexture_ = {}; cameraPreviewVisible_ = false;
 }
 bool ViewportSession::Resize(uint32_t width, uint32_t height) {
     if(localTextures_) {

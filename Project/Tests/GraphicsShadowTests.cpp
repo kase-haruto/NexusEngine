@@ -23,6 +23,7 @@
 #include "Graphics/Renderer/GraphicsContext.h"
 #include "Graphics/Renderer/GraphicsResourceFactory.h"
 #include "Graphics/Renderer/PrimitiveRenderer.h"
+#include "Graphics/Renderer/GraphicsSystem.h"
 #include "Graphics/Lighting/LightBaker.h"
 #include "Graphics/Lighting/LightmapGeometry.h"
 #include "Graphics/Shadow/ShadowSystem.h"
@@ -31,6 +32,18 @@
 namespace NexusEngine {
 	class GraphicsBackendTestAccess {
 	public:
+        static ID3D12Device* Device(GraphicsResourceFactory& factory) { return static_cast<ID3D12Device*>(factory.nativeDevice_); }
+        static void AllocateViewDescriptors(GraphicsContext& context, const ConstantBuffer& buffer) {
+            for(int i=0;i<200;++i) {
+                auto result = context.transientDescriptors_->CreateConstantBufferView(context.frameIndex_,
+                    buffer.GetGpuAddress(context.frameIndex_), static_cast<uint32_t>(buffer.GetAlignedSliceSize()));
+                if(!result) throw std::runtime_error(result.error().GetMessageText());
+            }
+        }
+        static void Listen(GraphicsContext& context, void* owner, void (*callback)(void*, bool, uint32_t)) {
+            const auto result = context.RegisterRecording(owner, callback);
+            if(!result) throw std::runtime_error(result.error().GetMessageText());
+        }
 		static void Connect(GraphicsResourceFactory& factory, GraphicsDevice& device, CommandQueue& queue,
 			BindlessDescriptorTable& bindless, DescriptorManager& descriptors, bool forceUnsupported = false) {
 			factory.ConnectBackend(device.GetDevice(), &queue, &bindless, 2, &descriptors,
@@ -827,11 +840,15 @@ namespace {
 
 #include "ColorManagementTests.inl"
 #include "EnvironmentLightingTests.inl"
+#include "ViewportRenderingTests.inl"
 
 int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+        if(argc == 2 && std::strcmp(argv[1], "--viewport-preview") == 0) {
+            ViewportRenderingTests(false); ViewportRenderingTests(true); return 0;
+        }
         if(argc == 2 && std::strcmp(argv[1], "--primitives") == 0) {
             for(auto shape : {PrimitiveShape::Cube,PrimitiveShape::Sphere,PrimitiveShape::Plane,PrimitiveShape::Cylinder,PrimitiveShape::Cone})
                 ForwardIntegration(false,false,false,0,false,false,0,0,4,0,false,false,false,shape);

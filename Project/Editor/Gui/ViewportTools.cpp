@@ -13,12 +13,27 @@ ReflectionValue ViewportTools::CaptureForReinstancing() {
     ImGuizmo::Enable(false); ImGuizmo::Enable(true);
     return ReflectionValue(ReflectionValue::Object{
         {"camera", CaptureReflection(std::array<float, 5>{position_.x, position_.y, position_.z, yaw_, pitch_})},
+        {"viewSettings", CaptureReflection(std::array<float, 2>{cameraSpeed_, fieldOfView_})},
+        {"snapSteps", CaptureReflection(snapSteps_)},
+        {"localSpace", CaptureReflection(localSpace_)}, {"snapping", CaptureReflection(snapping_)},
+        {"guides", CaptureReflection(guidesVisible_)}, {"diagnostics", CaptureReflection(showDiagnostics_)},
+        {"previewSize", CaptureReflection(previewSize_)},
         {"mode", CaptureReflection(mode_)}, {"gizmo", CaptureReflection(gizmoVisible_)}});
 }
 void ViewportTools::RestoreAfterReinstancing(const ReflectionValue& snapshot) {
     std::array<float, 5> camera{}; RestoreReflection(snapshot.At("camera"), camera);
     position_ = {camera[0], camera[1], camera[2]}; yaw_ = camera[3]; pitch_ = camera[4];
     RestoreReflection(snapshot.At("mode"), mode_); RestoreReflection(snapshot.At("gizmo"), gizmoVisible_);
+    // 古いコードで取得したスナップショットからも復元できるよう、新規項目は存在を確認する。
+    const auto& fields = std::get<ReflectionValue::Object>(snapshot.data);
+    if(fields.contains("viewSettings")) {
+        std::array<float, 2> settings{}; RestoreReflection(snapshot.At("viewSettings"), settings);
+        cameraSpeed_ = settings[0]; fieldOfView_ = settings[1];
+        RestoreReflection(snapshot.At("snapSteps"), snapSteps_);
+        RestoreReflection(snapshot.At("localSpace"), localSpace_); RestoreReflection(snapshot.At("snapping"), snapping_);
+        RestoreReflection(snapshot.At("guides"), guidesVisible_); RestoreReflection(snapshot.At("diagnostics"), showDiagnostics_);
+        RestoreReflection(snapshot.At("previewSize"), previewSize_);
+    }
     generation_ = session_.Generation();
 }
 namespace {
@@ -131,6 +146,18 @@ void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     PrepareCameraGuides(aspect);
     if(generation_ != session_.Generation()) {
         generation_ = session_.Generation(); position_ = {0,2,-10}; yaw_ = pitch_ = 0;
+        // 編集開始時の視点は既存の主カメラへ合わせる。複数配置でも編集は継続できる。
+        if(!frame.camera) if(auto* level = session_.GetLevel(); level && level->GetScene()) {
+            bool found = false;
+            level->GetScene()->ForEach<TransformComponent, CameraComponent>([&](Entity, TransformComponent& transform, CameraComponent& camera) {
+                if(found || !camera.enabled || !camera.primary) return;
+                const auto forward = Point({0,0,1}, transform.worldMatrix, 0).Normalized();
+                if(!TryInverse(transform.worldMatrix) || !std::isfinite(forward.y)) return;
+                position_ = Point({}, transform.worldMatrix);
+                yaw_ = std::atan2(forward.x,forward.z); pitch_ = -std::asin(std::clamp(forward.y,-1.0f,1.0f));
+                found = true;
+            });
+        }
         if(frame.camera) if(auto world = TryInverse(frame.camera->viewMatrix)) {
             position_ = Point({},*world); const auto forward = Point({0,0,1},*world,0).Normalized();
             yaw_ = std::atan2(forward.x,forward.z); pitch_ = -std::asin(std::clamp(forward.y,-1.0f,1.0f));
@@ -139,14 +166,14 @@ void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     const auto world = MakeAffineMatrix(Vector3::One(), Quaternion::FromEulerRadians({pitch_,yaw_,0}), position_);
     const auto view = TryInverse(world);
     if(!view || aspect <= 0) return;
-    const auto projection = MakePerspectiveFovMatrix(1.0471975512f,aspect,0.05f,100000.0f);
+    const auto projection = MakePerspectiveFovMatrix(fieldOfView_*0.01745329252f,aspect,0.05f,100000.0f);
     frame.camera = RenderCamera{{}, *view, projection, Multiply(*view,projection)};
 }
 bool ViewportTools::Pick(float x, float y, bool toggle) {
     if(session_.IsPlaying() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera ||
         !std::isfinite(x) || !std::isfinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
     auto* level = session_.GetLevel();
-    if(level && level->GetScene() && viewportWidth_>0 && viewportHeight_>0) {
+    if(guidesVisible_ && level && level->GetScene() && viewportWidth_>0 && viewportHeight_>0) {
         auto icons=SceneIcons(*level->GetScene(),frame_->camera->viewProjectionMatrix);
         // Icons are overlays; the frontmost visible icon wins before mesh picking.
         for(auto it=icons.rbegin();it!=icons.rend();++it) {
@@ -233,14 +260,60 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
 }
 void ViewportTools::DrawToolbar(const LocalizationService& text) {
     ImGui::BeginDisabled(IsManipulating());
+    const float toolbarRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
     static constexpr const char* keys[]{"viewport.translate","viewport.rotate","viewport.scale"};
+    static constexpr const char* labels[]{"W", "E", "R"};
     for(int i = 0; i < 3; ++i) {
         if(i) ImGui::SameLine();
-        if(ImGui::RadioButton(text.Label(keys[i],keys[i]).c_str(),mode_ == i)) { properties_.Commit(); mode_ = i; }
+        const bool active = mode_ == i;
+        if(active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive));
+        if(ImGui::Button(labels[i], {ImGui::GetFrameHeight()*1.25f, 0})) { properties_.Commit(); mode_ = i; }
+        if(active) ImGui::PopStyleColor();
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text.Text(keys[i]).c_str());
     }
-    ImGui::TextDisabled("%s",text.Text("viewport.controls").c_str());
+    const auto next = [&](const std::string& label) {
+        const float spacing = ImGui::GetStyle().ItemSpacing.x*2;
+        const float buttonWidth = ImGui::CalcTextSize(label.c_str()).x + ImGui::GetStyle().FramePadding.x*2;
+        if(ImGui::GetItemRectMax().x + spacing + buttonWidth <= toolbarRight) ImGui::SameLine(0, spacing);
+    };
+    next(text.Text(localSpace_ ? "viewport.local" : "viewport.world"));
+    if(ImGui::Button(text.Text(localSpace_ ? "viewport.local" : "viewport.world").c_str())) localSpace_ = !localSpace_;
+    next(text.Text("viewport.snap"));
+    if(ImGui::Button(text.Text("viewport.snap").c_str())) ImGui::OpenPopup("ViewportSnap");
+    if(ImGui::BeginPopup("ViewportSnap")) {
+        ImGui::Checkbox(text.Text("viewport.snapEnabled").c_str(), &snapping_);
+        for(int i=0;i<3;++i) {
+            ImGui::SetNextItemWidth(ImGui::GetFontSize()*8);
+            ImGui::DragFloat(text.Text(keys[i]).c_str(), &snapSteps_[i], i==1 ? 1.0f : .05f, .001f, i==1 ? 180.0f : 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            snapSteps_[i] = std::clamp(snapSteps_[i], .001f, i==1 ? 180.0f : 1000.0f);
+        }
+        ImGui::EndPopup();
+    }
+    next(text.Text("viewport.cameraTools"));
+    if(ImGui::Button(text.Text("viewport.cameraTools").c_str())) ImGui::OpenPopup("ViewportCamera");
+    if(ImGui::BeginPopup("ViewportCamera")) {
+        ImGui::SetNextItemWidth(ImGui::GetFontSize()*12);
+        ImGui::SliderFloat(text.Text("viewport.cameraSpeed").c_str(), &cameraSpeed_, .1f, 100, "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize()*12);
+        ImGui::SliderFloat(text.Text("viewport.fov").c_str(), &fieldOfView_, 10, 150, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+        if(ImGui::MenuItem(text.Text("viewport.focus").c_str(), "F")) FocusSelection();
+        ImGui::EndPopup();
+    }
+    next(text.Text("viewport.show"));
+    if(ImGui::Button(text.Text("viewport.show").c_str())) ImGui::OpenPopup("ViewportShow");
+    if(ImGui::BeginPopup("ViewportShow")) {
+        ImGui::Checkbox(text.Text("settings.gizmo").c_str(), &gizmoVisible_);
+        ImGui::Checkbox(text.Text("viewport.guides").c_str(), &guidesVisible_);
+        ImGui::Checkbox(text.Text("viewport.diagnostics").c_str(), &showDiagnostics_);
+        ImGui::SeparatorText(text.Text("viewport.previewSize").c_str());
+        static constexpr const char* sizeKeys[]{"viewport.small", "viewport.medium", "viewport.large"};
+        for(int i=0;i<3;++i) if(ImGui::RadioButton(text.Text(sizeKeys[i]).c_str(), previewSize_ == i)) previewSize_ = i;
+        ImGui::EndPopup();
+    }
     ImGui::EndDisabled();
-    if(gizmoRejected_) ImGui::TextWrapped("%s", text.Text("viewport.gizmoRejected").c_str());
+    if(gizmoRejected_) session_.Diagnostics().Set("gizmo", text.Text("viewport.gizmoRejected"));
+    else session_.Diagnostics().Resolve("gizmo");
+    ImGui::Separator();
 }
 std::optional<ViewportTools::Bounds> ViewportTools::GetEntityLocalBounds(Entity entity) const {
     if(frame_ && model_ && pose_ && entity.IsAlive()) {
@@ -400,18 +473,19 @@ void ViewportTools::DrawSceneGuides(float x, float y, float width, float height)
         }
     }
 }
-void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
+void ViewportTools::DrawOverlay(float x, float y, float width, float height, bool inputBlocked) {
     viewportWidth_=width; viewportHeight_=height;
     if(session_.IsPlaying() || !frame_ || !frame_->camera || !std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0) return;
-    const auto& io = ImGui::GetIO(); const bool hovered = ImGui::IsItemHovered();
-    DrawSceneGuides(x,y,width,height);
+    inputBlocked |= ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+    const auto& io = ImGui::GetIO(); const bool hovered = !inputBlocked && ImGui::IsItemHovered();
+    if(guidesVisible_) DrawSceneGuides(x,y,width,height);
     if(hovered && !IsManipulating() && ImGui::IsMouseClicked(1)) { navigating_ = true; ImGui::SetWindowFocus(); }
-    if(!ImGui::IsMouseDown(1) || !ImGui::IsWindowFocused() || io.AppFocusLost) navigating_ = false;
+    if(!ImGui::IsMouseDown(1) || !ImGui::IsWindowFocused() || io.AppFocusLost || inputBlocked) navigating_ = false;
     if(navigating_ && !io.WantTextInput) {
         yaw_ += io.MouseDelta.x*0.004f; pitch_ = std::clamp(pitch_+io.MouseDelta.y*0.004f,-1.55f,1.55f);
         const auto camera = MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({pitch_,yaw_,0}),{});
         const auto right = Point({1,0,0},camera,0), forward = Point({0,0,1},camera,0);
-        const float distance = std::min(io.DeltaTime,0.1f)*(io.KeyShift ? 50.0f : 10.0f);
+        const float distance = std::min(io.DeltaTime,0.1f)*cameraSpeed_*(io.KeyShift ? 5.0f : 1.0f);
         if(ImGui::IsKeyDown(ImGuiKey_W)) position_ = position_+forward*distance;
         if(ImGui::IsKeyDown(ImGuiKey_S)) position_ = position_-forward*distance;
         if(ImGui::IsKeyDown(ImGuiKey_D)) position_ = position_+right*distance;
@@ -423,7 +497,7 @@ void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
         const auto camera = MakeAffineMatrix(Vector3::One(),Quaternion::FromEulerRadians({pitch_,yaw_,0}),{});
         position_ = position_+Point({0,0,1},camera,0)*io.MouseWheel*2;
     }
-    if(ImGui::IsWindowFocused() && !io.WantTextInput && !navigating_ && !IsManipulating() && !ImGui::IsAnyItemActive()) {
+    if(!inputBlocked && ImGui::IsWindowFocused() && !io.WantTextInput && !navigating_ && !IsManipulating() && !ImGui::IsAnyItemActive()) {
         if(ImGui::IsKeyPressed(ImGuiKey_W,false)) mode_ = 0;
         if(ImGui::IsKeyPressed(ImGuiKey_E,false)) mode_ = 1;
         if(ImGui::IsKeyPressed(ImGuiKey_R,false)) mode_ = 2;
@@ -440,16 +514,16 @@ void ViewportTools::DrawOverlay(float x, float y, float width, float height) {
         ImGuizmo::SetRect(x,y,width,height);
         ImGuizmo::SetOrthographic(false);
         ImGuizmo::PushID("NexusViewport");
-        ImGuizmo::Enable(!navigating_ && !blockedUntilRelease_ && !io.AppFocusLost);
+        ImGuizmo::Enable(!inputBlocked && !navigating_ && !blockedUntilRelease_ && !io.AppFocusLost);
         auto edited = *pivot;
         const auto before = edited;
         const ImGuizmo::OPERATION operations[]{ImGuizmo::TRANSLATE,ImGuizmo::ROTATE,ImGuizmo::SCALE};
-        const float step = mode_ == 0 ? .5f : mode_ == 1 ? 15.0f : .1f;
+        const float step = snapSteps_[mode_];
         const float snap[]{step,step,step};
         // Engineはrow-vector/row-major。ImGuizmoのfloat[16]と同じ配置なので転置しない。
         const bool changed = ImGuizmo::Manipulate(frame_->camera->viewMatrix.elements.data(),
-            frame_->camera->projectionMatrix.elements.data(),operations[mode_],ImGuizmo::LOCAL,
-            edited.elements.data(),nullptr,io.KeyCtrl ? snap : nullptr);
+            frame_->camera->projectionMatrix.elements.data(),operations[mode_],localSpace_ ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+            edited.elements.data(),nullptr,(snapping_ || io.KeyCtrl) ? snap : nullptr);
         const bool usingGizmo = ImGuizmo::IsUsing();
         // IsOver()は前Frameのhoverを返す。今Frameのハンドルを使い、瞬間的なclickも消費する。
         gizmoHovered = ImGuizmo::GetHoveredHandleType() != ImGuizmo::MT_NONE || usingGizmo;

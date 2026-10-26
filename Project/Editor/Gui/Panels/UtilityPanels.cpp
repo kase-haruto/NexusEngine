@@ -2,9 +2,11 @@
 #include "Editor/Gui/Widgets/SearchBar.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/SelectionService.h"
+#include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Gui/Widgets/AssetPropertyWidget.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/imgui_internal.h"
+#include "Runtime/Scene/Components/CameraComponent.h"
 #include <cstdio>
 #include <algorithm>
 #include <ctime>
@@ -269,15 +271,109 @@ void PreferencesPanel::Draw(const EditorContext& context) {
 void ViewportPanel::Draw(const EditorContext& context) {
     static constexpr const char* states[] = {"runtime.disconnected", "runtime.starting", "runtime.connected", "runtime.running", "runtime.paused", "runtime.stopping", "runtime.error"};
     auto state = static_cast<size_t>(session_.State());
-    ImGui::TextUnformatted(context.text.Text(session_.IsLocalPreview() ? "runtime.localPreview" : states[state < 7 ? state : 6]).c_str());
-    if(session_.IsLocalPreview() && !context.session.IsPlaying()) tools_.DrawToolbar(context.text);
+    if(session_.IsLocalPreview()) tools_.DrawToolbar(context.text);
+    else ImGui::TextUnformatted(context.text.Text(states[state < 7 ? state : 6]).c_str());
     const auto size = ImGui::GetContentRegionAvail();
     if(size.x < 1 || size.y < 1) { session_.Resize(0, 0); return; }
     session_.Resize(static_cast<uint32_t>(std::min(size.x, 16384.0f)), static_cast<uint32_t>(std::min(size.y, 16384.0f)));
     if(auto image = session_.Image(); image && image->IsValid()) {
         const auto origin = ImGui::GetCursorScreenPos();
         ImGui::Image(static_cast<ImTextureID>(image->nativeId), size);
-        if(session_.IsLocalPreview()) { tools_.DrawOverlay(origin.x, origin.y, size.x, size.y); return; }
+        if(session_.IsLocalPreview()) {
+            const auto imageEnd = ImGui::GetCursorScreenPos();
+            const float padding = ImGui::GetStyle().WindowPadding.x;
+            const float line = ImGui::GetTextLineHeightWithSpacing();
+            const float header = ImGui::GetFrameHeightWithSpacing();
+            const float requestedWidths[]{220, 320, 480};
+            float previewWidth = std::min(requestedWidths[tools_.PreviewSize()] * ImGui::GetFontSize()/16,
+                std::min(size.x*.48f, (size.y-header-padding*4)*16/9));
+            const bool showPreview = context.session.GetCameraPreview().IsValid() && previewWidth >= 120;
+            const ImVec2 previewSize{previewWidth, previewWidth*9/16 + header + padding*2};
+            const ImVec2 previewOrigin{origin.x+size.x-previewSize.x-padding, origin.y+size.y-previewSize.y-padding};
+            session_.SetCameraPreviewVisible(showPreview);
+
+            // 操作通知は短時間、問題の診断は解消されるまで表示する。
+            std::vector<ViewportDiagnostics::Item> messages;
+            if(tools_.ShowDiagnostics()) {
+                for(const auto& [key, item] : context.session.Diagnostics().Items()) {
+                    static_cast<void>(key); messages.push_back(item);
+                }
+                if(logs_) if(auto snapshot = logs_->SnapshotIfChanged(logRevision_)) records_ = std::move(*snapshot);
+                const auto cutoff = std::chrono::system_clock::now() - std::chrono::seconds(8);
+                for(auto it = records_.rbegin(); it != records_.rend(); ++it) {
+                    if(it->timestamp < cutoff || it->level < LogLevel::Warning) continue;
+                    const std::string message = "[" + it->category + "] " + it->message;
+                    if(std::ranges::none_of(messages, [&](const auto& item) { return item.text == message; }))
+                        messages.push_back({message, it->level >= LogLevel::Error});
+                }
+                std::stable_sort(messages.begin(), messages.end(), [](const auto& a, const auto& b) { return a.error > b.error; });
+            }
+            const size_t shown = std::min<size_t>(4, messages.size());
+            const float diagnosticWidth = std::min(size.x-padding*2, ImGui::GetFontSize()*38);
+            const ImVec2 diagnosticOrigin{origin.x+padding, origin.y+padding};
+            const ImVec2 diagnosticSize{diagnosticWidth, line*static_cast<float>(shown)+header+padding*2};
+            const bool showMessages = shown && diagnosticWidth >= 120 && diagnosticSize.y < size.y*.5f;
+            const auto mouse = ImGui::GetMousePos();
+            const auto inside = [&](ImVec2 p, ImVec2 extent) {
+                return mouse.x >= p.x && mouse.y >= p.y && mouse.x < p.x+extent.x && mouse.y < p.y+extent.y;
+            };
+            // 子パネルを描く前に画像のhoverを使い、オーバーレイから背後への入力を遮断する。
+            tools_.DrawOverlay(origin.x, origin.y, size.x, size.y,
+                (showPreview && inside(previewOrigin, previewSize)) || (showMessages && inside(diagnosticOrigin, diagnosticSize)));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(.035f,.045f,.06f,.94f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6);
+            const auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings;
+            if(showMessages) {
+                ImGui::SetCursorScreenPos(diagnosticOrigin);
+                ImGui::BeginChild("ViewportDiagnostics", diagnosticSize, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding, flags);
+                for(size_t i=0;i<shown;++i) {
+                    auto message = messages[i].text;
+                    std::replace(message.begin(), message.end(), '\n', ' ');
+                    std::replace(message.begin(), message.end(), '\r', ' ');
+                    ImGui::TextColored(messages[i].error ? ImVec4(1,.32f,.3f,1) : ImVec4(1,.78f,.25f,1),
+                        "%s %s", context.text.Text(messages[i].error ? "log.error" : "log.warning").c_str(), message.c_str());
+                    if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s", messages[i].text.c_str());
+                }
+                if(ImGui::SmallButton(context.text.Text("viewport.openLog").c_str())) context.commands.Execute("viewport.openLog");
+                if(messages.size()>shown) { ImGui::SameLine(); ImGui::TextDisabled("+%zu", messages.size()-shown); }
+                ImGui::EndChild();
+            }
+            if(showPreview) {
+                ImGui::SetCursorScreenPos(previewOrigin);
+                ImGui::BeginChild("CameraPreview", previewSize, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding, flags);
+                auto* level = context.session.GetPreviewLevel();
+                const auto entity = level ? level->FindEntity(context.session.GetCameraPreview()) : Entity{};
+                const auto* name = entity.GetComponent<NameComponent>();
+                const auto* camera = entity.GetComponent<CameraComponent>();
+                const float closeWidth = std::max(ImGui::GetFrameHeight(), ImGui::CalcTextSize("X").x+ImGui::GetStyle().FramePadding.x*2);
+                ImGui::SetNextItemWidth(std::max(40.0f, ImGui::GetContentRegionAvail().x-closeWidth-ImGui::GetStyle().ItemSpacing.x));
+                if(ImGui::BeginCombo("##PreviewCamera", name ? name->name.c_str() : "Camera")) {
+                    if(auto* editLevel = context.session.GetLevel(); editLevel && editLevel->GetScene())
+                        editLevel->GetScene()->ForEach<CameraComponent, PersistentIdComponent>([&](Entity candidate, CameraComponent&, PersistentIdComponent& id) {
+                            const auto* candidateName = candidate.GetComponent<NameComponent>();
+                            const auto label = (candidateName ? candidateName->name : "Camera") + "###" + std::to_string(id.value.high) + ":" + std::to_string(id.value.low);
+                            if(ImGui::Selectable(label.c_str(), id.value == context.session.GetCameraPreview())) context.session.SetCameraPreview(id.value);
+                        });
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine();
+                if(ImGui::Button("X##StopPreview", {closeWidth, 0})) context.session.ClearCameraPreview();
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s", context.text.Text("viewport.previewStop").c_str());
+                const auto available = ImGui::GetContentRegionAvail();
+                const float w = std::min(available.x, available.y*16/9);
+                const ImVec2 position = ImGui::GetCursorScreenPos();
+                if(auto preview = session_.CameraPreviewImage(); preview && preview->IsValid() && w > 0) {
+                    ImGui::SetCursorScreenPos({position.x+(available.x-w)*.5f, position.y+(available.y-w*9/16)*.5f});
+                    ImGui::Image(static_cast<ImTextureID>(preview->nativeId), {w,w*9/16});
+                    if(camera && !camera->enabled) ImGui::GetWindowDrawList()->AddText({position.x+4,position.y+4}, IM_COL32(255,200,65,255), context.text.Text("viewport.cameraDisabled").c_str());
+                } else ImGui::TextWrapped("%s", context.text.Text("viewport.previewPending").c_str());
+                ImGui::EndChild();
+            }
+            ImGui::PopStyleVar(); ImGui::PopStyleColor();
+            ImGui::SetCursorScreenPos(imageEnd);
+            ImGui::Dummy({0, 0});
+            return;
+        }
         if(ImGui::IsItemHovered()) {
             const auto mouse = ImGui::GetMousePos();
             float x = (mouse.x - origin.x) / size.x, y = (mouse.y - origin.y) / size.y;

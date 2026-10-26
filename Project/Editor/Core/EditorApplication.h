@@ -90,6 +90,10 @@ namespace NexusEngine {
 		size_t sceneGeneration_ = 0;
         std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
         std::unique_ptr<PrimitiveRenderer> replacementRenderer_; //< GraphicsSystem停止まで保持する交換Renderer
+        std::unique_ptr<PrimitiveRenderer> cameraPreviewRenderer_; //< プレビュー専用GPU資源。GraphicsSystem停止まで保持する
+        RenderScene cameraPreviewScene_;
+        size_t previewAssetRevision_ = 0;
+        bool previewInitializationFailed_ = false;
         size_t uploadedAssetRevision_ = 1; //< GPUへ反映済みsnapshot
         std::set<std::string> reportedAssetErrors_; //< 同じ欠損参照による毎Frameのログ連打を防ぐ
 		std::array<char, 1024> environmentPath_ {}; //< Editor入力。RendererはScene設定だけを参照する

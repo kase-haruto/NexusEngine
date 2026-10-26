@@ -128,8 +128,11 @@ namespace NexusEngine {
 	}
 
 	std::optional<UI::ResolvedTexture> ImGuiRenderer::Resolve(UI::TextureHandle texture) const noexcept {
-		if(!initialized_ || !graphicsSystem_ || texture.value != SceneViewportTexture.value) return {};
-		const auto image = graphicsSystem_->GetSceneViewportImage();
+		if(!initialized_ || !graphicsSystem_) return {};
+		ViewportImage image;
+		if(texture.value == SceneViewportTexture.value) image = graphicsSystem_->GetSceneViewportImage();
+		else if(texture.value == CameraPreviewTexture.value) image = graphicsSystem_->GetCameraPreviewImage();
+		else return {};
 		if(!image.backendReference || !image.width || !image.height) return {};
 		return UI::ResolvedTexture{image.backendReference, image.width, image.height};
 	}

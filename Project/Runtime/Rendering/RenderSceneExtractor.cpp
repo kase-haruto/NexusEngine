@@ -33,7 +33,7 @@ namespace NexusEngine {
 		return result;
 	}
 
-	Result<void> RenderSceneExtractor::ExtractInto(Scene& scene, const float aspectRatio, RenderScene& result) const {
+	Result<void> RenderSceneExtractor::ExtractInto(Scene& scene, const float aspectRatio, RenderScene& result, bool includePrimaryCamera) const {
 		if(!std::isfinite(aspectRatio) || aspectRatio <= 0.0f) {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidViewport, "Render viewport aspect ratio must be positive and finite."));
 		}
@@ -83,6 +83,7 @@ namespace NexusEngine {
 				}
 			});
 
+		if(!includePrimaryCamera) return {};
 		std::optional<Error> cameraError;
 		scene.ForEach<TransformComponent, CameraComponent>(
 			[&](Entity entity, TransformComponent& transform, CameraComponent& camera) {

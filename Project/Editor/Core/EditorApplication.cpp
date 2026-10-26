@@ -8,6 +8,7 @@
 #include "Graphics/Renderer/GraphicsSystem.h"
 #include "Samples/OpticalDemoScene.h"
 #include "Foundation/Logging/Logger.h"
+#include "Runtime/Scene/Components/CameraComponent.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "Graphics/Color/ColorSpace.h"
 #include <cmath>
@@ -413,6 +414,7 @@ namespace NexusEngine {
 		workspace_->Commands().Register("tools.rendererDiagnostics", {
 			[this] { showLegacyDiagnostics_ = !showLegacyDiagnostics_; }, {}});
 		workspace_->Menu().RegisterTool({"tools.rendererDiagnostics", "tools.rendererDiagnostics"});
+		workspace_->Viewport().SetCameraPreviewTexture(ImGuiRenderer::CameraPreviewTexture);
 
 		return {};
 	}
@@ -473,11 +475,14 @@ namespace NexusEngine {
 		auto* preview = session_.GetPreviewLevel();
 		if(preview == nullptr || preview->GetScene() == nullptr || sceneHeight == 0) return {};
 		const float aspect = static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight);
-		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_);
-        if(extracted && modelLibrary_) {
+		if(graphicsSystem_) graphicsSystem_->SetCameraPreviewActive(false);
+		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_, session_.IsPlaying());
+		size_t missingAssets = 0;
+		if(extracted && modelLibrary_) {
             for(auto& item : renderScene_.primitives) {
                 auto range = modelLibrary_->Resolve(item.shape, item.meshAsset, item.baseColorTexture);
                 if(!range) {
+                    ++missingAssets;
                     const auto key = std::to_string(static_cast<uint32_t>(item.shape)) + "\n" + item.meshAsset + "\n" + item.baseColorTexture;
                     if(reportedAssetErrors_.insert(key).second) NEXUS_LOG_ERROR("Assets", range.error().GetMessageText());
                     item.nodeEnd = 0;
@@ -515,8 +520,59 @@ namespace NexusEngine {
                 if(workspace_) workspace_->ViewportEditor().SetModel(modelAsset_, modelPose_);
             }
         }
-		if(extracted && workspace_) workspace_->ViewportEditor().Prepare(renderScene_, aspect);
-		return extracted;
+		if(missingAssets) session_.Diagnostics().Set("assets", std::to_string(missingAssets) + " asset references could not be loaded. See Output Log.", true);
+		else session_.Diagnostics().Resolve("assets");
+		if(!extracted) {
+			session_.Diagnostics().Set("scene", extracted.error().GetMessageText(), true);
+			// 描画抽出に失敗したフレームは古い映像を描かず、診断を表示して編集を継続する。
+			renderScene_.primitives.clear(); renderScene_.camera.reset();
+		} else session_.Diagnostics().Resolve("scene");
+		if(workspace_) workspace_->ViewportEditor().Prepare(renderScene_, aspect);
+		if(extracted && graphicsSystem_ && workspace_ && session_.GetCameraPreview().IsValid()) {
+			auto camera = session_.ResolveCameraPreview(16.0f / 9.0f);
+			if(!camera) session_.Diagnostics().Set("preview.camera", camera.error().GetMessageText(), true);
+			else {
+				session_.Diagnostics().Resolve("preview.camera");
+				if(workspace_->Viewport().IsCameraPreviewVisible()) {
+					cameraPreviewScene_ = renderScene_;
+					cameraPreviewScene_.camera = *camera;
+					for(auto& item : cameraPreviewScene_.primitives) item.selected = false;
+					if(previewAssetRevision_ != uploadedAssetRevision_) previewInitializationFailed_ = false;
+					if((!cameraPreviewRenderer_ || previewAssetRevision_ != uploadedAssetRevision_) && !previewInitializationFailed_) {
+						auto renderer = std::make_unique<PrimitiveRenderer>();
+						renderer->SetRenderScene(&cameraPreviewScene_); renderer->SetModelInput(&modelAsset_, &modelPose_);
+						auto result = graphicsSystem_->ReplaceCameraPreviewRenderer(renderer.get());
+						previewAssetRevision_ = uploadedAssetRevision_;
+						if(result) { cameraPreviewRenderer_ = std::move(renderer); session_.Diagnostics().Resolve("preview.renderer"); }
+						else { previewInitializationFailed_ = true; session_.Diagnostics().Set("preview.renderer", result.error().GetMessageText(), true); }
+					}
+					if(cameraPreviewRenderer_ && !previewInitializationFailed_) {
+						// 設定値は主ビューと揃え、GPU資源と履歴はプレビュー側で独立して保持する。
+						if(shadows_) static_cast<void>(cameraPreviewRenderer_->GetShadows().SetSettings(shadows_->GetSettings()));
+						if(optics_) static_cast<void>(cameraPreviewRenderer_->GetOptics().SetSettings(optics_->GetSettings()));
+						if(materialRenderer_) {
+							const auto materials = materialRenderer_->GetOpticalMaterials();
+							for(size_t i=0; i<materials.size(); ++i)
+								static_cast<void>(cameraPreviewRenderer_->SetOpticalMaterial(static_cast<uint32_t>(i), materials[i].optics));
+						}
+						graphicsSystem_->SetCameraPreviewActive(true);
+					}
+				}
+			}
+		} else {
+			session_.Diagnostics().Resolve("preview.camera");
+			if(!session_.GetCameraPreview().IsValid()) {
+				previewInitializationFailed_ = false; session_.Diagnostics().Resolve("preview.renderer");
+			}
+		}
+		// 編集用カメラでは描画を継続しつつ、ゲーム用カメラの競合を知らせる。
+		int primaryCameras = 0;
+		preview->GetScene()->ForEach<CameraComponent>([&](Entity, CameraComponent& camera) {
+			if(camera.enabled && camera.primary) ++primaryCameras;
+		});
+		if(primaryCameras > 1) session_.Diagnostics().Set("camera.primary", "Multiple enabled primary cameras. Choose one game camera.");
+		else session_.Diagnostics().Resolve("camera.primary");
+		return {};
 	}
 
 	void EditorApplication::BeginFrame() {

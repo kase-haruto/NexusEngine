@@ -30,7 +30,9 @@ public:
     std::optional<Matrix4x4> GetSelectionPivot() const;
     /** \brief Viewport上の共通ツールと、画像後の入力・Gizmoを描く */
     void DrawToolbar(const LocalizationService& text);
-    void DrawOverlay(float x, float y, float width, float height);
+    void DrawOverlay(float x, float y, float width, float height, bool inputBlocked = false);
+    int PreviewSize() const noexcept { return previewSize_; }
+    bool ShowDiagnostics() const noexcept { return showDiagnostics_; }
     /** \brief ImGuizmoの操作中はWorkspaceの自動確定・Shortcutを抑止する */
     bool IsManipulating() const { return gizmo_.IsActive(); }
     void SetGizmoVisible(bool visible) { gizmoVisible_ = visible; }
@@ -62,6 +64,10 @@ private:
     float yaw_ = 0, pitch_ = 0; //< 編集Cameraの回転（radian）
     size_t generation_ = static_cast<size_t>(-1); //< Document変更時にCameraを初期化する
     int mode_ = 0; //< 0:移動、1:回転、2:拡縮
+    bool localSpace_ = true, snapping_ = false, guidesVisible_ = true, showDiagnostics_ = true;
+    std::array<float, 3> snapSteps_{.5f, 15.0f, .1f};
+    float cameraSpeed_ = 10, fieldOfView_ = 60;
+    int previewSize_ = 1; //< 小・中・大の表示サイズ。描画解像度と構図は固定
     bool navigating_ = false; //< RMB dragのcapture状態
     bool gizmoVisible_ = true;
     TransformGizmoTransaction gizmo_; //< ImGuizmoの一操作とLocal TRS履歴の接続

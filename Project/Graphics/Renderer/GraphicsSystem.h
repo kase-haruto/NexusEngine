@@ -79,6 +79,10 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> PrepareSceneViewport();
 		/** \brief UI backend専用の不透明画像参照。UIは資源を生成・解放しない */
 		[[nodiscard]] ViewportImage GetSceneViewportImage() const noexcept;
+		/** 独立したカメラプレビュー。作成・交換は描画命令の記録開始前に行う。 */
+		[[nodiscard]] Result<void> ReplaceCameraPreviewRenderer(IGraphicsRenderer* renderer);
+		void SetCameraPreviewActive(bool active) noexcept;
+		[[nodiscard]] ViewportImage GetCameraPreviewImage() const noexcept;
 
 	private:
 		class Impl;

@@ -49,9 +49,17 @@ namespace NexusEngine {
 		DepthStencilBuffer depthStencilBuffer;
 		BindlessDescriptorTable bindlessDescriptors;
 		TransientDescriptorArena transientDescriptors;
+		TransientDescriptorArena cameraPreviewDescriptors;
+		uint32_t transientDescriptorsPerFrame = 0;
+		bool cameraPreviewDescriptorsInitialized = false;
 		GraphicsResourceFactory resourceFactory;
 		PostProcessBackend postProcess;
 		ViewportTarget viewportTarget; //< GPU idle後にdescriptor allocatorより先に破棄する
+		ViewportTarget cameraPreviewTarget;
+		DepthStencilBuffer cameraPreviewDepth;
+		PostProcessBackend cameraPreviewPost;
+		IGraphicsRenderer* cameraPreviewRenderer = nullptr;
+		bool cameraPreviewActive = false;
 		bool viewportEnabled = false; //< ローカルEditorの専用出力経路
 		uint32_t viewportWidth = 0, viewportHeight = 0; //< 次frameへ集約するResize要求
 		PostProcessSettings postProcessSettings;
@@ -163,6 +171,7 @@ namespace NexusEngine {
 		result = implementation->transientDescriptors.Initialize(
 			implementation->device.GetDevice(), &implementation->descriptors.Resources(),
 			SwapChain::kBufferCount, desc.transientResourceDescriptorsPerFrame);
+		implementation->transientDescriptorsPerFrame = desc.transientResourceDescriptorsPerFrame;
 		if(!result) return std::unexpected(std::move(result.error()));
 
 		// RendererへNative Deviceを公開せずResourceを生成できるよう、Device寿命に従うFactoryを用意する。
@@ -207,6 +216,12 @@ namespace NexusEngine {
 			impl_->renderer->Shutdown();
 			impl_->renderer = nullptr;
 		}
+		if(impl_->cameraPreviewRenderer) {
+			impl_->cameraPreviewRenderer->Shutdown(); impl_->cameraPreviewRenderer = nullptr;
+		}
+		impl_->cameraPreviewPost.Shutdown();
+		impl_->cameraPreviewTarget.Shutdown();
+		impl_->cameraPreviewDepth.Shutdown();
 		// Command ListはAllocatorを参照して生成されるため、Listから先に解放する。
 		for(auto& frame : impl_->frames) {
 			frame.commandList.Reset();
@@ -216,6 +231,7 @@ namespace NexusEngine {
 		// Renderer Resourceの破棄完了後に、非所有Device参照だけを持つFactoryを破棄する。
 		impl_->resourceFactory.ConnectBackend(nullptr, nullptr, nullptr, 0);
 		impl_->transientDescriptors.Shutdown();
+		impl_->cameraPreviewDescriptors.Shutdown();
 		impl_->postProcess.Shutdown();
 		impl_->viewportTarget.Shutdown();
 		impl_->bindlessDescriptors.Shutdown();
@@ -251,6 +267,7 @@ namespace NexusEngine {
 		// このFrameが以前発行したDrawは完了済みなので、一時Descriptor領域を安全に再利用できる。
 		// ResetをFence待機より前に移動するとGPUが参照中のDescriptorを書き換えるため順序を維持する。
 		impl_->transientDescriptors.ResetFrame(frameIndex);
+		impl_->cameraPreviewDescriptors.ResetFrame(frameIndex);
 
 		// 対応Fenceの完了後なので、このAllocatorが保持していた前回の記録領域を再利用できる。
 		HRESULT result = frame.allocator->Reset();
@@ -316,6 +333,26 @@ namespace NexusEngine {
 		if(impl_->viewportEnabled) impl_->viewportTarget.BeginWrite(frame.commandList.Get());
 		impl_->postProcess.Resolve(frame.commandList.Get(), impl_->viewportEnabled ? impl_->viewportTarget.Rtv() : rtv, impl_->postProcessSettings);
 		if(impl_->viewportEnabled) impl_->viewportTarget.EndWrite(frame.commandList.Get());
+		GraphicsContext previewContext(frame.commandList.Get(), &impl_->bindlessDescriptors,
+			&impl_->cameraPreviewDescriptors, frameIndex, 640, 360);
+		if(impl_->cameraPreviewActive && impl_->cameraPreviewRenderer) {
+			// 視点ごとにHDR・深度・定数バッファ・時間履歴を分離する。
+			const auto image = impl_->cameraPreviewTarget.Image();
+			const D3D12_CPU_DESCRIPTOR_HANDLE previewDsv{impl_->cameraPreviewDepth.GetNativeDsvHandle()};
+			impl_->cameraPreviewPost.BeginScene(frame.commandList.Get(), previewDsv, impl_->clearColor.data());
+			frame.commandList->ClearDepthStencilView(previewDsv, D3D12_CLEAR_FLAG_DEPTH, 1, 0, 0, nullptr);
+			impl_->bindlessDescriptors.Bind(frame.commandList.Get());
+			const D3D12_VIEWPORT previewViewport{0, 0, static_cast<float>(image.width), static_cast<float>(image.height), 0, 1};
+			const D3D12_RECT previewScissor{0, 0, static_cast<LONG>(image.width), static_cast<LONG>(image.height)};
+			frame.commandList->RSSetViewports(1, &previewViewport);
+			frame.commandList->RSSetScissorRects(1, &previewScissor);
+			previewContext.nativeRtv_ = impl_->cameraPreviewPost.GetSceneRtv().ptr;
+			previewContext.nativeDsv_ = previewDsv.ptr;
+			impl_->cameraPreviewRenderer->Render(previewContext);
+			impl_->cameraPreviewTarget.BeginWrite(frame.commandList.Get());
+			impl_->cameraPreviewPost.Resolve(frame.commandList.Get(), impl_->cameraPreviewTarget.Rtv(), impl_->postProcessSettings);
+			impl_->cameraPreviewTarget.EndWrite(frame.commandList.Get());
+		}
 		// UI/extensions draw in display space after scene post processing.
 		impl_->bindlessDescriptors.Bind(frame.commandList.Get());
 		graphicsContext.nativeRtv_ = rtv.ptr;
@@ -340,6 +377,7 @@ namespace NexusEngine {
 		// Close成功後のListだけをQueueへ投入し、記録資源はFrameContextが所有し続ける。
 		impl_->commandQueue.Execute(frame.commandList.Get());
 		graphicsContext.CompleteRecording(true);
+		previewContext.CompleteRecording(true);
 		// Queue投入済みCommandの完了位置は、後続のPresent成否にかかわらず先に保存する。
 		auto signalResult = impl_->commandQueue.Signal();
 		if(!signalResult) {
@@ -413,6 +451,53 @@ namespace NexusEngine {
 	}
 	ViewportImage GraphicsSystem::GetSceneViewportImage() const noexcept {
 		return impl_ && impl_->viewportEnabled ? impl_->viewportTarget.Image() : ViewportImage{};
+	}
+
+	Result<void> GraphicsSystem::ReplaceCameraPreviewRenderer(IGraphicsRenderer* renderer) {
+		if(!impl_ || !renderer || renderer == impl_->cameraPreviewRenderer || renderer == impl_->renderer)
+			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid camera preview renderer."));
+		auto result = impl_->commandQueue.WaitForIdle();
+		if(!result) return result;
+		// 固定解像度で構図を維持し、UIのサイズ変更によるGPU資源の再生成を避ける。
+		constexpr uint32_t width = 640, height = 360;
+		if(!impl_->cameraPreviewDescriptorsInitialized) {
+			// 主ビューの一時領域を消費せず、両方のビューに同じ描画上限を確保する。
+			result = impl_->cameraPreviewDescriptors.Initialize(impl_->device.GetDevice(), &impl_->descriptors.Resources(),
+				SwapChain::kBufferCount, impl_->transientDescriptorsPerFrame);
+			if(!result) return result;
+			impl_->cameraPreviewDescriptorsInitialized = true;
+		}
+		if(!impl_->cameraPreviewDepth.IsInitialized()) {
+			result = impl_->cameraPreviewDepth.Initialize(impl_->device.GetDevice(), &impl_->descriptors.DepthStencils(),
+				DepthStencilBufferDesc{width, height, DepthStencilFormat::D32Float});
+			if(!result) return result;
+		}
+		if(!impl_->cameraPreviewTarget.Image().width) {
+			result = impl_->cameraPreviewTarget.Resize(impl_->device.GetDevice(), impl_->descriptors.Resources(),
+				impl_->descriptors.RenderTargets(), width, height);
+			if(!result) return result;
+		}
+		if(!impl_->cameraPreviewRenderer) {
+			// 初期化失敗後の再試行でも、GPUの完了待機後にのみ資源を解放する。
+			impl_->cameraPreviewPost.Shutdown();
+			result = impl_->cameraPreviewPost.Initialize(impl_->device.GetDevice(), impl_->shaderDirectory, width, height);
+			if(!result) return result;
+		}
+		result = renderer->Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
+		if(!result) {
+			auto idle = impl_->commandQueue.WaitForIdle();
+			if(!idle) return idle;
+			renderer->Shutdown(); return result;
+		}
+		if(impl_->cameraPreviewRenderer) impl_->cameraPreviewRenderer->Shutdown();
+		impl_->cameraPreviewRenderer = renderer;
+		return {};
+	}
+	void GraphicsSystem::SetCameraPreviewActive(bool active) noexcept {
+		if(impl_) impl_->cameraPreviewActive = active && impl_->cameraPreviewRenderer;
+	}
+	ViewportImage GraphicsSystem::GetCameraPreviewImage() const noexcept {
+		return impl_ && impl_->cameraPreviewActive ? impl_->cameraPreviewTarget.Image() : ViewportImage{};
 	}
 
 	void GraphicsSystem::SetClearColor(const std::array<float, 4>& color) noexcept {

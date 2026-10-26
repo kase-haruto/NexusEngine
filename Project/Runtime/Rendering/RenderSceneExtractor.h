@@ -23,7 +23,8 @@ namespace NexusEngine {
 		 */
 		[[nodiscard]] Result<RenderScene> Extract(Scene& scene, float aspectRatio) const;
 		/** \brief 呼出側のsnapshot容量を再利用して抽出する。失敗時は結果を描画しないこと */
-		[[nodiscard]] Result<void> ExtractInto(Scene& scene, float aspectRatio, RenderScene& output) const;
+		// 編集用の視点を使う場合はゲーム用カメラの選定を省略できる。
+		[[nodiscard]] Result<void> ExtractInto(Scene& scene, float aspectRatio, RenderScene& output, bool includePrimaryCamera = true) const;
 	};
 
 } // namespace NexusEngine

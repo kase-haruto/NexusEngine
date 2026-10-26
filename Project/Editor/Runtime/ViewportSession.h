@@ -33,7 +33,15 @@ public:
     bool Select(PersistentId id);
     IPC::RuntimeState State() const { return connection_ ? connection_->State() : IPC::RuntimeState::Disconnected; }
     std::optional<UI::ResolvedTexture> Image() const;
+    void SetCameraPreviewTexture(UI::TextureHandle texture) { cameraPreviewTexture_ = texture; }
+    std::optional<UI::ResolvedTexture> CameraPreviewImage() const {
+        return localTextures_ ? localTextures_->Resolve(cameraPreviewTexture_) : std::nullopt;
+    }
+    void SetCameraPreviewVisible(bool visible) noexcept { cameraPreviewVisible_ = visible; }
+    bool IsCameraPreviewVisible() const noexcept { return cameraPreviewVisible_; }
 private:
+    UI::TextureHandle cameraPreviewTexture_;
+    bool cameraPreviewVisible_ = false;
     IPC::IRuntimeConnection* connection_ = nullptr; //< host所有
     IViewportFrameTransport* frames_ = nullptr; //< Graphics host所有
     UI::ITextureProvider* textures_ = nullptr; //< ImGui adapter所有

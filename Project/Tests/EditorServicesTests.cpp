@@ -18,6 +18,7 @@
 #include "Editor/Core/EditorWorkspace.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
+#include "Editor/Gui/Panels/UtilityPanels.h"
 #include "Editor/Gui/Properties/MaterialPage.h"
 #include "Editor/Gui/Properties/MaterialSlots.h"
 #include "Runtime/Level/LevelSerializer.h"
@@ -681,6 +682,7 @@ void CacheAndWorkspaceIntegration() {
 #include "StartupPathTests.inl"
 #include "EntityConsoleTests.inl"
 #include "ViewportSceneGuidesTests.inl"
+#include "ViewportPreviewTests.inl"
 // Composite axis controls must forward activation and release even on frames
 // without a value change; the property service uses these to bound one undo step.
 void AxisWidgetInteraction() {
@@ -739,6 +741,7 @@ int main() {
     PropertyTransactions(); StructuralHistory(); DocumentsAndPlay(); HistoryBoundsAndCommands(); LazyPanelLifecycle();
     ViewportPickingAndValidation();
     ViewportSceneGuidesTests();
+    ViewportPreviewTests(); ViewportPreviewOverlayTests();
     CameraFarPlaneWorldProjectionTests();
     CacheAndWorkspaceIntegration();
     std::cout << "PASS: unified Details categories/header, component fallback/extensions, material source/undo/save, selection lifetime, offset-mesh pivot/rotation/scale, gizmo click capture over background, ImGuizmo mouse interaction, parent/multi-selection transforms, gizmo undo/cancel, component addition, asset round-trip/undo, model/texture variants, thumbnails, property transactions, rollback, structural undo, save protection, play isolation, history bounds, shortcuts, lazy panels, viewport picking, rotation/camera/light validation\n";

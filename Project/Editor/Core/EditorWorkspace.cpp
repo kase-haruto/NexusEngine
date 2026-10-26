@@ -42,8 +42,9 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
     panels_.RegisterFactory("Outliner", "panel.outliner", [] { return std::make_unique<OutlinerPanel>(); });
     panels_.RegisterFactory("Details", "panel.details", [this] { return std::make_unique<DetailsPanel>(categories_); });
-    panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_); }, settings_.editor.viewport);
+    panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_, logs_); }, settings_.editor.viewport);
     panels_.RegisterFactory("OutputLog", "panel.log", [this] { return std::make_unique<OutputLogPanel>(logs_); });
+    commands_.Register("viewport.openLog", {[this] { panels_.Open("OutputLog"); }, {}});
     panels_.RegisterFactory("Terminal", "panel.terminal", [this] { return std::make_unique<TerminalPanel>(console_); });
     panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
         return std::make_unique<ContentBrowserPanel>(*assets_, [this](const auto& path) {
@@ -227,6 +228,7 @@ void EditorWorkspace::Draw() {
         documents_.IsDirty(), session_.IsPlaying(), session_.IsPaused());
     layout_.Draw();
     const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_};
+    viewport_.SetCameraPreviewVisible(false);
     panels_.Draw(context, session_.IsPlaying());
     viewportTools_.CompleteInteraction();
     if(previousSelection_ != session_.GetSelection()) { properties_.Commit(); previousSelection_ = session_.GetSelection(); }
