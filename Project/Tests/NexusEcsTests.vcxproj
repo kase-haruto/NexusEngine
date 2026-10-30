@@ -14,6 +14,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EcsTests.cpp" />
+    <ClCompile Include="..\Foundation\Reflection\ReflectionTextArchive.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\Generated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
@@ -25,5 +28,6 @@
     <ClCompile Include="..\Runtime\Level\LevelSerializer.cpp" />
     <ClCompile Include="..\Runtime\Rendering\RenderSceneExtractor.cpp" />
   </ItemGroup>
+  <Import Project="..\Reflection.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

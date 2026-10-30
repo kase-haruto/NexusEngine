@@ -10,6 +10,7 @@ bool PanelRegistry::Register(std::unique_ptr<IEditorPanel> panel, bool open) {
     auto id = std::string(panel->Id()), title = std::string(panel->TitleKey());
     entries_.push_back({std::move(panel), open, std::move(id), std::move(title), {}}); return true;
 }
+
 bool PanelRegistry::RegisterFactory(std::string id, std::string titleKey, std::function<std::unique_ptr<IEditorPanel>()> factory, bool open) {
     if(drawing_ || id.empty() || !factory) return false;
     for(const auto& entry : entries_) if(entry.Id() == id) return false;

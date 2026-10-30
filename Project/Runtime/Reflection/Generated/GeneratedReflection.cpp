@@ -8,6 +8,7 @@ void RegisterGeneratedComponents(ComponentReflection& registry) {
     registry.Register<DirectionalLightComponent>();
     registry.Register<HierarchyComponent>();
     registry.Register<NameComponent>();
+    registry.Register<NexusGame::MoveComponent>();
     registry.Register<PersistentIdComponent>();
     registry.Register<PrimitiveRenderComponent>();
     registry.Register<TransformComponent>();
@@ -17,6 +18,7 @@ void RegisterGeneratedInspectorTypes(TypeRegistry& registry) {
     RegisterReflectedInspector<DirectionalLightComponent>(registry);
     RegisterReflectedInspector<HierarchyComponent>(registry);
     RegisterReflectedInspector<NameComponent>(registry);
+    RegisterReflectedInspector<NexusGame::MoveComponent>(registry);
     RegisterReflectedInspector<PersistentIdComponent>(registry);
     RegisterReflectedInspector<PrimitiveRenderComponent>(registry);
     RegisterReflectedInspector<TransformComponent>(registry);

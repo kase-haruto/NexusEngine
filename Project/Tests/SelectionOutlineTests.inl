@@ -11,7 +11,7 @@ void SelectionOutlineIntegration() {
     SelectionOutlineDraw item{&test.mesh,&constants,test.mesh.GetSubmeshes().front()};
     TransientDescriptorArena transient;
     Check(transient.Initialize(test.device.GetDevice(),&test.descriptors.Resources(),2,16));
-    const auto render=[&](uint32_t size,float depthValue,bool selected) {
+    const auto render=[&](uint32_t size,float depthValue,bool selected,size_t drawCount=1) {
         Check(test.queue.WaitForIdle());
         auto rtv=test.descriptors.RenderTargets().Allocate(); Check(rtv);
         auto dsv=test.descriptors.DepthStencils().Allocate(); Check(dsv);
@@ -45,7 +45,8 @@ void SelectionOutlineIntegration() {
         context.RestoreMainRenderTargets();
         test.commands->ClearRenderTargetView(rtv->cpuHandle,background,0,nullptr);
         test.commands->ClearDepthStencilView(dsv->cpuHandle,D3D12_CLEAR_FLAG_DEPTH,depthValue,0,0,nullptr);
-        Check(outline.Render(context,selected ? std::span(&item,1) : std::span<SelectionOutlineDraw>{}));
+        const std::vector<SelectionOutlineDraw> draws(selected ? drawCount : 0,item);
+        Check(outline.Render(context,draws));
         D3D12_RESOURCE_BARRIER barrier{}; barrier.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition={color.Get(),D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_COPY_SOURCE};
         test.commands->ResourceBarrier(1,&barrier);
@@ -66,6 +67,7 @@ void SelectionOutlineIntegration() {
     };
     const auto visible=render(64,1,true), occluded=render(64,0,true), noSelection=render(64,0,false);
     Require(visible==occluded,"Scene depth changed the selection outline.");
+    Require(render(64,1,true,300)==visible,"Selection with more than 256 draws changed the outline.");
     size_t orange=0;
     for(size_t i=0;i<visible.size();i+=4) if(visible[i]>visible[i+1] && visible[i+1]>visible[i+2]) ++orange;
     Require(orange>80,"Selection outline was not rendered.");

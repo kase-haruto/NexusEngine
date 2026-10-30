@@ -46,6 +46,8 @@ namespace NexusEngine {
 		friend class GraphicsResourceFactory;
 		friend class RayTracingScene;
 		friend class OpticalBackend;
+		/** Factoryが範囲数を確認した後、Bufferを共有して材質番号だけを更新する。 */
+		void ShareGeometryFrom(const MeshResource& source, const std::vector<SubmeshRange>& materialRanges);
 		/** \brief 完全なGeometry upload成功後だけ新世代を公開する */
 		void CommitGeometryGeneration() noexcept;
 

@@ -56,6 +56,8 @@ namespace NexusEngine {
 
 		/** \brief 全Mesh ResourceとNode metadataを破棄する */
 		void Shutdown() noexcept;
+		/** GPUの完了後、準備済みのモデル資源とメタデータをまとめて交換する。 */
+		void Swap(ModelResource& other) noexcept;
 		[[nodiscard]] bool IsInitialized() const noexcept;
 		[[nodiscard]] uint32_t GetMeshCount() const noexcept;
 		[[nodiscard]] const MeshResource* GetMesh(uint32_t index) const noexcept;
@@ -66,8 +68,13 @@ namespace NexusEngine {
 		[[nodiscard]] const std::vector<ModelMaterial>& GetMaterials() const noexcept;
 
 	private:
+#if defined(NEXUS_GRAPHICS_TESTS)
+		friend class GraphicsBackendTestAccess;
+#endif
 		friend class GraphicsResourceFactory;
-		std::vector<std::unique_ptr<MeshResource>> meshes_;
+		friend class PrimitiveRenderer;
+		std::vector<std::shared_ptr<MeshResource>> meshes_;
+		std::vector<uint64_t> sourceGeometryIds_;
 		std::vector<ModelNode> nodes_;
 		std::vector<AnimationClip> animations_;
 		std::vector<ModelSkin> skins_;

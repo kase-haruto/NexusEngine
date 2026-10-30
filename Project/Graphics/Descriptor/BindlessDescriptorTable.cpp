@@ -76,6 +76,7 @@ namespace NexusEngine {
 	// Resource HeapへSRVを生成して世代付き参照を返す
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<ShaderResourceRef> BindlessDescriptorTable::CreateShaderResourceView(ID3D12Resource* const resource, const D3D12_SHADER_RESOURCE_VIEW_DESC& desc) {
+		const std::lock_guard lock(mutex_);
 		// Descriptor APIはvoidを返すため、先に有効なDeviceと確保済みCPU Handleを保証する。
 		DescriptorAllocation allocation;
 		auto reference = Allocate(ShaderResourceClass::Resource, allocation);
@@ -88,6 +89,7 @@ namespace NexusEngine {
 	// Resource HeapへUAVを生成して世代付き参照を返す
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<ShaderResourceRef> BindlessDescriptorTable::CreateUnorderedAccessView(ID3D12Resource* const resource, ID3D12Resource* const counterResource, const D3D12_UNORDERED_ACCESS_VIEW_DESC& desc) {
+		const std::lock_guard lock(mutex_);
 		DescriptorAllocation allocation;
 		auto reference = Allocate(ShaderResourceClass::Resource, allocation);
 		if(!reference) return reference;
@@ -99,6 +101,7 @@ namespace NexusEngine {
 	// Resource HeapへCBVを生成して世代付き参照を返す
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<ShaderResourceRef> BindlessDescriptorTable::CreateConstantBufferView(const D3D12_CONSTANT_BUFFER_VIEW_DESC& desc) {
+		const std::lock_guard lock(mutex_);
 		DescriptorAllocation allocation;
 		auto reference = Allocate(ShaderResourceClass::Resource, allocation);
 		if(!reference) return reference;
@@ -110,6 +113,7 @@ namespace NexusEngine {
 	// Sampler HeapへSamplerを生成して世代付き参照を返す
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<ShaderResourceRef> BindlessDescriptorTable::CreateSampler(const D3D12_SAMPLER_DESC& desc) {
+		const std::lock_guard lock(mutex_);
 		DescriptorAllocation allocation;
 		auto reference = Allocate(ShaderResourceClass::Sampler, allocation);
 		if(!reference) return reference;
@@ -121,6 +125,7 @@ namespace NexusEngine {
 	// 参照を即時解放せず、最後のGPU利用Fenceとともにretire queueへ積む
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> BindlessDescriptorTable::Retire(const ShaderResourceRef reference, const uint64_t retireFenceValue) {
+		const std::lock_guard lock(mutex_);
 		if(!IsValid(reference) || retireFenceValue == 0) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidReference, "Bindless descriptor reference or retire fence is invalid."));
 		}
@@ -133,6 +138,7 @@ namespace NexusEngine {
 	}
 
 	void BindlessDescriptorTable::CollectGarbage(const uint64_t completedFenceValue) noexcept {
+		const std::lock_guard lock(mutex_);
 		// 完了Fenceへ到達したslotだけAllocatorへ返し、古いCommandからの参照中再利用を防ぐ。
 		for(size_t index = 0; index < retired_.size();) {
 			const auto retired = retired_[index];
@@ -160,6 +166,7 @@ namespace NexusEngine {
 	}
 
 	bool BindlessDescriptorTable::IsValid(const ShaderResourceRef reference) const noexcept {
+		const std::lock_guard lock(mutex_);
 		// index 0はGPU上では安全なnullだが、所有Resource参照としては無効扱いにする。
 		if(reference.index == 0 || reference.generation == 0) return false;
 		const auto& slots = reference.resourceClass == ShaderResourceClass::Resource ? resourceSlots_ : samplerSlots_;
@@ -168,6 +175,7 @@ namespace NexusEngine {
 	}
 
 	D3D12_GPU_DESCRIPTOR_HANDLE BindlessDescriptorTable::GetGpuHandle(const ShaderResourceRef reference) const noexcept {
+		const std::lock_guard lock(mutex_);
 		if(!IsValid(reference)) {
 			return {};
 		}

@@ -1,4 +1,4 @@
-giMode "DDGI"
+giMode "Off"
 gizmo "true"
 grid "true"
 viewport "true"

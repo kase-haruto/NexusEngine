@@ -51,6 +51,7 @@
     <ClCompile Include="..\Graphics\Resource\MeshResource.cpp" />
     <ClCompile Include="..\Graphics\Model\ModelResource.cpp" />
     <ClCompile Include="..\Graphics\Model\ModelLoader.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelAssetLibrary.cpp" />
     <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
     <ClCompile Include="..\Graphics\Model\GltfModelLoader.cpp" />
     <ClCompile Include="..\Graphics\Resource\ImmediateUploadContext.cpp" />

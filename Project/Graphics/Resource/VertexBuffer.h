@@ -24,6 +24,8 @@ namespace NexusEngine {
 		[[nodiscard]] uint32_t GetVertexCount() const noexcept;
 
 	private:
+		friend class MeshResource;
+		void ShareFrom(const VertexBuffer& source) noexcept;
 		friend class GraphicsContext;
 		friend class VertexBufferUploader;
 		friend class RayTracingScene;
@@ -34,6 +36,6 @@ namespace NexusEngine {
 		void Commit(void* nativeResource, uint32_t sizeInBytes, uint32_t stride, uint32_t vertexCount);
 		void Bind(void* nativeCommandList) const noexcept;
 		class Impl;
-		std::unique_ptr<Impl> impl_; //< Native Resource/Viewを公開Headerから隠す唯一の所有者
+		std::shared_ptr<Impl> impl_; //< 不変のGPU Bufferをアセットsnapshot間で共有する
 	};
 } // namespace NexusEngine

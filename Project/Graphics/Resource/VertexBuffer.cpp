@@ -13,6 +13,7 @@ namespace NexusEngine {
 
 	VertexBuffer::VertexBuffer() noexcept = default;
 	VertexBuffer::~VertexBuffer() noexcept { Shutdown(); }
+	void VertexBuffer::ShareFrom(const VertexBuffer& source) noexcept { impl_ = source.impl_; }
 	void VertexBuffer::Commit(void* const nativeResource, const uint32_t sizeInBytes, const uint32_t stride, const uint32_t vertexCount) {
 		auto implementation					= std::make_unique<Impl>();
 		implementation->resource			= static_cast<ID3D12Resource*>(nativeResource);

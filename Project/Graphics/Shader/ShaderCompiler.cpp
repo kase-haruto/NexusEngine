@@ -84,7 +84,7 @@ namespace NexusEngine {
 		static std::map<CacheKey, CachedShader> cache;
 		static size_t cachedBytes = 0;
 		constexpr size_t kCacheByteBudget = 64 * 1024 * 1024;
-		const std::lock_guard lock(cacheMutex);
+		std::unique_lock lock(cacheMutex);
 		SourceStamp sourceStamp;
 		const bool cacheable = Stamp(desc.sourcePath, sourceStamp);
 		const CacheKey key{cacheable ? sourceStamp.path : desc.sourcePath, desc.entryPoint, desc.targetProfile, desc.optimize};
@@ -94,6 +94,7 @@ namespace NexusEngine {
 			cache.erase(found);
 		}
 
+		lock.unlock(); // 初回コンパイル中も、描画スレッドによるキャッシュ参照を妨げない。
 		// Compilerとファイル読込UtilityはCompile処理だけで使用し、Shaderへ所有権を持ち越さない。
 		ComPtr<IDxcUtils> utils;
 		ComPtr<IDxcCompiler3> compiler;
@@ -162,14 +163,15 @@ namespace NexusEngine {
 		const auto* begin = static_cast<const uint8_t*>(object->GetBufferPointer());
 		std::vector<uint8_t> bytecode(begin, begin + object->GetBufferSize());
 		if(cacheable && trackingIncludes->cacheable && bytecode.size() <= kCacheByteBudget) {
+			lock.lock();
 			trackingIncludes->sources.push_back(std::move(sourceStamp));
 			// Bound process memory even when an editor session opens many shader variants.
 			if(cache.size() >= 256 || cachedBytes + bytecode.size() > kCacheByteBudget) {
 				cache.clear();
 				cachedBytes = 0;
 			}
-			cache.emplace(key, CachedShader{bytecode, std::move(trackingIncludes->sources)});
-			cachedBytes += bytecode.size();
+			const auto inserted = cache.emplace(key, CachedShader{bytecode, std::move(trackingIncludes->sources)}).second;
+			if(inserted) cachedBytes += bytecode.size();
 		}
 		return bytecode;
 	}

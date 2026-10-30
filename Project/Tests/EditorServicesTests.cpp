@@ -724,11 +724,15 @@ void AxisWidgetInteraction() {
     ImGui::DestroyContext();
 }
 void RunReinstancingTests();
+void RunGameRuntimeTests();
+void RunReflectedComponentTests();
 int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     RunReinstancingTests();
+    RunGameRuntimeTests();
+    RunReflectedComponentTests();
     EditorToolbarTests();
     EditorToolbarSettingsTests();
     AxisWidgetInteraction();

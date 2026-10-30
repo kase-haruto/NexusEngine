@@ -8,6 +8,8 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#include <chrono>
+#include "Foundation/Logging/Logger.h"
 
 // directx
 #include <d3d12.h>
@@ -32,6 +34,12 @@ namespace NexusEngine {
 			const bool hdr = format == TextureFormat::Rgba32Float;
 			const bool srgb = format == TextureFormat::Rgba8UnormSrgb;
 			const size_t pixelBytes = hdr ? 16 : 4;
+			// 入力は8bitなので、各画素のpow計算を256要素の正確な変換表で置き換える。
+			static const auto linearColors = [] {
+				std::array<float, 256> values{};
+				for(size_t i = 0; i < values.size(); ++i) values[i] = ColorSpace::SrgbToLinear(float(i) / 255.0f);
+				return values;
+			}();
 			for(UINT y = 0; y < target.Footprint.Height; ++y) {
 				const double y0 = double(y) * source.Footprint.Height / target.Footprint.Height;
 				const double y1 = double(y + 1) * source.Footprint.Height / target.Footprint.Height;
@@ -47,7 +55,7 @@ namespace NexusEngine {
 							std::array<float, 4> value;
 							if(hdr) std::memcpy(value.data(), pixel, 16);
 							else for(size_t c = 0; c < 4; ++c) value[c] = float(pixel[c]) / 255.0f;
-							if(srgb) for(size_t c = 0; c < 3; ++c) value[c] = ColorSpace::SrgbToLinear(value[c]);
+							if(srgb) for(size_t c = 0; c < 3; ++c) value[c] = linearColors[pixel[c]];
 							for(size_t c = 0; c < 4; ++c) sum[c] += value[c] * weight;
 						}
 					}
@@ -72,6 +80,7 @@ namespace NexusEngine {
 		TextureResource&			   texture,
 		const TextureDesc&			   desc,
 		const std::span<const uint8_t> pixels) const {
+		const auto uploadStart = std::chrono::steady_clock::now();
 		const uint32_t kBytesPerPixel = desc.format == TextureFormat::Rgba32Float ? 16 : 4;
 		if(ToNativeTextureFormat(desc.format) == DXGI_FORMAT_UNKNOWN)
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Unsupported texture format."));
@@ -149,8 +158,10 @@ namespace NexusEngine {
 				pixels.data() + static_cast<size_t>(row) * sourceRowSize,
 				sourceRowSize);
 		}
+		const auto mipStart = std::chrono::steady_clock::now();
 		for(size_t mip = 1; mip < footprints.size(); ++mip)
 			GenerateMip(staging.data(), footprints[mip - 1], footprints[mip], desc.format);
+		const auto mipEnd = std::chrono::steady_clock::now();
 		uint8_t* mapped = nullptr;
 		const D3D12_RANGE readRange{0, 0};
 		result = uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
@@ -186,11 +197,18 @@ namespace NexusEngine {
 		barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 		commandList->ResourceBarrier(1, &barrier);
 		// Textureとstagingは共通ContextのFence待機完了までscope内で保持する。
+		const auto waitStart = std::chrono::steady_clock::now();
 		auto executeResult = uploadContext.ExecuteAndWait(commandQueue);
 		if(!executeResult) return executeResult;
 
 		// GPU copy完了後だけTextureResourceへ所有権をcommitし、失敗したuploadを公開しない。
 		texture.Commit(destination.Get(), desc);
+		const auto end = std::chrono::steady_clock::now();
+		const double totalMs = std::chrono::duration<double, std::milli>(end - uploadStart).count();
+		// 遅い画像だけを記録し、ミップ生成とGPU転送待ちを区別する。
+		if(totalMs >= 25) NEXUS_LOG_INFO("Assets.Profile", "Texture " + std::to_string(desc.width) + "x" + std::to_string(desc.height) +
+			", mips=" + std::to_string(textureDesc.MipLevels) + ", mipCPU=" + std::to_string(std::chrono::duration<double, std::milli>(mipEnd - mipStart).count()) +
+			", submitWait=" + std::to_string(std::chrono::duration<double, std::milli>(end - waitStart).count()) + ", total=" + std::to_string(totalMs) + " ms.");
 		return {};
 	}
 } // namespace NexusEngine

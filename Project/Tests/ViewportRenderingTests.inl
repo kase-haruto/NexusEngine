@@ -63,7 +63,8 @@ void ViewportRenderingTests(bool warp) {
     Require(!graphics.ReplaceCameraPreviewRenderer(&failed), "Failed preview replacement was accepted.");
     graphics.SetCameraPreviewActive(true); Check(graphics.RenderFrame());
     Require(preview.renders == 5 && preview.shutdowns == 0, "Failed replacement destroyed the active preview.");
-    Check(graphics.ReplaceCameraPreviewRenderer(&replacement)); Check(graphics.RenderFrame()); Check(graphics.WaitForIdle());
+    Check(graphics.PrepareRenderer(&replacement));
+    Check(graphics.AdoptPreparedCameraPreviewRenderer(&replacement)); Check(graphics.RenderFrame()); Check(graphics.WaitForIdle());
     Require(preview.shutdowns == 1 && replacement.renders == 1 && replacement.submissions == 1,
         "Preview replacement did not retire the old renderer safely.");
     Check(graphics.ReleaseCameraPreviewRenderer());

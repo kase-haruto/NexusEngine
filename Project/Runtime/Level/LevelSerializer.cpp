@@ -10,6 +10,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sstream>
+#include "Runtime/Reflection/ComponentReflection.h"
+#include "Foundation/Reflection/ReflectionTextArchive.h"
 
 // engine
 #include "Level.h"
@@ -28,7 +31,15 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 11;
+		constexpr uint32_t kFormatVersion = 12;
+
+        // 既存の専用レコードは互換性と永続IDによる参照解決を維持する。
+        const std::set<std::type_index>& BuiltinComponents() {
+            static const std::set<std::type_index> types{typeid(NameComponent), typeid(TransformComponent),
+                typeid(PersistentIdComponent), typeid(HierarchyComponent), typeid(CameraComponent),
+                typeid(PrimitiveRenderComponent), typeid(DirectionalLightComponent)};
+            return types;
+        }
 
 		using PersistentKey = std::pair<uint64_t, uint64_t>;
 
@@ -89,8 +100,10 @@ namespace NexusEngine {
 		}
 
 		// 非対応Componentを黙って落とすとEditorの保存でデータを失うため、I/O前に拒否する。
-		const std::set<std::type_index> supported { typeid(NameComponent), typeid(TransformComponent),
-			typeid(PersistentIdComponent), typeid(HierarchyComponent), typeid(CameraComponent), typeid(PrimitiveRenderComponent), typeid(DirectionalLightComponent) };
+		ComponentReflection components;
+		RegisterGeneratedComponents(components);
+		auto supported = BuiltinComponents();
+		for(const auto& [id, type] : components.Types()) supported.insert(type.nativeType);
 		bool supportedStorages = true;
 		scene->ForEachStorageInfo([&](std::type_index type, size_t size) {
 			supportedStorages = supportedStorages && (size == 0 || supported.contains(type));
@@ -118,6 +131,29 @@ namespace NexusEngine {
 		TransformSystem transformValidation;
 		auto hierarchyResult = transformValidation.Update(*scene);
 		if(!hierarchyResult) return hierarchyResult;
+        // 独自Componentを先に検証・整形し、未対応値やIsValid失敗で既存ファイルを切り詰めない。
+        std::map<PersistentKey, std::string> extensionRecords;
+        try {
+            scene->ForEach<PersistentIdComponent>([&](Entity entity, const PersistentIdComponent& persistent) {
+                std::vector<std::pair<std::string, ReflectionValue>> values;
+                for(const auto& [id, type] : components.Types()) {
+                    if(!BuiltinComponents().contains(type.nativeType) && type.contains(entity))
+                        values.emplace_back(id, type.captureEntity(entity));
+                }
+                std::ostringstream record;
+                record.imbue(std::locale::classic());
+                record << "COMPONENTS " << values.size() << '\n';
+                for(const auto& [id, value] : values) {
+                    record << "COMPONENT " << std::quoted(id) << ' ';
+                    WriteReflectionTextArchive(record, value);
+                    record << '\n';
+                }
+                extensionRecords.emplace(MakeKey(persistent.value), record.str());
+            });
+        } catch(const std::exception& exception) {
+            return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat,
+                std::string("Cannot serialize reflected component: ") + exception.what()));
+        }
 		std::ofstream output(path, std::ios::binary | std::ios::trunc);
 		output.imbue(std::locale::classic());
 		if(!output) {
@@ -185,6 +221,7 @@ namespace NexusEngine {
 					output << "DIRECTIONAL_LIGHT 1 " << component->enabled << ' ' << l.direction[0] << ' ' << l.direction[1] << ' ' << l.direction[2]
 						<< ' ' << l.color[0] << ' ' << l.color[1] << ' ' << l.color[2] << ' ' << l.intensity << ' ' << l.angularRadius << '\n';
 				} else output << "DIRECTIONAL_LIGHT 0\n";
+				output << extensionRecords.at(MakeKey(persistent.value));
 				output << "END_ENTITY\n";
 			});
 		output << "END_LEVEL\n";
@@ -238,6 +275,8 @@ namespace NexusEngine {
 			}
 		}
 		auto loadedScene = std::make_unique<Scene>();
+        ComponentReflection components;
+        RegisterGeneratedComponents(components);
 		std::map<PersistentKey, EntityId> loadedEntities;
 		std::vector<PendingParent> pendingParents;
 
@@ -327,6 +366,28 @@ namespace NexusEngine {
 						return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Directional light component is invalid."));
 				}
 			}
+            if(version >= 12) {
+                uint32_t componentCount = 0;
+                if(!(input >> token >> componentCount) || token != "COMPONENTS" || componentCount > components.Types().size())
+                    return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Invalid reflected component count."));
+                try {
+                    std::set<std::string> seen;
+                    for(uint32_t index = 0; index < componentCount; ++index) {
+                        std::string typeId;
+                        if(!(input >> token >> std::quoted(typeId)) || token != "COMPONENT" || !seen.insert(typeId).second)
+                            throw std::runtime_error("Invalid or duplicate component record");
+                        const auto type = components.Types().find(typeId);
+                        if(type == components.Types().end()) throw std::runtime_error("Unknown component type: " + typeId);
+                        if(BuiltinComponents().contains(type->second.nativeType))
+                            throw std::runtime_error("Built-in component cannot use an extension record");
+                        const auto value = ReadReflectionTextArchive(input);
+                        type->second.restoreEntity(entity, value);
+                    }
+                } catch(const std::exception& exception) {
+                    return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat,
+                        std::string("Cannot restore reflected component: ") + exception.what()));
+                }
+            }
 			if(!(input >> token) || token != "END_ENTITY") {
 				return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Entity record is not terminated."));
 			}

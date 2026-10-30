@@ -24,6 +24,7 @@ namespace NexusEngine {
 
 	IndexBuffer::IndexBuffer() noexcept = default;
 	IndexBuffer::~IndexBuffer() noexcept { Shutdown(); }
+	void IndexBuffer::ShareFrom(const IndexBuffer& source) noexcept { impl_ = source.impl_; }
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// Upload完了後のResourceをIndex Buffer Viewと一体で所有する

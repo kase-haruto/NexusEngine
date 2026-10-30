@@ -1,9 +1,10 @@
 #include "DescriptorAllocator.h"
 #include <string>
+#include <atomic>
 
 namespace NexusEngine {
 	namespace {
-		uint64_t gNextAllocatorId = 1;
+		std::atomic<uint64_t> gNextAllocatorId = 1;
 		constexpr int32_t kInvalidArgument = 1;
 		constexpr int32_t kHeapCreationFailed = 2;
 		constexpr int32_t kCapacityExceeded = 3;
@@ -57,6 +58,7 @@ namespace NexusEngine {
 	// Heap内から要求数の連続Descriptor領域を確保する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<DescriptorAllocation> DescriptorAllocator::Allocate(const uint32_t count) {
+		const std::lock_guard lock(allocationMutex_);
 		if(count == 0 || count > allocated_.size()) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidArgument, "Descriptor allocation count is invalid."));
 		}
@@ -96,6 +98,7 @@ namespace NexusEngine {
 	// GPU利用完了済みDescriptor領域を再利用可能な状態へ戻す
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> DescriptorAllocator::Free(const DescriptorAllocation& allocation) {
+		const std::lock_guard lock(allocationMutex_);
 		// Indexだけでなくcountも検証し、別Heap由来または破損した範囲による越境を防ぐ。
 		if(allocation.allocatorId != allocatorId_ || allocation.heapType != heapType_ ||
 		   allocation.count == 0 || allocation.index + allocation.count > allocated_.size()) {

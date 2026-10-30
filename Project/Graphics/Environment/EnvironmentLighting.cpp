@@ -14,6 +14,7 @@ namespace NexusEngine {
     };
     EnvironmentLighting::EnvironmentLighting() noexcept = default;
     EnvironmentLighting::~EnvironmentLighting() noexcept { Shutdown(); }
+    void EnvironmentLighting::Swap(EnvironmentLighting& other) noexcept { impl_.swap(other.impl_); }
     Result<void> EnvironmentLighting::Initialize(GraphicsResourceFactory& f, const std::filesystem::path& shaders) {
         if(impl_) return std::unexpected(Error(ErrorCategory::Graphics, 90, "EnvironmentLighting already initialized."));
         impl_ = std::make_unique<Impl>();

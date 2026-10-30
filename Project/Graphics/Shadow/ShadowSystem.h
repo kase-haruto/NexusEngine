@@ -41,6 +41,10 @@ namespace NexusEngine {
 			const DirectionalLightData& light, std::span<const ShadowDrawItem> draws);
 		/** \brief GPU idleを保証してから呼ぶ。ResourceとDescriptorを解放する */
 		void Shutdown() noexcept;
+		/** GPUの完了後、既存の影パイプラインと設定を交換先へ引き継ぐ。 */
+		void Swap(ShadowSystem& other) noexcept;
+		/** GPUの完了後、変更のない形状のASを再利用し、未使用形状を解放する。 */
+		void RetainGeometry(std::span<const uint64_t> generations);
 	private:
 		friend class GraphicsResourceFactory;
 		[[nodiscard]] Result<void> Initialize(GraphicsResourceFactory& resources, const std::filesystem::path& shaders);

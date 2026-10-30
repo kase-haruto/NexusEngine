@@ -74,15 +74,17 @@ Details上部の「Add Component / Componentを追加」からPrimitive Renderin
 複数選択時は不足しているEntityだけに追加し、一回のUndoで戻せます。追加Cameraは非primary、既存Lightがあれば追加Lightは無効で始まります。
 
 Primitive RenderingのMesh欄をクリックしてglTF / GLB / OBJを選ぶか、Content BrowserのファイルをMesh欄へドロップします。
+読み込み・画像デコード・ミップ生成・GPU転送はバックグラウンドで進めます。準備中は旧メッシュを表示し、Transformや選択の編集を継続できます。完了後に新しいメッシュへ交換し、連続して選び直した場合は最新の選択だけを反映します。新規Entityでは準備が完了するまでメッシュを表示しません。
 Mesh Nodeでモデル全体または個別Nodeを選択できます。Mesh変更時は全Nodeへ戻し、以前のモデルのNode番号を引き継ぎません。
 Base Color Texture欄も同じ操作で画像を選べます。PNG / JPEG / BMP / TIFFに対応し、Xでモデル付属の材質へ戻します。
-AssetはプロジェクトのAssetフォルダ内から選びます。型違い・破損ファイル・外部への参照は拒否し、理由を欄に表示します。
+AssetはプロジェクトのAssetフォルダ内から選びます。型違いと外部への参照は選択時に拒否します。破損ファイルなど読み込み時のエラーはViewportの診断とOutput Logに表示し、旧メッシュの描画を維持します。
 
 Meshには実Geometryから生成した深度付き形状プレビュー、画像には実画像のプレビューを表示します。
 Content Browserでは対応ファイルにマウスを置くとプレビューが出ます。
 Meshと画像の参照はAssetフォルダからの相対パスでLevelへ保存し、Undo / Redoと再読込に対応します。
 Base Colorの差替えは選択Entityの全材質へ適用し、Raster・影・光学描画で同じGeometry / Materialを使います。
-初めて使うモデル・材質の組ではGPU snapshotを再構築するため、一時的に編集が止まる場合があります。
+未設定Entityの追加や、すでに使用中のメッシュの割り当てではGPU資源を再構築しません。初めて使用する形状・画像だけをバックグラウンドで準備し、既存のGPU Buffer・画像・描画Pipelineは再利用します。カメラプレビューも同じGPU形状・画像を共有します。
+Meshlet描画を無効にしている間は、Mesh Shader PipelineとMeshletを生成しません。初めて有効にした際に準備し、有効化後のアセット追加では既存Meshletも再利用します。
 
 Name、Transform（位置・Euler角UIによるQuaternion回転・拡縮）、Primitive（表示・色・静的Lighting）、
 Camera（FOV・clip・primary/enabled）、DirectionalLight（強度・色・方向・enabled）を登録しています。
@@ -164,6 +166,8 @@ RTX 3060 Tiで実起動し、Docking、Toolbar、SponzaのViewport描画、Conte
 起動Logと画像を`Generated/EditorPreview`へ保存します。Captureは対象windowを前面へ表示します。
 
 ## 今後の範囲
+
+ゲーム固有Componentの自動一覧表示・「その他」での編集・Level保存は[ゲーム固有Componentの追加と保存](CustomComponents.md)を参照してください。
 
 別プロセスRuntimeの起動、実IPC、共有GPU画像、切断復旧は設計契約のみで、今回のローカル再生とは別です。
 glTF / GLB / OBJのMesh選択とBase Color画像の差替えに対応しています。AssetのGUID管理、自動再import、Normal / Metallic等の画像差替えは今後の範囲です。

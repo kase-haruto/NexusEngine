@@ -1,6 +1,7 @@
 #pragma once
 
 // c++
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -31,7 +32,7 @@ namespace NexusEngine {
 		 * \param device CBV生成に使用する非所有Device
 		 * \param allocator 領域の所有元となる非所有Allocator
 		 * \param frameCount 同時進行するFrameContext数
-		 * \param descriptorsPerFrame 各Frameが使用できる最大Descriptor数
+		 * \param descriptorsPerFrame 各Frameの初期予約数と追加ページのDescriptor数
 		 */
 		[[nodiscard]] Result<void> Initialize(
 			ID3D12Device* device,
@@ -59,13 +60,14 @@ namespace NexusEngine {
 
 	private:
 		struct FrameArena {
-			DescriptorHandle allocation; //< 起動中占有するFrame専用の連続領域
+			std::vector<DescriptorHandle> pages; //< 同一Heap上で保持し、Fence完了後に再利用する
+			std::size_t pageIndex = 0;
 			uint32_t cursor = 0; //< 次に書き込む領域内offset
 		};
 
 		ID3D12Device* device_ = nullptr; //< GraphicsSystem所有Deviceへの非所有参照
 		DescriptorAllocator* allocator_ = nullptr; //< DescriptorManager所有Allocatorへの非所有参照
 		std::vector<FrameArena> frames_; //< FrameContextと同じindexで管理するArena
-		uint32_t descriptorsPerFrame_ = 0; //< Frame単位の固定上限
+		uint32_t descriptorsPerFrame_ = 0; //< 初期予約数と追加ページの大きさ
 	};
 } // namespace NexusEngine

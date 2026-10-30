@@ -35,6 +35,8 @@ namespace NexusEngine {
 		[[nodiscard]] IndexFormat GetFormat() const noexcept;
 
 	private:
+		friend class MeshResource;
+		void ShareFrom(const IndexBuffer& source) noexcept;
 		friend class GraphicsContext;
 		friend class IndexBufferUploader;
 		friend class RayTracingScene;
@@ -47,6 +49,6 @@ namespace NexusEngine {
 		void Bind(void* nativeCommandList) const noexcept;
 
 		class Impl;
-		std::unique_ptr<Impl> impl_;
+		std::shared_ptr<Impl> impl_; //< 不変のGPU Bufferをアセットsnapshot間で共有する
 	};
 } // namespace NexusEngine

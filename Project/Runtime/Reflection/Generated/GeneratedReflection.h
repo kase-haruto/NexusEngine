@@ -3,6 +3,7 @@
 #include "Foundation/Reflection/ReflectionValue.h"
 #include "Foundation/Math/Quaternion.h"
 #include "Foundation/Math/Vector3.h"
+#include "Game/Components/MoveComponent.h"
 #include "Graphics/Material/MaterialOverride.h"
 #include "Graphics/Shadow/ShadowTypes.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
@@ -78,6 +79,13 @@ template<> struct ReflectionTraits<NameComponent> {
     static constexpr const char* Label = "component.name";
     template<class Visitor> static void Visit(Visitor&& visitor) {
         visitor("name", &NameComponent::name);
+    }
+};
+template<> struct ReflectionTraits<NexusGame::MoveComponent> {
+    static constexpr const char* Id = "Game.Move";
+    static constexpr const char* Label = "component.gameMove";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("speed", &NexusGame::MoveComponent::speed);
     }
 };
 template<> struct ReflectionTraits<PersistentId> {

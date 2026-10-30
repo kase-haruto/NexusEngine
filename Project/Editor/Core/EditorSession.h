@@ -2,6 +2,7 @@
 
 // engine
 #include "Runtime/Level/LevelDocument.h"
+#include "Runtime/Application/GameRuntime.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 
 // c++ standard
@@ -44,16 +45,21 @@ namespace NexusEngine {
 		[[nodiscard]] LevelDocument* GetLevelDocument() const noexcept { return levelDocument_.get(); }
 		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
 		/** \brief 描画・更新用World。再生中は編集Worldの複製を返す */
-		Level* GetPreviewLevel() noexcept { return playLevel_ ? playLevel_.get() : GetLevel(); }
-		Level* GetPlayLevel() noexcept { return playLevel_.get(); }
+		Level* GetPreviewLevel() noexcept { return IsPlaying() ? playRuntime_.GetLevel() : GetLevel(); }
+		Level* GetPlayLevel() noexcept { return playRuntime_.GetLevel(); }
+		/** \brief Editorと単体起動が共有するGame側のSystem登録処理を設定する */
+		[[nodiscard]] bool SetGameLevelSetup(GameLevelSetup setup) { return playRuntime_.SetLevelSetup(std::move(setup)); }
+		/** \brief 編集中はTransform、再生中はGameRuntimeを更新する */
+		[[nodiscard]] Result<void> UpdatePreview(float deltaTime);
+		const std::optional<Error>& GetPlayError() const noexcept { return playError_; }
 		/** World の同一性を保った再生成後、UI キャッシュだけを無効化する。 */
 		void NotifyReinstanced() noexcept { ++generation_; }
 		/** \brief 編集Worldを変更せずに再生Worldを作る */
 		bool StartPlay();
-		void StopPlay() noexcept { playLevel_.reset(); paused_ = false; }
-		void TogglePause() noexcept { if(playLevel_) paused_ = !paused_; }
-		bool IsPlaying() const noexcept { return playLevel_ != nullptr; }
-		bool IsPaused() const noexcept { return paused_; }
+		void StopPlay() noexcept { playRuntime_.Stop(); playError_.reset(); }
+		void TogglePause() noexcept { playRuntime_.TogglePause(); }
+		bool IsPlaying() const noexcept { return playRuntime_.IsRunning(); }
+		bool IsPaused() const noexcept { return playRuntime_.IsPaused(); }
 		[[nodiscard]] bool			 IsDirty() const noexcept { return dirty_; }
 
 		/** \brief IDとLocal値による編集を適用する。派生MatrixはLevel更新で再計算する */
@@ -63,8 +69,8 @@ namespace NexusEngine {
 
 	private:
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
-		std::unique_ptr<Level> playLevel_; //< 再生専用World。停止時に破棄する
-		bool paused_ = false; //< 再生更新を停止して描画は維持する
+		GameRuntime playRuntime_; //< Game単体起動と共通の実行基盤
+		std::optional<Error> playError_; //< Play開始失敗をEditor UIへ伝える
 
 		SelectionService selection_; //< 全Panel共通の永続ID集合
 		PersistentId previewCamera_;

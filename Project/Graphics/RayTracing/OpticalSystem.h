@@ -64,6 +64,9 @@ namespace NexusEngine {
 			const std::array<float, 3>& ambientIrradiance = {0.03f, 0.03f, 0.03f}, const EnvironmentDrawData& environment = {}, const GlobalIlluminationSettings& gi = {}, const BakedLightingDrawData& baked = {}, const DDGISettings& ddgi = {});
 		/** \brief GPU idleを保証してすべての所有資源を解放する */
 		void Shutdown() noexcept;
+		/** GPUの完了後、既存の光学パイプライン・描画先・設定を交換先へ引き継ぐ。 */
+		void Swap(OpticalSystem& other) noexcept;
+		void RetainGeometry(std::span<const uint64_t> generations);
 		/** \brief 最新Renderで生成した間接拡散出力。無効/非対応/失敗時はnull参照。 */
 		[[nodiscard]] ShaderResourceRef GetDiffuseGlobalIllumination() const noexcept { return diffuseGI_; }
 		/** \brief Renderer内でのみ使う最新DDGI参照。無効・非対応・失敗時はゼロ。 */

@@ -40,6 +40,7 @@ namespace NexusEngine {
 			return invalid("Lightmap geometry exceeds buffer limits.");
 		const auto grid = LightmapChartGrid(static_cast<uint32_t>(corners / 3));
 		MeshAssetData output;
+		output.resourceId = mesh.resourceId;
 		output.vertexStride = sizeof(ModelVertex);
 		output.vertexData.resize(size_t(corners) * sizeof(ModelVertex));
 		output.indexFormat = IndexFormat::UInt32;

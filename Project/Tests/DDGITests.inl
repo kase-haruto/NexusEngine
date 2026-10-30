@@ -53,6 +53,9 @@ std::vector<uint8_t> ValidateDDGIIntegration(uint32_t variant,bool unsupported,R
         settings.freeze=true;
         const auto stable=render(ShadowMode::Auto,false);const auto frame=renderer.GetOptics().GetDDGIFrameCount();
         Require(render(ShadowMode::Auto,false)==stable && renderer.GetOptics().GetDDGIFrameCount()==frame,"Frozen DDGI changed history or pixels.");
+        scene.fallbackEnvironmentIntensity=.05f;
+        Require(render(ShadowMode::Auto,false)==stable,"GI-off environment attenuation changed active DDGI lighting.");
+        scene.fallbackEnvironmentIntensity=1;
         if(test.factory.GetCapabilities().SupportsMeshShaders()) {
             Require(renderer.AreMeshShadersAvailable(),"DDGI Mesh Shader pipeline unavailable.");
             renderer.GetMeshletSettings().enabled=true;
@@ -78,8 +81,11 @@ std::vector<uint8_t> ValidateDDGIIntegration(uint32_t variant,bool unsupported,R
         };
         write(L"Generated/DDGI"+std::to_wstring(variant)+L".ppm",stable);
     }
+    const auto framesBeforeOff=renderer.GetOptics().GetDDGIFrameCount();
     settings.enabled=false;scene.globalIllumination.enabled=false;render(ShadowMode::Auto,false);
     Require(renderer.GetOptics().GetDDGIDrawData().spacingEnabled[3]==0,"Disabled DDGI retained an active draw reference.");
+    Require(renderer.GetOptics().GetDDGIFrameCount()==framesBeforeOff,"GI-off frame updated DDGI probes.");
+    Require(!renderer.IsGlobalIlluminationActive(),"GI-off frame retained a pixel RTGI output.");
     Check(test.queue.WaitForIdle());renderer.Shutdown();test.shadows.ReleaseTexture(depth);
     Check(test.descriptors.RenderTargets().Free(*rtv));transient.Shutdown();test.Validate();
     std::cout << "DDGI integration passed; variant=" << variant << " unsupported=" << unsupported << '\n';return cold;

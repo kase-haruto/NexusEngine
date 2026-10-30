@@ -18,6 +18,7 @@
 #include "Graphics/Resource/Depthstencil/DepthstencilBuffer.h"
 #include "GraphicsContext.h"
 #include "GraphicsRenderer.h"
+#include "PrimitiveRenderer.h"
 #include "GraphicsResourceFactory.h"
 #include "GraphicsRenderExtension.h"
 #include "Graphics/Backend/DirectX12/PostProcess/PostProcessBackend.h"
@@ -454,6 +455,12 @@ namespace NexusEngine {
 	}
 
 	Result<void> GraphicsSystem::ReplaceCameraPreviewRenderer(IGraphicsRenderer* renderer) {
+		return SetCameraPreviewRenderer(renderer, false);
+	}
+	Result<void> GraphicsSystem::AdoptPreparedCameraPreviewRenderer(IGraphicsRenderer* renderer) {
+		return SetCameraPreviewRenderer(renderer, true);
+	}
+	Result<void> GraphicsSystem::SetCameraPreviewRenderer(IGraphicsRenderer* renderer, bool prepared) {
 		if(!impl_ || !renderer || renderer == impl_->cameraPreviewRenderer || renderer == impl_->renderer)
 			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid camera preview renderer."));
 		auto result = impl_->commandQueue.WaitForIdle();
@@ -483,7 +490,7 @@ namespace NexusEngine {
 			result = impl_->cameraPreviewPost.Initialize(impl_->device.GetDevice(), impl_->shaderDirectory, width, height);
 			if(!result) return result;
 		}
-		result = renderer->Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
+		result = prepared ? Result<void>{} : renderer->Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
 		if(!result) {
 			auto idle = impl_->commandQueue.WaitForIdle();
 			if(!idle) return idle;
@@ -550,6 +557,47 @@ namespace NexusEngine {
 		return {};
 	}
 
+	Result<void> GraphicsSystem::PrepareRenderer(IGraphicsRenderer* renderer) {
+		if(!impl_ || !renderer)
+			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid renderer preparation."));
+		// 転送先は未公開の資源だけ。専用Queueの完了を確認してから描画側へ渡す。
+		CommandQueue uploads;
+		auto initialized = uploads.Initialize(impl_->device.GetDevice());
+		if(!initialized) return initialized;
+		GraphicsResourceFactory::UploadScope scope(&uploads);
+		auto result = renderer->Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
+		auto idle = uploads.WaitForIdle();
+		if(!idle) return idle;
+		return result;
+	}
+	Result<void> GraphicsSystem::AdoptPreparedRenderer(IGraphicsRenderer* renderer) {
+		if(!impl_ || !renderer || !impl_->renderer || renderer == impl_->renderer)
+			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid prepared renderer replacement."));
+		auto idle = impl_->commandQueue.WaitForIdle();
+		if(!idle) return idle;
+		impl_->renderer->Shutdown();
+		impl_->renderer = renderer;
+		return {};
+	}
+	Result<void> GraphicsSystem::PrepareModelResources(PrimitiveRenderer* renderer,
+		std::shared_ptr<const RendererModelResources> reuse, std::stop_token cancellation) {
+		if(!impl_ || !renderer) return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid model preparation."));
+		CommandQueue uploads;
+		auto initialized = uploads.Initialize(impl_->device.GetDevice()); if(!initialized) return initialized;
+		GraphicsResourceFactory::UploadScope scope(&uploads);
+		auto result = renderer->PrepareModel({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory}, std::move(reuse), cancellation);
+		auto idle = uploads.WaitForIdle(); if(!idle) return idle;
+		return result;
+	}
+	Result<void> GraphicsSystem::PrepareSharedRenderer(PrimitiveRenderer* renderer, std::shared_ptr<const RendererModelResources> reuse) {
+		if(!impl_ || !renderer) return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid shared renderer preparation."));
+		CommandQueue uploads;
+		auto initialized = uploads.Initialize(impl_->device.GetDevice()); if(!initialized) return initialized;
+		GraphicsResourceFactory::UploadScope scope(&uploads);
+		auto result = renderer->InitializeShared({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory}, std::move(reuse));
+		auto idle = uploads.WaitForIdle(); if(!idle) return idle;
+		return result;
+	}
     Result<void> GraphicsSystem::ReplaceRenderer(IGraphicsRenderer* renderer) {
         if(!impl_ || !renderer || !impl_->renderer || renderer == impl_->renderer)
             return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "Invalid renderer replacement."));

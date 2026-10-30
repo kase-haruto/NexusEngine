@@ -1,6 +1,7 @@
 #include "EditorApplication.h"
 #include "Runtime/Reflection/ComponentReflection.h"
 #include "Foundation/Logging/Logger.h"
+#include "Runtime/Scene/TransformSystem.h"
 
 namespace NexusEngine {
 ReflectionValue EditorApplication::CaptureReinstancing() {
@@ -13,6 +14,7 @@ ReflectionValue EditorApplication::CaptureReinstancing() {
     return ReflectionValue(std::move(result));
 }
 void EditorApplication::ReleaseReinstancing() noexcept {
+    FinishAssetPreparation();
     if(workspace_) { workspace_->ReleaseForReinstancing(); workspace_.reset(); }
     if(auto* level = session_.GetLevel(); level && level->GetScene()) level->GetScene()->ReleaseComponentStorages();
     if(auto* level = session_.GetPlayLevel(); level && level->GetScene()) level->GetScene()->ReleaseComponentStorages();
@@ -25,7 +27,8 @@ void EditorApplication::RestoreReinstancing(const ReflectionValue& snapshot) {
         if(auto found = worlds.find(id); found != worlds.end()) {
             if(!level || !level->GetScene()) throw std::runtime_error("Reinstancing world is no longer available");
             registry.Restore(*level->GetScene(), found->second);
-            const auto update = level->Update(0.0f);
+            // 再生成では派生Matrixだけを復元し、Pause中のゲームSystemを実行しない。
+            const auto update = TransformSystem{}.Update(*level->GetScene());
             if(!update) throw std::runtime_error(update.error().GetMessageText());
         }
     }
