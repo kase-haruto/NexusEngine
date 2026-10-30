@@ -5,6 +5,7 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <atomic>
 
 // engine
 #include "Foundation/Math/Matrix4x4.h"
@@ -15,6 +16,11 @@
 #include "Graphics/Material/OpticalMaterial.h"
 
 namespace NexusEngine {
+	/** 不変なCPUアセットの世代識別子。ペイロードを書き換える際は対応するIDも更新する。 */
+	inline uint64_t NextModelResourceIdentity() noexcept {
+		static std::atomic<uint64_t> next{1};
+		return next.fetch_add(1, std::memory_order_relaxed);
+	}
 	/** Static model pipelineへ渡す共通頂点形式。Loaderごとの差をGPU境界へ持ち込まない。 */
 	struct ModelVertex {
 		float position[3] = {};
@@ -37,6 +43,7 @@ namespace NexusEngine {
 		IndexFormat indexFormat = IndexFormat::UInt16;
 		std::vector<SubmeshRange> submeshes;
 		uint32_t skinIndex = kNoSkin;
+		uint64_t resourceId = NextModelResourceIdentity(); //< 統合時の参照番号変更では維持し、頂点・Index・描画範囲の変更時は再採番する
 	};
 
 	/** glTF等のLoaderが生成するCPU側Material。画像はGPU upload前のencoded byte列で保持する。 */
@@ -55,6 +62,10 @@ namespace NexusEngine {
 		float occlusionStrength = 1;
 		std::vector<uint8_t> emissiveImageData, occlusionImageData;
 		SamplerDesc emissiveSampler, occlusionSampler;
+		// 画像ペイロードを書き換える際は対応するIDを更新する。材質係数の変更では維持する。
+		uint64_t baseColorImageId = NextModelResourceIdentity(), normalImageId = NextModelResourceIdentity();
+		uint64_t metallicRoughnessImageId = NextModelResourceIdentity(), emissiveImageId = NextModelResourceIdentity();
+		uint64_t occlusionImageId = NextModelResourceIdentity();
 	};
 
 	/** Model hierarchy上のNode。Meshを持たないTransform Nodeも許可する。 */

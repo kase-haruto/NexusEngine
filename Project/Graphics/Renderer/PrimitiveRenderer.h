@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <memory>
 #include <vector>
+#include <unordered_map>
+#include <stop_token>
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -27,6 +29,8 @@
 #include "Graphics/Selection/SelectionOutline.h"
 
 namespace NexusEngine {
+	enum class TextureColorSpace : uint8_t;
+	struct RendererModelResources;
 
 	/*-----------------------------------------------------------------------------------------
 	 * PrimitiveRenderer
@@ -35,10 +39,26 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class PrimitiveRenderer final : public IGraphicsRenderer {
 	public:
+		/** 描画中の資源を共有所有で固定し、準備スレッドへ渡す。 */
+		std::shared_ptr<const RendererModelResources> CaptureModelResources() const;
+		/** プレビューの初回生成でも、メインビューのGPUアセットを共有する。 */
+		Result<void> InitializeShared(const GraphicsRendererInitializationContext&, std::shared_ptr<const RendererModelResources>);
+		/** Pipelineを初期化せず、追加・変更されたモデル資源だけを準備する。 */
+		Result<void> PrepareModel(const GraphicsRendererInitializationContext&, std::shared_ptr<const RendererModelResources>, std::stop_token = {});
+		/** GPUの完了後にモデルだけを交換する。描画Pipelineと表示設定は維持する。 */
+		void CommitPreparedModel(PrimitiveRenderer& prepared);
+		/** メッシュ適用の待ち時間を、頂点数に依存する処理と固定の初期化処理に分けて記録する。 */
+		struct InitializationProfile {
+			double pipelineMs = 0, selectionMs = 0, geometryMs = 0, texturesMs = 0, viewSystemsMs = 0, meshletsMs = 0, totalMs = 0;
+			double shadersMs = 0, pipelineCreationMs = 0, meshletPipelineMs = 0;
+			size_t meshes = 0, vertices = 0, materials = 0, encodedTextureBytes = 0;
+			size_t meshesUploaded = 0, meshesReused = 0, texturesCreated = 0, texturesReused = 0;
+		};
+		const InitializationProfile& GetInitializationProfile() const noexcept { return initializationProfile_; }
 		/** \brief Editor に設定値のみを公開する。Runtime は ImGui に依存しない */
 		[[nodiscard]] MeshletDebugSettings& GetMeshletSettings() noexcept { return meshletSettings_; }
-		/** \brief GPU 対応と Pipeline 初期化成功をまとめた利用可能状態 */
-		[[nodiscard]] bool AreMeshShadersAvailable() const noexcept { return meshPipeline_.IsInitialized(); }
+		/** \brief GPU対応と初期化失敗の有無を返す。Pipelineは有効化時に生成する */
+		[[nodiscard]] bool AreMeshShadersAvailable() const noexcept { return meshShadersSupported_ && !meshShaderFailed_; }
 		/**
 		 * \brief Primitive用Shader、Pipeline、Geometry Bufferを初期化する
 		 * \param context GPU Resource FactoryとShader/Assetルートを持つ初期化Context
@@ -69,6 +89,8 @@ namespace NexusEngine {
 		[[nodiscard]] std::span<const OpticalSurfaceMaterial> GetOpticalMaterials() const noexcept { return opticalMaterials_; }
 		/** \brief 次FrameのRT評価へ光学係数を反映する。Geometry/BLAS再生成は不要 */
 		[[nodiscard]] Result<void> SetOpticalMaterial(uint32_t slot, const OpticalMaterial& optics);
+		/** GPUの完了後に呼び、メッシュ交換による環境ベイク・描画系の再構築を避ける。 */
+		void ReuseViewResources(PrimitiveRenderer& previous) noexcept;
 
 
 		/** \brief Scene所有のCPUモデルと更新済み姿勢を接続する。初期化前に設定し、Shutdownまで保持すること */
@@ -78,14 +100,35 @@ namespace NexusEngine {
 		}
 
 	private:
-        Result<ShaderResourceRef> GetMaterialSampler(const SamplerDesc& description);
-        std::vector<std::pair<SamplerDesc, ShaderResourceRef>> materialSamplers_; //< 材質間で共有し、一度だけ退役するSamplerの所有者
+#if defined(NEXUS_GRAPHICS_TESTS)
+		friend class GraphicsBackendTestAccess;
+#endif
+		friend struct RendererModelResources;
+		InitializationProfile initializationProfile_;
+		std::shared_ptr<const RendererModelResources> initializationReuse_;
+		struct SharedTexture {
+			GraphicsResourceFactory* resources = nullptr;
+			TextureResource texture;
+			ShaderResourceRef reference;
+			~SharedTexture();
+		};
+		struct SharedSampler {
+			GraphicsResourceFactory* resources = nullptr;
+			ShaderResourceRef reference;
+			~SharedSampler();
+		};
+		Result<void> BuildModelResources(const GraphicsRendererInitializationContext&, const RendererModelResources*, std::stop_token);
+		Result<void> EnsureMeshlets(const RendererModelResources*, std::stop_token, bool createPipeline);
+		Result<ShaderResourceRef> GetMaterialSampler(const SamplerDesc&, const RendererModelResources* = nullptr);
+		Result<std::shared_ptr<SharedTexture>> GetMaterialTexture(uint64_t, const std::vector<uint8_t>&, TextureColorSpace, const RendererModelResources*);
+		std::vector<std::pair<SamplerDesc, std::shared_ptr<SharedSampler>>> materialSamplers_;
+		std::unordered_map<uint64_t, std::shared_ptr<SharedTexture>> modelTextures_; //< 現snapshotが使う画像だけを所有する
 		struct MaterialGpuResource {
-			std::unique_ptr<TextureResource> texture;
+			std::shared_ptr<SharedTexture> texture;
 			ShaderResourceRef textureRef;
 			ShaderResourceRef samplerRef;
-			std::unique_ptr<TextureResource> normalTexture, metallicRoughnessTexture;
-			std::unique_ptr<TextureResource> emissiveTexture, occlusionTexture;
+			std::shared_ptr<SharedTexture> normalTexture, metallicRoughnessTexture;
+			std::shared_ptr<SharedTexture> emissiveTexture, occlusionTexture;
 			ShaderResourceRef emissiveRef, emissiveSamplerRef, occlusionRef, occlusionSamplerRef;
 			ShaderResourceRef normalRef, normalSamplerRef, metallicRoughnessRef, metallicRoughnessSamplerRef;
 		};
@@ -95,7 +138,10 @@ namespace NexusEngine {
         SelectionOutline selectionOutline_; //< 独立Maskから深度なしで外周を合成
         std::vector<SelectionOutlineDraw> selectionDraws_; //< 通常Drawの確定済みCBをFrame内だけ借用する
 		MeshShaderPipeline meshPipeline_; //< 独立 AS/MS/PS 経路
-		std::vector<std::unique_ptr<MeshletResource>> meshletResources_; //< 元 Mesh と同じ index の静的 Resource
+		std::vector<std::shared_ptr<MeshletResource>> meshletResources_; //< 元Meshと同じindex。既存形状のMeshletを共有する
+		std::vector<bool> meshletAttempted_;
+		bool meshShadersSupported_ = false, meshShaderFailed_ = false;
+		std::filesystem::path shaderDirectory_;
 		MeshletDebugSettings meshletSettings_; //< Editor が変更する表示 / Culling 設定
 		ShadowSystem shadows_; //< Shadow方式とGPU影Resourceの独立所有者
 		EnvironmentLighting environment_; //< IBL GPU ownership independent of materials and viewport

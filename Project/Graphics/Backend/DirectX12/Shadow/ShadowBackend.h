@@ -100,6 +100,8 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class RayTracedShadowTechnique final : public IShadowTechnique {
 	public:
+		void ResetGeometry() noexcept { scene_.ResetGeometry(); }
+		void RetainGeometry(std::span<const uint64_t> generations) { scene_.RetainGeometry(generations); }
 		[[nodiscard]] Result<void> Initialize(ShadowBackend& backend);
 		[[nodiscard]] Result<void> Render(ShadowBackend&, GraphicsContext&, ID3D12GraphicsCommandList*,
 			std::span<const ShadowDrawItem>, ShadowGpuConstants, const ShadowSettings&) override;
@@ -122,6 +124,9 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class ShadowBackend final {
 	public:
+		/** GPUの完了後、RTを使わない次のメッシュでも旧BLASを保持しないよう解放する。 */
+		void ResetGeometry() noexcept;
+		void RetainGeometry(std::span<const uint64_t> generations);
 		[[nodiscard]] Result<void> Initialize(void* nativeDevice, CommandQueue* nativeQueue,
 			DescriptorManager* descriptorManager, BindlessDescriptorTable* bindlessTable,
 			GraphicsResourceFactory* factory, uint32_t frameCount, GraphicsCapabilities caps,

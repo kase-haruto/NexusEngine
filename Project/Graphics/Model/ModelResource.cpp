@@ -5,9 +5,15 @@
 
 namespace NexusEngine {
 	ModelResource::~ModelResource() noexcept { Shutdown(); }
+	void ModelResource::Swap(ModelResource& other) noexcept {
+		meshes_.swap(other.meshes_); sourceGeometryIds_.swap(other.sourceGeometryIds_);
+		nodes_.swap(other.nodes_); animations_.swap(other.animations_); skins_.swap(other.skins_);
+		meshSkinIndices_.swap(other.meshSkinIndices_); materials_.swap(other.materials_);
+	}
 
 	void ModelResource::Shutdown() noexcept {
 		meshes_.clear();
+		sourceGeometryIds_.clear();
 		nodes_.clear();
 		animations_.clear();
 		skins_.clear();

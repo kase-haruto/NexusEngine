@@ -34,6 +34,8 @@
 namespace NexusEngine {
 	class GraphicsBackendTestAccess {
 	public:
+        static std::shared_ptr<MeshResource> Mesh(const PrimitiveRenderer& renderer, uint32_t index) { return renderer.model_.meshes_.at(index); }
+        static const MeshletResource* Meshlets(const PrimitiveRenderer& renderer, uint32_t index) { return renderer.meshletResources_.at(index).get(); }
         static ID3D12Device* Device(GraphicsResourceFactory& factory) { return static_cast<ID3D12Device*>(factory.nativeDevice_); }
         static void AllocateViewDescriptors(GraphicsContext& context, const ConstantBuffer& buffer) {
             for(int i=0;i<200;++i) {
@@ -324,6 +326,7 @@ namespace {
 	#include "BakedLightingTests.inl"
 	#include "DDGITests.inl"
     #include "SelectionOutlineTests.inl"
+    #include "TransientDescriptorTests.inl"
 	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false, PrimitiveShape primitiveShape = PrimitiveShape::Asset) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = performanceMeasurement ? 1280U : (sponza || metalTest ? 384U : (opticalDemo ? 256U : 64U));
@@ -671,6 +674,27 @@ namespace {
             };
             auto on=render(ShadowMode::Auto,false);
             Require(visible(on)>100,"Environment-only raster/optical lighting produced no visible geometry.");
+            if(!opticalDemo && pbrVariant == 0) {
+                auto energy = [](const auto& pixels) { uint64_t sum=0; for(size_t i=0;i<pixels.size();i+=4) sum+=pixels[i]+pixels[i+1]+pixels[i+2]; return sum; };
+                scene.fallbackEnvironmentIntensity=.05f;
+                const auto dimmed=render(ShadowMode::Auto,false);
+                Require(energy(dimmed)>0 && energy(dimmed)<energy(on)/4,"GI-off HDR environment was not attenuated.");
+                Require(!renderer.IsGlobalIlluminationActive() && !renderer.GetOptics().IsDDGIActive() && renderer.GetOptics().GetDDGIFrameCount()==0,
+                    "GI-off environment lighting activated RTGI or DDGI.");
+                scene.fallbackEnvironmentIntensity=1;
+                Require(render(ShadowMode::Auto,false)==on,"Restoring GI-off intensity did not restore HDR lighting.");
+                scene.environment.enabled=false; scene.ambientIrradiance={1,1,1};
+                const auto ambient=render(ShadowMode::Auto,false);
+                scene.fallbackEnvironmentIntensity=.05f;
+                const auto dimAmbient=render(ShadowMode::Auto,false);
+                Require(energy(dimAmbient)>0 && energy(dimAmbient)<energy(ambient)/4,"GI-off fallback sky was not attenuated.");
+                scene.environment.debugMode=LightingDebugMode::Direct; scene.directionalLight.intensity=1;
+                const auto direct=render(ShadowMode::Auto,false);
+                scene.fallbackEnvironmentIntensity=1;
+                Require(render(ShadowMode::Auto,false)==direct && energy(direct)>0,"GI-off environment intensity changed direct lighting.");
+                scene.directionalLight.intensity=0; scene.environment.debugMode=LightingDebugMode::Final;
+                scene.ambientIrradiance={0,0,0}; scene.environment.enabled=true;
+            }
             if(!opticalDemo) {
                 Require(render(ShadowMode::ShadowMap,true)==on,"Shadow Map incorrectly attenuated environment lighting.");
                 Require(render(ShadowMode::RayTracing,true)==on,"RT shadow incorrectly attenuated environment lighting.");
@@ -919,11 +943,28 @@ namespace {
 #include "ColorManagementTests.inl"
 #include "EnvironmentLightingTests.inl"
 #include "ViewportRenderingTests.inl"
+#include "BackgroundAssetTests.inl"
+#include "MeshAssignmentProfileTests.inl"
+#include "IncrementalAssetTests.inl"
 
 int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+		if(argc == 2 && std::strcmp(argv[1], "--transient-descriptors") == 0) { TransientDescriptorTests(); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--meshlet-lazy") == 0) {
+			const auto raster = ForwardIntegration(false,false,false,6);
+			const auto mesh = ForwardIntegration(false,false,false,7);
+			Require(raster.size()==mesh.size(),"Lazy mesh shader output size mismatch.");
+			for(size_t i=0;i<raster.size();++i) Require(std::abs(int(raster[i])-int(mesh[i]))<=1,"Lazy mesh shader differs from raster output.");
+			std::cout << "PASS: lazily initialized mesh shaders match raster output\n"; return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--incremental-assets") == 0) { IncrementalAssetTests(false); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--incremental-sponza") == 0) { IncrementalAssetTests(true); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--mesh-assignment-profile") == 0) { MeshAssignmentProfileTests(); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--mesh-assignment-cached") == 0) { MeshAssignmentCachedSnapshotTest(); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--background-assets") == 0) { BackgroundAssetTests(false); BackgroundAssetTests(true); return 0; }
+		if(argc == 2 && std::strcmp(argv[1], "--background-assets-warp") == 0) { BackgroundAssetTests(true); return 0; }
 		if(argc == 2 && std::strcmp(argv[1], "--shader-cache") == 0) { ShaderCacheTests(); return 0; }
 		if(argc == 2 && std::strcmp(argv[1], "--empty-model") == 0) { EmptyModelInitializationTest(); return 0; }
         if(argc == 2 && std::strcmp(argv[1], "--viewport-preview") == 0) {
@@ -990,6 +1031,12 @@ int main(int argc, char** argv) {
 			EnvironmentLightingIntegration();
 			ForwardIntegration(false,false,false,0,false,false,0,0,4,0,true);
 			ForwardIntegration(true,false,false,0,false,false,0,0,4,0,true);
+			return 0;
+		}
+		if(argc == 2 && std::strcmp(argv[1], "--gi-off") == 0) {
+			EnvironmentLightingIntegration();
+			ForwardIntegration(false,false,false,0,false,true);
+			ForwardIntegration(false,false,false,0,false,false,0,0,4,2);
 			return 0;
 		}
 		if(argc == 2 && std::strcmp(argv[1], "--ibl") == 0) {

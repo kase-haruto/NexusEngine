@@ -26,6 +26,9 @@ namespace NexusEngine {
 		/** \brief 未投入記録のAS/Texture状態を復帰する */
 		static void CompleteRecording(void*, bool, uint32_t) noexcept;
 		void Shutdown() noexcept;
+		/** GPUの完了後、パイプラインを保持して旧GeometryとそのSRVを解放する。 */
+		void ResetGeometry() noexcept;
+		void RetainGeometry(std::span<const uint64_t> generations);
 		[[nodiscard]] ShaderResourceRef GetDiffuseGlobalIllumination() const noexcept { return giSrv_; }
 		[[nodiscard]] DDGIDrawData GetDDGIDrawData(float intensity) const noexcept {return ddgi_.GetDrawData(intensity);}
 		[[nodiscard]] uint32_t GetDDGIFrameCount() const noexcept {return ddgi_.FrameCount();}

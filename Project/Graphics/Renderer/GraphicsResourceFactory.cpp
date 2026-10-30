@@ -35,6 +35,10 @@
 #include "Graphics/Shadow/ShadowSystem.h"
 
 namespace NexusEngine {
+	thread_local CommandQueue* GraphicsResourceFactory::uploadQueueOverride_ = nullptr;
+	GraphicsResourceFactory::UploadScope::UploadScope(CommandQueue* queue) noexcept
+		: previous_(uploadQueueOverride_) { uploadQueueOverride_ = queue; }
+	GraphicsResourceFactory::UploadScope::~UploadScope() { uploadQueueOverride_ = previous_; }
 	Result<void> GraphicsResourceFactory::WaitForIdle() const {
 		if(!commandQueue_) return std::unexpected(Error(ErrorCategory::Graphics, 91, "Graphics queue not connected."));
 		return commandQueue_->WaitForIdle();
@@ -48,7 +52,7 @@ namespace NexusEngine {
 		if(data.submeshes.size() != mesh.GetSubmeshes().size()) return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet submesh count mismatch."));
 		for(uint32_t index : data.vertices) if(index >= mesh.vertexBuffer_.GetVertexCount())
 			return std::unexpected(Error(ErrorCategory::Resource, 81, "Meshlet original vertex index out of bounds."));
-		return resource.Initialize(nativeDevice_, commandQueue_, data, mesh.GetGeometryGeneration());
+		return resource.Initialize(nativeDevice_, UploadQueue(), data, mesh.GetGeometryGeneration());
 	}
 	namespace {
 		constexpr int32_t kInvalidResourceArgument = 1;
@@ -106,7 +110,7 @@ namespace NexusEngine {
 		// 静的GeometryはUpload Heapへ常駐させず、専用UploaderからDefault Heapへ転送する。
 		const VertexBufferUploader uploader;
 		return uploader.Upload(
-			static_cast<ID3D12Device*>(nativeDevice_), commandQueue_, vertexBuffer, data, stride);
+			static_cast<ID3D12Device*>(nativeDevice_), UploadQueue(), vertexBuffer, data, stride);
 	}
 
 	Result<void> GraphicsResourceFactory::CreateIndexBuffer(
@@ -116,7 +120,7 @@ namespace NexusEngine {
 		// Vertex Bufferと同じImmediate Upload経路を使い、RendererからNative Deviceを隠蔽する。
 		const IndexBufferUploader uploader;
 		return uploader.Upload(
-			static_cast<ID3D12Device*>(nativeDevice_), commandQueue_, indexBuffer, data, format);
+			static_cast<ID3D12Device*>(nativeDevice_), UploadQueue(), indexBuffer, data, format);
 	}
 
 	Result<void> GraphicsResourceFactory::CreateMeshResource(
@@ -173,7 +177,8 @@ namespace NexusEngine {
 
 	Result<void> GraphicsResourceFactory::CreateModelResource(
 		ModelResource& model,
-		const ModelAssetData& assetData, const bool generateLightmapUV) const {
+		const ModelAssetData& assetData, const bool generateLightmapUV,
+		const std::unordered_map<uint64_t, std::shared_ptr<const MeshResource>>* reusable, std::stop_token cancellation) const {
 		if(model.IsInitialized() || assetData.meshes.empty()) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
 				"Model resource state or asset data is invalid."));
@@ -250,7 +255,7 @@ namespace NexusEngine {
 			}
 		}
 
-		std::vector<std::unique_ptr<MeshResource>> meshes;
+		std::vector<std::shared_ptr<MeshResource>> meshes;
 		for(const auto& material : assetData.materials) {
 			if(!std::isfinite(material.occlusionStrength) || material.occlusionStrength < 0 || material.occlusionStrength > 1 ||
 				std::any_of(material.emissiveFactor.begin(), material.emissiveFactor.end(), [](float value) { return !std::isfinite(value) || value < 0; }))
@@ -262,6 +267,16 @@ namespace NexusEngine {
 		}
 		meshes.reserve(assetData.meshes.size());
 		for(const MeshAssetData& source : assetData.meshes) {
+			if(cancellation.stop_requested()) return std::unexpected(Error(ErrorCategory::Resource, 132, "Asset preparation cancelled."));
+			if(reusable) {
+				auto found = reusable->find(source.resourceId);
+				if(found != reusable->end() && found->second->GetSubmeshes().size() == source.submeshes.size()) {
+					auto mesh = std::make_shared<MeshResource>();
+					mesh->ShareGeometryFrom(*found->second, source.submeshes);
+					meshes.push_back(std::move(mesh));
+					continue;
+				}
+			}
 			MeshAssetData prepared;
 			const MeshAssetData* geometry = &source;
 			if(generateLightmapUV && source.skinIndex == MeshAssetData::kNoSkin) {
@@ -270,7 +285,7 @@ namespace NexusEngine {
 				prepared = std::move(*result);
 				geometry = &prepared;
 			}
-			auto mesh = std::make_unique<MeshResource>();
+			auto mesh = std::make_shared<MeshResource>();
 			auto result = CreateMeshResource(
 				*mesh, geometry->vertexData, geometry->vertexStride,
 				geometry->indexData, geometry->indexFormat, geometry->submeshes);
@@ -295,6 +310,7 @@ namespace NexusEngine {
 		}
 
 		model.meshes_ = std::move(meshes);
+		for(const auto& mesh : assetData.meshes) model.sourceGeometryIds_.push_back(mesh.resourceId);
 		model.nodes_ = std::move(nodes);
 		model.animations_ = assetData.animations;
 		model.skins_ = assetData.skins;
@@ -353,7 +369,7 @@ namespace NexusEngine {
 		// UploadのCommand資源とFence待機は専用サービスへ閉じ、FactoryはBackend接続だけを提供する。
 		const TextureUploader uploader;
 		return uploader.Upload(
-			static_cast<ID3D12Device*>(nativeDevice_), commandQueue_, texture, desc, pixels);
+			static_cast<ID3D12Device*>(nativeDevice_), UploadQueue(), texture, desc, pixels);
 	}
 
 	Result<void> GraphicsResourceFactory::CreateTexture2DFromEncodedData(

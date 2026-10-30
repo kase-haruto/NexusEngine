@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <mutex>
 
 #include <d3d12.h>
 
@@ -85,6 +86,7 @@ namespace NexusEngine {
 		void Bind(ID3D12GraphicsCommandList* commandList) const noexcept;
 
 	private:
+		mutable std::recursive_mutex mutex_; //< アセット準備と描画が共有するスロットの公開・退役を保護する
 		struct SlotState {
 			uint32_t generation = 1; //< 再利用ごとに更新する世代番号
 			bool active = false;     //< 新しい描画へ公開中か

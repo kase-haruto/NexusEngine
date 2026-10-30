@@ -12,6 +12,13 @@ namespace NexusEngine {
 	};
 	ShadowSystem::ShadowSystem() noexcept = default;
 	ShadowSystem::~ShadowSystem() noexcept { Shutdown(); }
+	void ShadowSystem::RetainGeometry(std::span<const uint64_t> generations) { if(impl_) impl_->backend.RetainGeometry(generations); }
+	void ShadowSystem::Swap(ShadowSystem& other) noexcept {
+		if(impl_) impl_->backend.ResetGeometry();
+		if(other.impl_) other.impl_->backend.ResetGeometry();
+		impl_.swap(other.impl_);
+		std::swap(settings_, other.settings_);
+	}
 	Result<void> ShadowSystem::SetSettings(const ShadowSettings& settings) {
 		if(static_cast<uint8_t>(settings.mode) > static_cast<uint8_t>(ShadowMode::ShadowMap) ||
 			settings.sampleCount == 0 || settings.sampleCount > 64 ||

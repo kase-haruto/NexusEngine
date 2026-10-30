@@ -9,6 +9,13 @@ namespace NexusEngine {
 		geometryGeneration_ = nextGeneration.fetch_add(1, std::memory_order_relaxed);
 	}
 	MeshResource::~MeshResource() noexcept { Shutdown(); }
+	void MeshResource::ShareGeometryFrom(const MeshResource& source, const std::vector<SubmeshRange>& materialRanges) {
+		submeshes_ = source.submeshes_;
+		for(size_t i = 0; i < submeshes_.size(); ++i) submeshes_[i].materialSlot = materialRanges[i].materialSlot;
+		vertexBuffer_.ShareFrom(source.vertexBuffer_);
+		indexBuffer_.ShareFrom(source.indexBuffer_);
+		geometryGeneration_ = source.geometryGeneration_;
+	}
 
 	void MeshResource::Shutdown() noexcept {
 		indexBuffer_.Shutdown();

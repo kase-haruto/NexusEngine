@@ -13,6 +13,7 @@ ReflectionValue EditorApplication::CaptureReinstancing() {
     return ReflectionValue(std::move(result));
 }
 void EditorApplication::ReleaseReinstancing() noexcept {
+    FinishAssetPreparation();
     if(workspace_) { workspace_->ReleaseForReinstancing(); workspace_.reset(); }
     if(auto* level = session_.GetLevel(); level && level->GetScene()) level->GetScene()->ReleaseComponentStorages();
     if(auto* level = session_.GetPlayLevel(); level && level->GetScene()) level->GetScene()->ReleaseComponentStorages();

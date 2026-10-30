@@ -8,6 +8,15 @@ namespace NexusEngine {
 	class OpticalSystem::Impl { public: OpticalBackend backend; };
 	OpticalSystem::OpticalSystem() noexcept = default;
 	OpticalSystem::~OpticalSystem() noexcept { Shutdown(); }
+	void OpticalSystem::RetainGeometry(std::span<const uint64_t> generations) { if(impl_) impl_->backend.RetainGeometry(generations); }
+	void OpticalSystem::Swap(OpticalSystem& other) noexcept {
+		if(impl_) impl_->backend.ResetGeometry();
+		if(other.impl_) other.impl_->backend.ResetGeometry();
+		impl_.swap(other.impl_);
+		std::swap(settings_, other.settings_);
+		std::swap(diffuseGI_, other.diffuseGI_);
+		std::swap(ddgi_, other.ddgi_);
+	}
 	Result<void> OpticalSystem::Initialize(GraphicsResourceFactory& factory, const std::filesystem::path& shaders) {
 		if(impl_) return std::unexpected(Error(ErrorCategory::Graphics, 70, "OpticalSystem already initialized."));
 		auto next = std::make_unique<Impl>();

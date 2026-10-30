@@ -11,6 +11,8 @@
 #include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
 #include <set>
+#include <future>
+#include "Graphics/Resource/WicImageDecoder.h"
 
 namespace NexusEngine {
 	class ShadowSystem;
@@ -83,13 +85,36 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		struct PreparedAssets {
+			std::unique_ptr<ModelAssetLibrary> library;
+			std::shared_ptr<const ModelAssetData> asset;
+			ModelInstance pose;
+			std::unique_ptr<PrimitiveRenderer> renderer, preview;
+			double loadMilliseconds = 0, rendererMilliseconds = 0;
+			~PreparedAssets() {
+				if(preview) preview->Shutdown();
+				if(renderer) renderer->Shutdown();
+			}
+		};
+		Result<void> PrepareAssets(std::vector<ModelAssetLibrary::Request> requests);
+		Result<void> PrepareCameraPreview(bool requested);
+		void FinishAssetPreparation() noexcept;
+		ImTextureRef RequestAssetPreview(const std::string& key, const std::string& reference, bool texture, int node);
+		std::future<Result<std::unique_ptr<PreparedAssets>>> assetBuild_; //< 同時実行は1件。旧資源を描画しながら準備する
+		std::stop_source assetBuildCancellation_;
+		std::future<Result<std::unique_ptr<PreparedAssets>>> previewBuild_; //< カメラ表示の開始時も同期ロードしない
+		size_t buildingPreviewAssetRevision_ = 0;
+		std::vector<ModelAssetLibrary::Request> requestedAssets_;
+		size_t assetRequestRevision_ = 0, buildingAssetRevision_ = 0, resolvedAssetRequestRevision_ = 0, failedAssetRequestRevision_ = 0;
+		std::future<Result<DecodedImage>> thumbnailBuild_; //< サムネイルの生成もUIスレッドを使わない
+		std::string thumbnailBuildKey_;
+		std::set<std::string> failedThumbnails_;
 		[[nodiscard]] Result<void> CreateWorkspace(float dpiScale);
 		ReflectionValue CaptureReinstancing();
 		void ReleaseReinstancing() noexcept;
 		void RestoreReinstancing(const ReflectionValue& snapshot);
 		size_t sceneGeneration_ = 0;
         std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
-        std::unique_ptr<PrimitiveRenderer> replacementRenderer_; //< GraphicsSystem停止まで保持する交換Renderer
         std::unique_ptr<PrimitiveRenderer> cameraPreviewRenderer_; //< プレビュー専用GPU資源。GraphicsSystem停止まで保持する
         RenderScene cameraPreviewScene_;
         size_t previewAssetRevision_ = 0;

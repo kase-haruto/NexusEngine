@@ -1,4 +1,5 @@
-// Asset switching must release unused source/variant payloads and preserve published snapshots.
+#include <future>
+// 切り替えで未使用ペイロードを解放し、公開済みsnapshotと準備中のライブラリを分離する。
 void AssetMemoryTests() {
     using namespace NexusEngine;
     const auto folder = std::filesystem::absolute("Generated/EditorTests/AssetMemory");
@@ -82,6 +83,25 @@ void AssetMemoryTests() {
     assert(library.Snapshot().meshes.empty() && library.Snapshot().materials.empty() && library.Snapshot().nodes.empty());
     ModelInstance emptyPose; assert(emptyPose.Initialize(library.Snapshot()));
     assert(emptyPose.GetNodeWorldTransforms().empty());
+    // 遅いローダーを待つ間も、描画側はキャッシュを即時参照できる。
+    std::promise<void> entered, proceed;
+    auto released = proceed.get_future().share();
+    auto empty = std::make_shared<ModelAssetData>();
+    ModelAssetLibrary active(empty, folder, [&]() {
+        entered.set_value(); released.wait();
+        return PrimitiveMeshBuilder::Build(PrimitiveShape::Cube);
+    });
+    active.Retain({});
+    auto loading = std::async(std::launch::async, [copy = active]() mutable {
+        auto range = copy.Resolve(kStartupModelAssetReference, ""); assert(range);
+        return copy.SharedSnapshot();
+    });
+    entered.get_future().wait();
+    const bool isolated = active.Snapshot().meshes.empty() && !active.FindModel(kStartupModelAssetReference) &&
+        !active.FindRange(PrimitiveShape::Asset, kStartupModelAssetReference, "");
+    proceed.set_value();
+    auto prepared = loading.get();
+    assert(isolated && prepared->meshes.size() == 1 && active.Snapshot().meshes.empty());
     std::filesystem::remove(folder / "a.obj"); std::filesystem::remove(folder / "b.obj");
     std::cout << "PASS: 64 asset switches retain one mesh, evict unused sources, share snapshots and release startup payloads\n";
 }

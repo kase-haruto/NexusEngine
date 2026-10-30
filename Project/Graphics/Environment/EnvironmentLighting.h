@@ -21,6 +21,8 @@ namespace NexusEngine {
         [[nodiscard]] EnvironmentDrawData GetDrawData(const EnvironmentLightingData&) const noexcept;
         /** \brief GraphicsSystemがGPU idleを保証した後に解放する。Resizeの影響は受けない。 */
         void Shutdown() noexcept;
+        /** GPUの完了後、メッシュ交換先へ環境マップとベイク状態の所有権を引き継ぐ。 */
+        void Swap(EnvironmentLighting& other) noexcept;
     private:
         class Impl;
         std::unique_ptr<Impl> impl_; //< 全GPU所有物をDX12境界に閉じ込める

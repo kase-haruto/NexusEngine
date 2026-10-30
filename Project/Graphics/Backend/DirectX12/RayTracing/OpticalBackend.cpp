@@ -460,4 +460,21 @@ namespace NexusEngine {
 		pipelineReady_ = false;
 		timingReadback_.Reset();timingQueries_.Reset();timingReady_.clear();timingRecorded_.clear();timings_={};
 	}
+	void OpticalBackend::ResetGeometry() noexcept {
+		for(auto& [generation, views] : views_) { (void)generation; ReleaseViews(views); }
+		views_.clear();
+		for(auto& active : activeGenerations_) active.clear();
+		accelerationDraws_.clear(); instances_.clear(); geometries_.clear(); hitGroupOffsets_.clear();
+		scene_.ResetGeometry();
+	}
+	void OpticalBackend::RetainGeometry(std::span<const uint64_t> generations) {
+		for(auto it = views_.begin(); it != views_.end();) {
+			if(std::find(generations.begin(), generations.end(), it->first) == generations.end()) {
+				ReleaseViews(it->second); it = views_.erase(it);
+			} else ++it;
+		}
+		for(auto& active : activeGenerations_) active.clear();
+		accelerationDraws_.clear(); instances_.clear(); geometries_.clear(); hitGroupOffsets_.clear();
+		scene_.RetainGeometry(generations);
+	}
 }

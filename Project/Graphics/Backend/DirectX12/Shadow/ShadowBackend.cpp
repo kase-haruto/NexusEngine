@@ -17,6 +17,8 @@
 #include "Graphics/Shader/Shader.h"
 
 namespace NexusEngine {
+	void ShadowBackend::ResetGeometry() noexcept { if(rayTracing_) rayTracing_->ResetGeometry(); }
+	void ShadowBackend::RetainGeometry(std::span<const uint64_t> generations) { if(rayTracing_) rayTracing_->RetainGeometry(generations); }
 	namespace {
 		constexpr int32_t kShadowFailure = 60;
 		void LogRayTracingError(const Error& error) {

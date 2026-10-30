@@ -6,6 +6,9 @@
 #include <filesystem>
 #include <span>
 #include <vector>
+#include <memory>
+#include <unordered_map>
+#include <stop_token>
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -114,7 +117,9 @@ namespace NexusEngine {
 		 */
 		[[nodiscard]] Result<void> CreateModelResource(
 			ModelResource& model,
-			const ModelAssetData& assetData, bool generateLightmapUV = false) const;
+			const ModelAssetData& assetData, bool generateLightmapUV = false,
+			const std::unordered_map<uint64_t, std::shared_ptr<const MeshResource>>* reusable = nullptr,
+			std::stop_token cancellation = {}) const;
 
 		/**
 		 * \brief 全FrameContextに独立sliceを持つConstant Bufferを初期化する
@@ -162,6 +167,17 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> WaitForIdle() const;
 
 	private:
+		// 描画系が保持するFactory参照を変えず、準備スレッドだけ専用の転送Queueを使用する。
+		// 描画とDescriptorの退役には引き続きcommandQueue_を使う。
+		class UploadScope {
+		public:
+			explicit UploadScope(CommandQueue* queue) noexcept;
+			~UploadScope();
+		private:
+			CommandQueue* previous_;
+		};
+		static thread_local CommandQueue* uploadQueueOverride_;
+		CommandQueue* UploadQueue() const noexcept { return uploadQueueOverride_ ? uploadQueueOverride_ : commandQueue_; }
 		friend class GraphicsSystem;
 #if defined(NEXUS_GRAPHICS_TESTS)
 		friend class GraphicsBackendTestAccess;

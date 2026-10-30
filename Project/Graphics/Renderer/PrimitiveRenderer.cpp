@@ -5,10 +5,13 @@
 #include "Graphics/Lighting/LightBaker.h"
 
 // c++
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <span>
 #include <utility>
+#include <chrono>
 
 // engine
 #include "Graphics/Model/ModelAssetData.h"
@@ -19,12 +22,198 @@
 #include "Foundation/Logging/Logger.h"
 
 namespace NexusEngine {
-    Result<ShaderResourceRef> PrimitiveRenderer::GetMaterialSampler(const SamplerDesc& description) {
-        for(const auto& [existing, reference] : materialSamplers_) if(existing == description) return reference;
-        auto sampler = resources_->CreatePersistentSampler(description);
-        if(!sampler) return sampler;
-        materialSamplers_.emplace_back(description, *sampler); return sampler;
-    }
+	struct RendererModelResources {
+		std::unordered_map<uint64_t, std::shared_ptr<const MeshResource>> meshes;
+		std::unordered_map<uint64_t, std::shared_ptr<PrimitiveRenderer::SharedTexture>> textures;
+		std::unordered_map<uint64_t, std::shared_ptr<MeshletResource>> meshlets;
+		std::vector<std::pair<SamplerDesc, std::shared_ptr<PrimitiveRenderer::SharedSampler>>> samplers;
+		bool meshletsEnabled = false;
+	};
+	PrimitiveRenderer::SharedTexture::~SharedTexture() {
+		if(resources && reference.IsValid()) {
+			auto retired = resources->RetirePersistentShaderResource(reference);
+			if(!retired) NEXUS_LOG_ERROR("Graphics", retired.error().GetMessageText());
+		}
+	}
+	PrimitiveRenderer::SharedSampler::~SharedSampler() {
+		if(resources && reference.IsValid()) {
+			auto retired = resources->RetirePersistentShaderResource(reference);
+			if(!retired) NEXUS_LOG_ERROR("Graphics", retired.error().GetMessageText());
+		}
+	}
+	std::shared_ptr<const RendererModelResources> PrimitiveRenderer::CaptureModelResources() const {
+		auto reuse = std::make_shared<RendererModelResources>();
+		for(size_t i = 0; i < model_.meshes_.size(); ++i) {
+			const auto id = model_.sourceGeometryIds_[i];
+			reuse->meshes.emplace(id, model_.meshes_[i]);
+			if(i < meshletResources_.size() && meshletResources_[i]) reuse->meshlets.emplace(id, meshletResources_[i]);
+		}
+		reuse->textures = modelTextures_;
+		reuse->samplers = materialSamplers_;
+		reuse->meshletsEnabled = meshletSettings_.enabled && meshPipeline_.IsInitialized();
+		return reuse;
+	}
+	Result<ShaderResourceRef> PrimitiveRenderer::GetMaterialSampler(const SamplerDesc& description, const RendererModelResources* reuse) {
+		for(const auto& [existing, sampler] : materialSamplers_) if(existing == description) return sampler->reference;
+		if(reuse) for(const auto& [existing, sampler] : reuse->samplers) if(existing == description) {
+			materialSamplers_.emplace_back(description, sampler); return sampler->reference;
+		}
+		auto sampler = std::make_shared<SharedSampler>(); sampler->resources = resources_;
+		auto created = resources_->CreatePersistentSampler(description);
+		if(!created) return std::unexpected(std::move(created.error()));
+		sampler->reference = *created;
+		materialSamplers_.emplace_back(description, sampler);
+		return sampler->reference;
+	}
+	Result<void> PrimitiveRenderer::InitializeShared(const GraphicsRendererInitializationContext& context,
+		std::shared_ptr<const RendererModelResources> reuse) {
+		initializationReuse_ = std::move(reuse);
+		auto initialized = Initialize(context);
+		initializationReuse_.reset();
+		return initialized;
+	}
+	Result<std::shared_ptr<PrimitiveRenderer::SharedTexture>> PrimitiveRenderer::GetMaterialTexture(
+		uint64_t id, const std::vector<uint8_t>& bytes, TextureColorSpace space, const RendererModelResources* reuse) {
+		if(auto found = modelTextures_.find(id); found != modelTextures_.end()) return found->second;
+		if(reuse) if(auto found = reuse->textures.find(id); found != reuse->textures.end()) {
+			modelTextures_.emplace(id, found->second); ++initializationProfile_.texturesReused; return found->second;
+		}
+		auto texture = std::make_shared<SharedTexture>(); texture->resources = resources_;
+		constexpr std::array<uint8_t, 4> white{255,255,255,255};
+		auto created = bytes.empty()
+			? resources_->CreateTexture2D(texture->texture, TextureDesc{1,1,TextureFormat::Rgba8UnormSrgb}, white)
+			: resources_->CreateTexture2DFromEncodedData(texture->texture, bytes, space);
+		if(!created) return std::unexpected(std::move(created.error()));
+		auto reference = resources_->CreatePersistentTextureShaderResource(texture->texture);
+		if(!reference) return std::unexpected(std::move(reference.error()));
+		texture->reference = *reference;
+		modelTextures_.emplace(id, texture); ++initializationProfile_.texturesCreated;
+		return texture;
+	}
+	Result<void> PrimitiveRenderer::BuildModelResources(const GraphicsRendererInitializationContext& context,
+		const RendererModelResources* reuse, std::stop_token cancellation) {
+		if(!modelAsset_ || !modelPose_ || modelPose_->GetAsset() != modelAsset_)
+			return std::unexpected(Error(ErrorCategory::Resource, 1, "Scene model input is not connected."));
+		const auto start = std::chrono::steady_clock::now();
+		const auto cancelled = [&] { return cancellation.stop_requested(); };
+		const auto stopped = [] { return std::unexpected(Error(ErrorCategory::Resource, 132, "Asset preparation cancelled.")); };
+		if(cancelled()) return stopped();
+		const auto& asset = *modelAsset_;
+		initializationProfile_.meshes = asset.meshes.size(); initializationProfile_.materials = asset.materials.size();
+		for(const auto& mesh : asset.meshes) {
+			if(mesh.vertexStride) initializationProfile_.vertices += mesh.vertexData.size()/mesh.vertexStride;
+		}
+		for(const auto& material : asset.materials)
+			initializationProfile_.encodedTextureBytes += material.baseColorImageData.size() + material.normalImageData.size() +
+				material.metallicRoughnessImageData.size() + material.emissiveImageData.size() + material.occlusionImageData.size();
+		auto result = asset.meshes.empty() ? Result<void>{} : context.resources.CreateModelResource(model_, asset, true,
+			reuse ? &reuse->meshes : nullptr, cancellation);
+		if(!result) return result;
+		for(uint32_t i = 0; i < model_.GetMeshCount(); ++i) {
+			const auto found = reuse ? reuse->meshes.find(asset.meshes[i].resourceId) : std::unordered_map<uint64_t, std::shared_ptr<const MeshResource>>::const_iterator{};
+			if(reuse && found != reuse->meshes.end() && found->second->GetGeometryGeneration() == model_.GetMesh(i)->GetGeometryGeneration())
+				++initializationProfile_.meshesReused;
+			else ++initializationProfile_.meshesUploaded;
+		}
+		const auto geometryDone = std::chrono::steady_clock::now();
+		initializationProfile_.geometryMs = std::chrono::duration<double, std::milli>(geometryDone - start).count();
+		materialResources_.reserve(asset.materials.size());
+		for(const auto& material : asset.materials) {
+			if(cancelled()) return stopped();
+			materialResources_.emplace_back(); auto& gpu = materialResources_.back();
+			const auto upload = [&](uint64_t id, const std::vector<uint8_t>& bytes, const SamplerDesc& sampler,
+				std::shared_ptr<SharedTexture>& texture, ShaderResourceRef& reference, ShaderResourceRef& sample,
+				TextureColorSpace space, bool required = false) -> Result<void> {
+				if(cancelled()) return stopped();
+				if(bytes.empty() && !required) return {};
+				auto image = GetMaterialTexture(bytes.empty() ? 0 : id, bytes, space, reuse);
+				if(!image) return std::unexpected(std::move(image.error()));
+				texture = *image; reference = texture->reference;
+				auto sampling = GetMaterialSampler(sampler, reuse);
+				if(!sampling) return std::unexpected(std::move(sampling.error()));
+				sample = *sampling; return {};
+			};
+			result = upload(material.baseColorImageId, material.baseColorImageData, material.sampler,
+				gpu.texture, gpu.textureRef, gpu.samplerRef, TextureColorSpace::Srgb, true);
+			if(result) result = upload(material.normalImageId, material.normalImageData, material.normalSampler,
+				gpu.normalTexture, gpu.normalRef, gpu.normalSamplerRef, TextureColorSpace::Linear);
+			if(result) result = upload(material.metallicRoughnessImageId, material.metallicRoughnessImageData, material.metallicRoughnessSampler,
+				gpu.metallicRoughnessTexture, gpu.metallicRoughnessRef, gpu.metallicRoughnessSamplerRef, TextureColorSpace::Linear);
+			if(result) result = upload(material.emissiveImageId, material.emissiveImageData, material.emissiveSampler,
+				gpu.emissiveTexture, gpu.emissiveRef, gpu.emissiveSamplerRef, TextureColorSpace::Srgb);
+			if(result) result = upload(material.occlusionImageId, material.occlusionImageData, material.occlusionSampler,
+				gpu.occlusionTexture, gpu.occlusionRef, gpu.occlusionSamplerRef, TextureColorSpace::Linear);
+			if(!result) return result;
+		}
+		initializationProfile_.texturesMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - geometryDone).count();
+		for(size_t i = 0; i < model_.GetMaterials().size() && i < materialResources_.size(); ++i) {
+			const auto& material = model_.GetMaterials()[i]; const auto& gpu = materialResources_[i];
+			opticalMaterials_.push_back({material.baseColorFactor, material.optics, gpu.textureRef, gpu.samplerRef,
+				{material.metallicFactor, material.roughnessFactor, material.normalScale,0}, gpu.normalRef, gpu.normalSamplerRef,
+				gpu.metallicRoughnessRef, gpu.metallicRoughnessSamplerRef,
+				{material.emissiveFactor[0],material.emissiveFactor[1],material.emissiveFactor[2],material.occlusionStrength},
+				gpu.emissiveRef,gpu.emissiveSamplerRef,gpu.occlusionRef,gpu.occlusionSamplerRef});
+		}
+		meshletResources_.resize(model_.GetMeshCount()); meshletAttempted_.resize(model_.GetMeshCount());
+		return {};
+	}
+	Result<void> PrimitiveRenderer::PrepareModel(const GraphicsRendererInitializationContext& context,
+		std::shared_ptr<const RendererModelResources> reuse, std::stop_token cancellation) {
+		initializationProfile_ = {}; resources_ = &context.resources;
+		meshShadersSupported_ = resources_->GetCapabilities().SupportsMeshShaders(); shaderDirectory_ = context.shaderDirectory;
+		const auto start = std::chrono::steady_clock::now();
+		auto result = BuildModelResources(context, reuse.get(), cancellation);
+		if(result && reuse && reuse->meshletsEnabled) result = EnsureMeshlets(reuse.get(), cancellation, false);
+		initializationProfile_.totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+		return result;
+	}
+	Result<void> PrimitiveRenderer::EnsureMeshlets(const RendererModelResources* reuse, std::stop_token cancellation, bool createPipeline) {
+		if(!meshShadersSupported_ || meshShaderFailed_ || !modelAsset_) return {};
+		if(createPipeline && !meshPipeline_.IsInitialized()) {
+			const auto start = std::chrono::steady_clock::now();
+			auto created = resources_->CreateMeshShaderPipeline(meshPipeline_, shaderDirectory_);
+			initializationProfile_.meshletPipelineMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+			if(!created) { meshShaderFailed_ = true; return created; }
+		}
+		for(uint32_t i = 0; i < model_.GetMeshCount(); ++i) {
+			if(cancellation.stop_requested()) return std::unexpected(Error(ErrorCategory::Resource, 132, "Asset preparation cancelled."));
+			const auto& mesh = modelAsset_->meshes[i];
+			if(mesh.skinIndex != MeshAssetData::kNoSkin || meshletAttempted_[i]) continue;
+			meshletAttempted_[i] = true;
+			if(reuse) if(auto found = reuse->meshlets.find(mesh.resourceId); found != reuse->meshlets.end() &&
+				found->second->GetGeometryGeneration() == model_.GetMesh(i)->GetGeometryGeneration()) {
+				meshletResources_[i] = found->second; continue;
+			}
+			auto prepared = BuildLightmapGeometry(mesh);
+			if(!prepared) { NEXUS_LOG_WARNING("Meshlet", prepared.error().GetMessageText()); continue; }
+			auto data = MeshletBuilder{}.Build(*prepared);
+			if(!data) { NEXUS_LOG_WARNING("Meshlet", data.error().GetMessageText()); continue; }
+			auto resource = std::make_shared<MeshletResource>();
+			auto uploaded = resources_->CreateMeshletResource(*resource, *data, *model_.GetMesh(i));
+			meshletResources_[i] = std::move(resource);
+			if(!uploaded) NEXUS_LOG_WARNING("Meshlet", uploaded.error().GetMessageText());
+		}
+		return {};
+	}
+	void PrimitiveRenderer::CommitPreparedModel(PrimitiveRenderer& prepared) {
+		model_.Swap(prepared.model_); materialResources_.swap(prepared.materialResources_);
+		modelTextures_.swap(prepared.modelTextures_); materialSamplers_.swap(prepared.materialSamplers_);
+		meshletResources_.swap(prepared.meshletResources_); meshletAttempted_.swap(prepared.meshletAttempted_);
+		opticalMaterials_.swap(prepared.opticalMaterials_);
+		std::swap(modelAsset_, prepared.modelAsset_); std::swap(modelPose_, prepared.modelPose_);
+		initializationProfile_ = prepared.initializationProfile_;
+		selectionDraws_.clear(); shadowDraws_.clear(); opticalDraws_.clear();
+		std::vector<uint64_t> generations;
+		for(const auto& mesh : model_.meshes_) generations.push_back(mesh->GetGeometryGeneration());
+		shadows_.RetainGeometry(generations); optics_.RetainGeometry(generations);
+		bakedLighting_.Shutdown(); bakedLighting_.Initialize(*resources_);
+	}
+	void PrimitiveRenderer::ReuseViewResources(PrimitiveRenderer& previous) noexcept {
+		environment_.Swap(previous.environment_);
+		shadows_.Swap(previous.shadows_);
+		optics_.Swap(previous.optics_);
+		meshletSettings_ = previous.meshletSettings_;
+	}
 	Result<void> PrimitiveRenderer::BakeLighting(const BakedLightingSettings& settings) {
 		if(!modelAsset_ || !modelPose_ || !renderScene_) return std::unexpected(Error(ErrorCategory::Resource,91,"Bake requires model and render scene."));
 		auto baked=LightBaker{}.Bake(*modelAsset_,*modelPose_,*renderScene_,settings);
@@ -42,7 +231,17 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> PrimitiveRenderer::Initialize(
 		const GraphicsRendererInitializationContext& context) {
+		initializationProfile_ = {};
+		const auto initializationStart = std::chrono::steady_clock::now();
+		auto stageStart = initializationStart;
+		const auto mark = [&](double& milliseconds) {
+			const auto now = std::chrono::steady_clock::now();
+			milliseconds = std::chrono::duration<double, std::milli>(now - stageStart).count();
+			stageStart = now;
+		};
 		resources_ = &context.resources;
+		shaderDirectory_ = context.shaderDirectory;
+		meshShadersSupported_ = resources_->GetCapabilities().SupportsMeshShaders();
 		// Shaderはこの初期化時にCompileとReflectionを一度だけ行い、Draw中には解析しない。
 		Shader vertexShader;
 		auto   result = vertexShader.Initialize(
@@ -60,6 +259,7 @@ namespace NexusEngine {
 			return std::unexpected(std::move(result.error()));
 		}
 
+		initializationProfile_.shadersMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - initializationStart).count();
 		// Reflectionでsemanticを検証しつつ、CPU構造からしか安全に決められないoffsetを明示する。
 		GraphicsPipelineDesc pipelineDesc;
 		pipelineDesc.hdrRenderTarget = true;
@@ -82,78 +282,20 @@ namespace NexusEngine {
 			return std::unexpected(std::move(result.error()));
 		}
 
+		mark(initializationProfile_.pipelineMs);
+		initializationProfile_.pipelineCreationMs = initializationProfile_.pipelineMs - initializationProfile_.shadersMs;
 		// モデルの選択・CPUロード・再生設定はScene側で済ませる。ここではGPU転送だけを担当する。
         result = selectionOutline_.Initialize(context.resources, context.shaderDirectory);
         if(!result) return result;
+		mark(initializationProfile_.selectionMs);
 
         if(modelAsset_ == nullptr || modelPose_ == nullptr || modelPose_->GetAsset() != modelAsset_) {
 			Shutdown();
 			return std::unexpected(Error(ErrorCategory::Resource, 1, "Scene model input is not connected."));
 		}
-		// Prepare/upload one mesh at a time; never clone the entire scene and its encoded images.
-		const ModelAssetData* asset = modelAsset_;
-		result = asset->meshes.empty() ? Result<void>{} : context.resources.CreateModelResource(model_, *asset, true);
-		if(!result) {
-			Shutdown();
-			return std::unexpected(std::move(result.error()));
-		}
-
-		// Materialごとに独立したTexture/Samplerを生成し、SubmeshのmaterialSlotで選択する。
-		// Missing albedo maps multiply by white; a checker fallback would tint mirrors.
-		constexpr std::array<uint8_t, 16> kWhitePixels = {
-			255, 255, 255, 255, 255, 255, 255, 255,
-			255, 255, 255, 255, 255, 255, 255, 255};
-		materialResources_.reserve(asset->materials.size());
-		for(const ModelMaterialAssetData& material : asset->materials) {
-			// Retain ownership before allocation so every failure retires its descriptors.
-			materialResources_.emplace_back();
-			auto& gpuMaterial = materialResources_.back();
-			gpuMaterial.texture = std::make_unique<TextureResource>();
-			result				= material.baseColorImageData.empty()
-									  ? resources_->CreateTexture2D(*gpuMaterial.texture,
-																	TextureDesc{2, 2, TextureFormat::Rgba8UnormSrgb}, kWhitePixels)
-									  : resources_->CreateTexture2DFromEncodedData(
-											*gpuMaterial.texture, material.baseColorImageData, TextureColorSpace::Srgb);
-			if(!result) {
-				Shutdown();
-				return std::unexpected(std::move(result.error()));
-			}
-			auto textureReference = resources_->CreatePersistentTextureShaderResource(*gpuMaterial.texture);
-			if(!textureReference) {
-				Shutdown();
-				return std::unexpected(std::move(textureReference.error()));
-			}
-			gpuMaterial.textureRef = *textureReference;
-            auto samplerReference = GetMaterialSampler(material.sampler);
-			if(!samplerReference) {
-				Shutdown();
-				return std::unexpected(std::move(samplerReference.error()));
-			}
-			gpuMaterial.samplerRef = *samplerReference;
-			// Retain ownership before upload so initialization failures retire every descriptor.
-			auto uploadMap = [&](const std::vector<uint8_t>& bytes, const SamplerDesc& sampler,
-				std::unique_ptr<TextureResource>& texture, ShaderResourceRef& ref, ShaderResourceRef& samplerRef, TextureColorSpace space = TextureColorSpace::Linear) -> Result<void> {
-				if(bytes.empty()) return {};
-				texture = std::make_unique<TextureResource>();
-				auto status = resources_->CreateTexture2DFromEncodedData(*texture, bytes, space);
-				if(!status) return status;
-				auto srv = resources_->CreatePersistentTextureShaderResource(*texture);
-				if(!srv) return std::unexpected(std::move(srv.error()));
-				ref = *srv;
-                auto sample = GetMaterialSampler(sampler);
-				if(!sample) return std::unexpected(std::move(sample.error()));
-				samplerRef = *sample;
-				return {};
-			};
-			auto& gpu = materialResources_.back();
-			result = uploadMap(material.normalImageData, material.normalSampler, gpu.normalTexture, gpu.normalRef, gpu.normalSamplerRef);
-			if(result) result = uploadMap(material.metallicRoughnessImageData, material.metallicRoughnessSampler,
-				gpu.metallicRoughnessTexture, gpu.metallicRoughnessRef, gpu.metallicRoughnessSamplerRef);
-			if(result) result = uploadMap(material.emissiveImageData, material.emissiveSampler, gpu.emissiveTexture, gpu.emissiveRef, gpu.emissiveSamplerRef, TextureColorSpace::Srgb);
-			if(result) result = uploadMap(material.occlusionImageData, material.occlusionSampler, gpu.occlusionTexture, gpu.occlusionRef, gpu.occlusionSamplerRef);
-			if(!result) { Shutdown(); return std::unexpected(std::move(result.error())); }
-		}
-
+		auto built = BuildModelResources(context, initializationReuse_.get(), {});
+		if(!built) { Shutdown(); return built; }
+		stageStart = std::chrono::steady_clock::now();
         auto initialBuffer = std::make_unique<ConstantBuffer>();
         result = resources_->CreateConstantBuffer(*initialBuffer, sizeof(PrimitiveDrawData));
         if(!result) { Shutdown(); return result; }
@@ -171,47 +313,26 @@ namespace NexusEngine {
 		result = environment_.Initialize(context.resources, context.shaderDirectory);
 		if(!result) { Shutdown(); return result; }
 		bakedLighting_.Initialize(context.resources);
-		for(size_t i = 0; i < model_.GetMaterials().size(); ++i) {
-			const auto& material = model_.GetMaterials()[i];
-			opticalMaterials_.push_back({material.baseColorFactor, material.optics,
-				materialResources_[i].textureRef, materialResources_[i].samplerRef,
-				{material.metallicFactor, material.roughnessFactor, material.normalScale, 0},
-				materialResources_[i].normalRef, materialResources_[i].normalSamplerRef,
-				materialResources_[i].metallicRoughnessRef, materialResources_[i].metallicRoughnessSamplerRef,
-				{material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2], material.occlusionStrength},
-				materialResources_[i].emissiveRef, materialResources_[i].emissiveSamplerRef, materialResources_[i].occlusionRef, materialResources_[i].occlusionSamplerRef});
+		mark(initializationProfile_.viewSystemsMs);
+		if(meshletSettings_.enabled) {
+			auto meshlets = EnsureMeshlets(nullptr, {}, true);
+			if(!meshlets) NEXUS_LOG_WARNING("Meshlet", meshlets.error().GetMessageText());
 		}
-		////////////////////////////////////////////////////////////////////////////////
-		// 静的 Meshlet は Asset 初期化時だけ生成。Skinning は従来 Pipeline を維持する。
-		// Mesh Pipeline / 個別 Meshlet 初期化失敗も従来描画を継続できるようにする。
-		// 他の必須初期化が成功した後に実行し、Upload 完了確認に失敗した Resource が
-		// 初期化 rollback で即時破棄されず、GPU idle 後の Shutdown まで保持されるようにする。
-		////////////////////////////////////////////////////////////////////////////////
-		meshletResources_.resize(model_.GetMeshCount());
-		if(resources_->GetCapabilities().SupportsMeshShaders()) {
-			auto meshStatus = resources_->CreateMeshShaderPipeline(meshPipeline_, context.shaderDirectory);
-			if(!meshStatus) NEXUS_LOG_WARNING("Meshlet", meshStatus.error().GetMessageText());
-			else for(uint32_t i = 0; i < model_.GetMeshCount(); ++i) {
-				if(asset->meshes[i].skinIndex != MeshAssetData::kNoSkin) continue;
-				auto prepared = BuildLightmapGeometry(asset->meshes[i]);
-				if(!prepared) { NEXUS_LOG_WARNING("Meshlet", prepared.error().GetMessageText()); continue; }
-				auto data = MeshletBuilder{}.Build(*prepared);
-				if(!data) { NEXUS_LOG_WARNING("Meshlet", data.error().GetMessageText()); continue; }
-				auto resource = std::make_unique<MeshletResource>();
-				meshStatus = resources_->CreateMeshletResource(*resource, *data, *model_.GetMesh(i));
-				if(!meshStatus) {
-					NEXUS_LOG_WARNING("Meshlet", meshStatus.error().GetMessageText());
-					// Upload 待機失敗時にも GPU が使用する Resource を Shutdown まで保持する。
-					meshletResources_[i] = std::move(resource);
-					continue;
-				}
-				meshletResources_[i] = std::move(resource);
-			}
-		}
+		mark(initializationProfile_.meshletsMs);
+		initializationProfile_.totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - initializationStart).count();
+		NEXUS_LOG_INFO("Assets.Profile", "Renderer initialization: meshes=" + std::to_string(initializationProfile_.meshes) +
+			", vertices=" + std::to_string(initializationProfile_.vertices) + ", materials=" + std::to_string(initializationProfile_.materials) +
+			", encodedTextureMiB=" + std::to_string(double(initializationProfile_.encodedTextureBytes) / (1024 * 1024)) +
+			", pipeline=" + std::to_string(initializationProfile_.pipelineMs) + ", selection=" + std::to_string(initializationProfile_.selectionMs) +
+			", geometry=" + std::to_string(initializationProfile_.geometryMs) + ", textures=" + std::to_string(initializationProfile_.texturesMs) +
+			", viewSystems=" + std::to_string(initializationProfile_.viewSystemsMs) + ", meshlets=" + std::to_string(initializationProfile_.meshletsMs) +
+			", shaders=" + std::to_string(initializationProfile_.shadersMs) + ", pipelineCreation=" + std::to_string(initializationProfile_.pipelineCreationMs) +
+			", meshletPipeline=" + std::to_string(initializationProfile_.meshletPipelineMs) + ", total=" + std::to_string(initializationProfile_.totalMs) + " ms.");
 		return {};
 	}
 
 	void PrimitiveRenderer::Shutdown() noexcept {
+		meshShadersSupported_ = false;
         selectionDraws_.clear();
         selectionOutline_.Shutdown();
 		// GraphicsSystem の GPU idle 後に呼ばれる。元 Vertex Buffer より先に解放する。
@@ -224,30 +345,12 @@ namespace NexusEngine {
 		opticalMaterials_.clear();
 		shadows_.Shutdown();
 		shadowDraws_.clear();
-		// GraphicsSystemは通常Shutdown前にGPU idleを保証する。参照はそれでも共通retire経路へ渡し、
-		// 実行中のRenderer差し替えへ拡張した場合にも即時slot再利用を起こさない。
-		if(resources_ != nullptr) {
-			try {
-				auto retire = [&](ShaderResourceRef& reference) {
-					if(!reference.IsValid()) return;
-					auto result = resources_->RetirePersistentShaderResource(reference);
-					if(!result) NEXUS_LOG_ERROR("Graphics", result.error().GetMessageText());
-					reference = {};
-				};
-				for(MaterialGpuResource& material : materialResources_) {
-					retire(material.textureRef);
-                    retire(material.normalRef); retire(material.metallicRoughnessRef);
-                    retire(material.emissiveRef); retire(material.occlusionRef);
-				}
-                for(auto& [description, reference] : materialSamplers_) { static_cast<void>(description); retire(reference); }
-			} catch(...) {
-				NEXUS_LOG_ERROR("Graphics", "Unexpected exception while retiring PrimitiveRenderer descriptors.");
-			}
-		}
 		drawBuffers_.clear();
 
 		materialResources_.clear();
         materialSamplers_.clear();
+		modelTextures_.clear();
+		meshletAttempted_.clear();
 		// PipelineとBufferはいずれもDevice依存なので、GraphicsSystemがDeviceより先に呼び出す。
 
 		model_.Shutdown();
@@ -256,6 +359,10 @@ namespace NexusEngine {
 	}
 
 	void PrimitiveRenderer::Render(GraphicsContext& context) {
+		if(meshletSettings_.enabled && AreMeshShadersAvailable()) {
+			auto meshlets = EnsureMeshlets(nullptr, {}, true);
+			if(!meshlets) NEXUS_LOG_WARNING("Meshlet", meshlets.error().GetMessageText());
+		}
 		optics_.ClearFrameOutputs();
 		drawData_.diffuseGIIndex=0;
 		drawData_.ddgi={};
@@ -275,6 +382,13 @@ namespace NexusEngine {
 		auto environmentStatus = environment_.Prepare(renderScene_->environment);
 		if(!environmentStatus) NEXUS_LOG_ERROR("Environment", environmentStatus.error().GetMessageText());
 		drawData_.environment = environment_.GetDrawData(renderScene_->environment);
+		// GI用の強い空を、GIオフ時に未遮蔽の環境光としてそのまま注入しない。
+		const bool giRequested = renderScene_->ddgi.enabled || renderScene_->bakedLighting.enabled || renderScene_->globalIllumination.enabled;
+		const float fallbackIntensity = giRequested ? 1.0f :
+			(std::isfinite(renderScene_->fallbackEnvironmentIntensity) ? std::clamp(renderScene_->fallbackEnvironmentIntensity, 0.0f, 1.0f) : 0.0f);
+		auto ambientIrradiance = renderScene_->ambientIrradiance;
+		for(auto& channel : ambientIrradiance) channel *= fallbackIntensity;
+		drawData_.environment.parameters[0] *= fallbackIntensity;
 		const bool dynamicGI=renderScene_->ddgi.enabled && resources_->GetCapabilities().SupportsRayTracing();
 		auto bakedStatus = dynamicGI?Result<void>{}:bakedLighting_.Prepare(*modelAsset_,*modelPose_,*renderScene_);
 		if(!bakedStatus) NEXUS_LOG_ERROR("BakedGI",bakedStatus.error().GetMessageText());
@@ -285,7 +399,7 @@ namespace NexusEngine {
 		// ベイク方式を選択した場合はキャッシュ未作成時もRTGIを起動しない。
 		if(renderScene_->bakedLighting.enabled || renderScene_->ddgi.enabled) realtimeGI.enabled = false;
 		drawData_.cameraPosition = {cameraWorld->At(3, 0), cameraWorld->At(3, 1), cameraWorld->At(3, 2), 1};
-		for(size_t i = 0; i < 3; ++i) drawData_.ambientIrradiance[i] = renderScene_->ambientIrradiance[i];
+		for(size_t i = 0; i < 3; ++i) drawData_.ambientIrradiance[i] = ambientIrradiance[i];
 		const auto& fog = renderScene_->fog;
 		const bool validFog = fog.IsValid();
 		drawData_.fogColorEnabled = validFog ? std::array<float, 4>{fog.color[0], fog.color[1], fog.color[2], fog.enabled ? 1.0f : 0.0f}
@@ -324,7 +438,7 @@ namespace NexusEngine {
 			}
 		}
 		auto radiance = (renderScene_->environment.debugMode == LightingDebugMode::Final || renderScene_->environment.debugMode == LightingDebugMode::Indirect || realtimeGI.enabled || renderScene_->ddgi.enabled)
-			? optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_, renderScene_->ambientIrradiance, drawData_.environment, realtimeGI, bakedData, renderScene_->ddgi)
+			? optics_.Render(context, projection, renderScene_->directionalLight, opticalDraws_, opticalMaterials_, ambientIrradiance, drawData_.environment, realtimeGI, bakedData, renderScene_->ddgi)
 			: Result<ShaderResourceRef>{ShaderResourceRef{}};
 		drawData_.diffuseGIIndex = radiance && realtimeGI.enabled ? optics_.GetDiffuseGlobalIllumination().index : 0;
 		drawData_.ddgi=radiance && renderScene_->ddgi.enabled?optics_.GetDDGIDrawData():DDGIDrawData{};

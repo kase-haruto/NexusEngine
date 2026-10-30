@@ -14,6 +14,9 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
+#include <chrono>
+#include <tuple>
+#include <cctype>
 
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "ThirdParty/imgui/imgui.h"
@@ -33,6 +36,213 @@ namespace NexusEngine {
 			return asset;
 		}
 	}
+	Result<void> EditorApplication::PrepareAssets(std::vector<ModelAssetLibrary::Request> requests) {
+		// 空のEntityや組み込み形状の未使用ファイル名は、GPUアセット集合を変えない。
+		std::erase_if(requests, [](const auto& request) { return request.shape == PrimitiveShape::Asset && request.mesh.empty(); });
+		for(auto& request : requests) if(request.shape != PrimitiveShape::Asset) request.mesh.clear();
+		std::ranges::sort(requests, [](const auto& a, const auto& b) {
+			return std::tie(a.shape, a.mesh, a.texture) < std::tie(b.shape, b.mesh, b.texture);
+		});
+		requests.erase(std::unique(requests.begin(), requests.end()), requests.end());
+		if(assetRequestRevision_ == 0 || requestedAssets_ != requests) {
+			assetBuildCancellation_.request_stop();
+			requestedAssets_ = requests; ++assetRequestRevision_;
+		}
+		if(modelLibrary_->MatchesRequests(requests)) {
+			resolvedAssetRequestRevision_ = assetRequestRevision_;
+			session_.Diagnostics().Resolve("assets");
+		}
+		if(assetBuild_.valid() && assetBuild_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+			Result<std::unique_ptr<PreparedAssets>> built;
+			try { built = assetBuild_.get(); }
+			catch(const std::exception& exception) { built = std::unexpected(Error(ErrorCategory::Resource, 131, exception.what())); }
+			if(buildingAssetRevision_ == assetRequestRevision_ && resolvedAssetRequestRevision_ != assetRequestRevision_) {
+				if(!built) {
+					failedAssetRequestRevision_ = assetRequestRevision_;
+					session_.Diagnostics().Set("assets", built.error().GetMessageText(), true);
+					NEXUS_LOG_ERROR("Assets", built.error().GetMessageText());
+				} else {
+					auto& prepared = **built;
+					const auto publicationStart = std::chrono::steady_clock::now();
+					if(prepared.renderer) {
+						auto idle = graphicsSystem_->WaitForIdle(); if(!idle) return idle;
+						auto previousAsset = modelAsset_;
+						modelPose_ = std::move(prepared.pose);
+						materialRenderer_->CommitPreparedModel(*prepared.renderer);
+						modelAsset_ = prepared.asset;
+						materialRenderer_->SetModelInput(modelAsset_.get(), &modelPose_);
+						if(prepared.preview) {
+							if(cameraPreviewRenderer_) {
+								cameraPreviewRenderer_->CommitPreparedModel(*prepared.preview);
+								cameraPreviewRenderer_->SetModelInput(modelAsset_.get(), &modelPose_);
+							} else {
+								prepared.preview->SetModelInput(modelAsset_.get(), &modelPose_);
+								prepared.preview->SetRenderScene(&cameraPreviewScene_);
+								auto adopted = graphicsSystem_->AdoptPreparedCameraPreviewRenderer(prepared.preview.get());
+								if(!adopted) return adopted;
+								cameraPreviewRenderer_ = std::move(prepared.preview);
+							}
+						} else {
+							auto released = graphicsSystem_->ReleaseCameraPreviewRenderer(); if(!released) return released;
+							cameraPreviewRenderer_.reset();
+						}
+						previewInitializationFailed_ = false; editPose_.reset();
+						mirrorMaterialSlot_ = glassMaterialSlot_ = UINT32_MAX;
+						for(uint32_t slot = 0; slot < modelAsset_->materials.size(); ++slot) {
+							if(modelAsset_->materials[slot].name == "Mirror Sphere") mirrorMaterialSlot_ = slot;
+							if(modelAsset_->materials[slot].name == "Glass Sphere") glassMaterialSlot_ = slot;
+						}
+						if(workspace_) workspace_->ViewportEditor().SetModel(*modelAsset_, modelPose_);
+						++renderScene_.ddgi.revision;
+					}
+					modelLibrary_ = std::move(prepared.library);
+					uploadedAssetRevision_ = modelLibrary_->Revision();
+					if(cameraPreviewRenderer_) previewAssetRevision_ = uploadedAssetRevision_;
+					resolvedAssetRequestRevision_ = assetRequestRevision_;
+					session_.Diagnostics().Resolve("assets");
+					const auto& profile = materialRenderer_->GetInitializationProfile();
+					const double published = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - publicationStart).count();
+					NEXUS_LOG_INFO("Assets", "Asset update: CPU=" + std::to_string(prepared.loadMilliseconds) +
+						" ms, resources=" + std::to_string(prepared.rendererMilliseconds) + " ms, publish=" + std::to_string(published) +
+						" ms; meshes uploaded/reused=" + std::to_string(profile.meshesUploaded) + "/" + std::to_string(profile.meshesReused) +
+						", textures created/reused=" + std::to_string(profile.texturesCreated) + "/" + std::to_string(profile.texturesReused));
+				}
+			}
+		}
+		if(!assetBuild_.valid() && resolvedAssetRequestRevision_ != assetRequestRevision_ && failedAssetRequestRevision_ != assetRequestRevision_) {
+			auto library = std::make_unique<ModelAssetLibrary>(*modelLibrary_);
+			const bool withPreview = workspace_ && session_.GetCameraPreview().IsValid() && workspace_->Viewport().IsCameraPreviewVisible();
+			const bool reusePreview = cameraPreviewRenderer_ != nullptr;
+			auto reuse = materialRenderer_->CaptureModelResources();
+			assetBuildCancellation_ = std::stop_source{};
+			buildingAssetRevision_ = assetRequestRevision_;
+			assetBuild_ = std::async(std::launch::async,
+				[library = std::move(library), requests = std::move(requests), reuse = std::move(reuse), current = modelAsset_,
+				 graphics = graphicsSystem_, withPreview, reusePreview, cancellation = assetBuildCancellation_.get_token()]() mutable -> Result<std::unique_ptr<PreparedAssets>> {
+					auto prepared = std::make_unique<PreparedAssets>();
+					const auto start = std::chrono::steady_clock::now();
+					library->Retain(requests);
+					for(const auto& request : requests) {
+						if(cancellation.stop_requested()) return std::unexpected(Error(ErrorCategory::Resource,132,"Asset preparation cancelled."));
+						auto range = library->Resolve(request.shape, request.mesh, request.texture);
+						if(!range) return std::unexpected(std::move(range.error()));
+					}
+					prepared->asset = library->SharedSnapshot(); prepared->library = std::move(library);
+					if(prepared->asset == current) return prepared;
+					auto pose = prepared->pose.Initialize(*prepared->asset); if(!pose) return std::unexpected(std::move(pose.error()));
+					const auto loaded = std::chrono::steady_clock::now();
+					prepared->loadMilliseconds = std::chrono::duration<double, std::milli>(loaded - start).count();
+					prepared->renderer = std::make_unique<PrimitiveRenderer>();
+					prepared->renderer->SetModelInput(prepared->asset.get(), &prepared->pose);
+					auto initialized = graphics->PrepareModelResources(prepared->renderer.get(), std::move(reuse), cancellation);
+					if(!initialized) return std::unexpected(std::move(initialized.error()));
+					if(withPreview) {
+						if(cancellation.stop_requested()) return std::unexpected(Error(ErrorCategory::Resource,132,"Asset preparation cancelled."));
+						prepared->preview = std::make_unique<PrimitiveRenderer>();
+						prepared->preview->SetModelInput(prepared->asset.get(), &prepared->pose);
+						auto resources = prepared->renderer->CaptureModelResources();
+						initialized = reusePreview
+							? graphics->PrepareModelResources(prepared->preview.get(), std::move(resources), cancellation)
+							: graphics->PrepareSharedRenderer(prepared->preview.get(), std::move(resources));
+						if(!initialized) return std::unexpected(std::move(initialized.error()));
+					}
+					prepared->rendererMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loaded).count();
+					return prepared;
+				});
+		}
+		if(assetBuild_.valid() && resolvedAssetRequestRevision_ != assetRequestRevision_) session_.Diagnostics().Set("assets.loading", "Loading mesh assets...", false);
+		else session_.Diagnostics().Resolve("assets.loading");
+		return {};
+	}
+
+	Result<void> EditorApplication::PrepareCameraPreview(bool requested) {
+		if(previewBuild_.valid() && previewBuild_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+			Result<std::unique_ptr<PreparedAssets>> built;
+			try { built = previewBuild_.get(); }
+			catch(const std::exception& exception) { built = std::unexpected(Error(ErrorCategory::Resource, 131, exception.what())); }
+			if(requested && buildingPreviewAssetRevision_ == uploadedAssetRevision_) {
+				previewAssetRevision_ = uploadedAssetRevision_;
+				if(!built) {
+					previewInitializationFailed_ = true;
+					session_.Diagnostics().Set("preview.renderer", built.error().GetMessageText(), true);
+				} else if((**built).asset == modelAsset_) {
+					auto& renderer = (**built).preview;
+					renderer->SetModelInput(modelAsset_.get(), &modelPose_);
+					renderer->SetRenderScene(&cameraPreviewScene_);
+					auto idle = graphicsSystem_->WaitForIdle(); if(!idle) return idle;
+					if(cameraPreviewRenderer_) {
+						cameraPreviewRenderer_->CommitPreparedModel(*renderer);
+						cameraPreviewRenderer_->SetModelInput(modelAsset_.get(), &modelPose_);
+						cameraPreviewRenderer_->SetRenderScene(&cameraPreviewScene_);
+					} else {
+						auto adopted = graphicsSystem_->AdoptPreparedCameraPreviewRenderer(renderer.get()); if(!adopted) return adopted;
+						cameraPreviewRenderer_ = std::move(renderer);
+					}
+					previewInitializationFailed_ = false;
+					session_.Diagnostics().Resolve("preview.renderer");
+				}
+			}
+		}
+		if(requested && !previewBuild_.valid() && !assetBuild_.valid() && !previewInitializationFailed_ &&
+			(!cameraPreviewRenderer_ || previewAssetRevision_ != uploadedAssetRevision_)) {
+			buildingPreviewAssetRevision_ = uploadedAssetRevision_;
+			previewBuild_ = std::async(std::launch::async, [asset = modelAsset_, reuse = materialRenderer_->CaptureModelResources(), graphics = graphicsSystem_]() -> Result<std::unique_ptr<PreparedAssets>> {
+				auto prepared = std::make_unique<PreparedAssets>();
+				prepared->asset = asset;
+				auto initialized = prepared->pose.Initialize(*asset);
+				if(!initialized) return std::unexpected(std::move(initialized.error()));
+				prepared->preview = std::make_unique<PrimitiveRenderer>();
+				prepared->preview->SetModelInput(asset.get(), &prepared->pose);
+				initialized = graphics->PrepareSharedRenderer(prepared->preview.get(), std::move(reuse));
+				if(!initialized) return std::unexpected(std::move(initialized.error()));
+				return prepared;
+			});
+		}
+		return {};
+	}
+	void EditorApplication::FinishAssetPreparation() noexcept {
+		assetBuildCancellation_.request_stop();
+		// DeviceとFactoryの解放、またはコードの差し替えより先に準備処理を終了する。
+		for(auto* future : {&assetBuild_, &previewBuild_}) {
+			try { if(future->valid()) { auto prepared = future->get(); } }
+			catch(const std::exception& exception) { NEXUS_LOG_ERROR("Assets", exception.what()); }
+		}
+		try { if(thumbnailBuild_.valid()) { auto image = thumbnailBuild_.get(); } }
+		catch(const std::exception& exception) { NEXUS_LOG_ERROR("Assets", exception.what()); }
+	}
+
+	ImTextureRef EditorApplication::RequestAssetPreview(const std::string& key, const std::string& reference, bool texture, int node) {
+		auto cached = imguiRenderer_.FindPreview(key);
+		if(cached._TexData || !imguiRenderer_.CanCreatePreview()) return cached;
+		if(thumbnailBuild_.valid()) {
+			if(thumbnailBuild_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return {};
+			try {
+				auto image = thumbnailBuild_.get();
+				if(image) imguiRenderer_.CreatePreview(thumbnailBuildKey_, *image);
+				else failedThumbnails_.insert(thumbnailBuildKey_);
+			} catch(const std::exception&) { failedThumbnails_.insert(thumbnailBuildKey_); }
+			return imguiRenderer_.FindPreview(key);
+		}
+		// 本体の読み込みを優先し、大きいモデルをサムネイル用に同時ロードしない。
+		if(assetBuild_.valid() || failedThumbnails_.contains(key)) return {};
+		if(failedThumbnails_.size() >= 128) failedThumbnails_.clear();
+		thumbnailBuildKey_ = key;
+		auto library = std::make_unique<ModelAssetLibrary>(*modelLibrary_);
+		thumbnailBuild_ = std::async(std::launch::async, [library = std::move(library), reference, texture, node]() -> Result<DecodedImage> {
+			if(texture) {
+				auto bytes = library->Texture(reference);
+				if(!bytes) return std::unexpected(std::move(bytes.error()));
+				auto image = WicImageDecoder{}.Decode(**bytes);
+				if(!image) return std::unexpected(std::move(image.error()));
+				return CreateImageThumbnail(*image);
+			}
+			auto model = library->Model(reference);
+			if(!model) return std::unexpected(std::move(model.error()));
+			return CreateModelThumbnail(**model, node);
+		});
+		return {};
+	}
+
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
 		editPose_.reset();
         reportedAssetErrors_.clear();
@@ -70,6 +280,7 @@ namespace NexusEngine {
 		auto levelResult = session_.Open(std::filesystem::path{ConvertString(bootSettings.project.startupLevel)});
 		if(!levelResult) return levelResult;
 		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // HDR未指定時の遠方環境の照度
+		renderScene_.fallbackEnvironmentIntensity = .05f; // GIオフ時は弱い環境光だけを残す
 		renderScene_.globalIllumination.enabled = false;
 		renderScene_.bakedLighting.enabled = false;
 		renderScene_.ddgi.enabled = bootSettings.editor.giMode == "DDGI";
@@ -391,11 +602,16 @@ namespace NexusEngine {
             [this](const std::filesystem::path& path, bool texture) -> Result<std::string> {
                 auto reference = modelLibrary_->Reference(path);
                 if(!reference) return std::unexpected(reference.error());
-                if(texture) { auto loaded = modelLibrary_->Texture(*reference); if(!loaded) return std::unexpected(loaded.error()); }
-                else { auto loaded = modelLibrary_->Model(*reference); if(!loaded) return std::unexpected(loaded.error()); }
+                // 選択確定ではパスと形式だけを検証し、重いデコードは準備スレッドで行う。
+                auto extension = AssetCatalog::Utf8(path.extension());
+                std::ranges::transform(extension, extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                const bool supported = texture
+                    ? extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".bmp" || extension == ".tif" || extension == ".tiff"
+                    : extension == ".gltf" || extension == ".glb" || extension == ".obj";
+                if(!supported) return std::unexpected(Error(ErrorCategory::Resource, 130, "Unsupported asset format."));
                 return reference;
             }, [this](const std::string& reference) -> const ModelAssetData* {
-                auto model = modelLibrary_->Model(reference); return model ? *model : nullptr;
+                return modelLibrary_->FindModel(reference);
             }, [this](const std::string& path, bool texture, int node) -> ImTextureRef {
                 std::string reference;
                 if(path == kStartupModelAssetReference && !texture) reference = path;
@@ -404,17 +620,7 @@ namespace NexusEngine {
                     if(!result) return {}; reference = *result;
                 }
                 const auto key = std::string(texture ? "texture:" : "mesh:") + reference + ":" + std::to_string(node);
-                auto cached = imguiRenderer_.FindPreview(key);
-                if(cached._TexData) return cached;
-                if(!imguiRenderer_.CanCreatePreview()) return {};
-                if(texture) {
-                    auto bytes = modelLibrary_->Texture(reference); if(!bytes) return {};
-                    auto image = WicImageDecoder{}.Decode(**bytes); if(!image) return {};
-                    return imguiRenderer_.CreatePreview(key, CreateImageThumbnail(*image));
-                }
-                auto model = modelLibrary_->Model(reference); if(!model) return {};
-                auto image = CreateModelThumbnail(**model, node); if(!image) return {};
-                return imguiRenderer_.CreatePreview(key, *image);
+                return RequestAssetPreview(key, reference, texture, node);
             });
 		if(!workspace_->Viewport().AttachLocalPreview(imguiRenderer_, ImGuiRenderer::SceneViewportTexture,
 			[graphics = graphicsSystem_](uint32_t width, uint32_t height) { return graphics->RequestSceneViewportSize(width, height); })) {
@@ -442,6 +648,8 @@ namespace NexusEngine {
 
 	Result<void> EditorApplication::PrepareRender(const uint32_t width, const uint32_t height) {
 		if(sceneGeneration_ != session_.Generation()) {
+			// 別LevelのEntity番号が一致しても、旧メッシュを仮表示しない。
+			renderScene_.primitives.clear();
 			sceneGeneration_ = session_.Generation();
 			// Probe history and a saved bake belong to one document's geometry/light setup.
 			++renderScene_.ddgi.revision;
@@ -485,28 +693,32 @@ namespace NexusEngine {
 		if(preview == nullptr || preview->GetScene() == nullptr || sceneHeight == 0) return {};
 		const float aspect = static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight);
 		if(graphicsSystem_) graphicsSystem_->SetCameraPreviewActive(false);
+		const auto previousPrimitives = renderScene_.primitives;
+		const auto previousAssetRevision = uploadedAssetRevision_;
 		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_, session_.IsPlaying());
-		size_t missingAssets = 0;
-		if(extracted && modelLibrary_) {
+		if(extracted && modelLibrary_ && graphicsSystem_) {
             std::vector<ModelAssetLibrary::Request> requests;
             requests.reserve(renderScene_.primitives.size());
             for(const auto& item : renderScene_.primitives) requests.push_back({item.shape, item.meshAsset, item.baseColorTexture});
-            modelLibrary_->Retain(requests);
+            auto preparation = PrepareAssets(std::move(requests));
+            if(!preparation) return preparation;
             for(auto& item : renderScene_.primitives) {
-                auto range = modelLibrary_->Resolve(item.shape, item.meshAsset, item.baseColorTexture);
-                if(!range) {
-                    ++missingAssets;
-                    const auto key = std::to_string(static_cast<uint32_t>(item.shape)) + "\n" + item.meshAsset + "\n" + item.baseColorTexture;
-                    if(reportedAssetErrors_.insert(key).second) NEXUS_LOG_ERROR("Assets", range.error().GetMessageText());
-                    item.nodeEnd = 0;
-                    continue;
-                }
-                item.nodeBegin = range->begin; item.nodeEnd = range->end;
-                item.materialBegin = range->materialBegin;
-                if(item.shape != PrimitiveShape::Asset) item.nodeIndex = PrimitiveRenderItem::kAllNodes;
-                if(item.nodeIndex != PrimitiveRenderItem::kAllNodes) {
-                    if(item.nodeIndex >= range->end - range->begin) item.nodeEnd = 0;
-                    else item.nodeIndex += range->begin;
+                auto range = modelLibrary_->FindRange(item.shape, item.meshAsset, item.baseColorTexture);
+                if(range) {
+                    item.nodeBegin = range->begin; item.nodeEnd = range->end;
+                    item.materialBegin = range->materialBegin;
+                    if(item.shape != PrimitiveShape::Asset) item.nodeIndex = PrimitiveRenderItem::kAllNodes;
+                    if(item.nodeIndex != PrimitiveRenderItem::kAllNodes) {
+                        if(item.nodeIndex >= range->end - range->begin) item.nodeEnd = 0;
+                        else item.nodeIndex += range->begin;
+                    }
+                } else {
+                    // 準備中は同じEntityの旧メッシュを表示し、Transformや選択の編集は継続する。
+                    const auto previous = std::ranges::find(previousPrimitives, item.sourceObject, &PrimitiveRenderItem::sourceObject);
+                    if(previous != previousPrimitives.end() && uploadedAssetRevision_ == previousAssetRevision) {
+                        item.nodeBegin = previous->nodeBegin; item.nodeEnd = previous->nodeEnd;
+                        item.nodeIndex = previous->nodeIndex; item.materialBegin = previous->materialBegin;
+                    } else item.nodeEnd = 0;
                 }
                 if(!session_.IsPlaying()) for(auto id : session_.Selection().All()) {
                     const auto entity = preview->FindEntity(id);
@@ -514,44 +726,15 @@ namespace NexusEngine {
                     item.selected |= entity.IsAlive() && item.sourceObject.value == ((static_cast<uint64_t>(local.generation) << 32) | local.index);
                 }
             }
-            if(graphicsSystem_ && uploadedAssetRevision_ != modelLibrary_->Revision()) {
-                auto released = graphicsSystem_->ReleaseCameraPreviewRenderer();
-                if(!released) return released;
-                cameraPreviewRenderer_.reset();
-                previewInitializationFailed_ = false;
-                auto previousAsset = std::move(modelAsset_);
-                auto previousPose = modelPose_;
-                modelAsset_ = modelLibrary_->SharedSnapshot();
-                modelPose_.Shutdown();
-                auto initialized = modelPose_.Initialize(*modelAsset_);
-                if(!initialized) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return initialized; }
-                auto renderer = std::make_unique<PrimitiveRenderer>();
-                renderer->SetRenderScene(&renderScene_); renderer->SetModelInput(modelAsset_.get(), &modelPose_);
-                // 初期化はCommandList記録前。旧GPU資源はidle後にだけ解放する。
-                auto replaced = graphicsSystem_->ReplaceRenderer(renderer.get());
-                if(!replaced) { modelAsset_ = std::move(previousAsset); modelPose_ = std::move(previousPose); return replaced; }
-                replacementRenderer_ = std::move(renderer);
-                editPose_.reset();
-                // Compaction changes global material offsets, including the demo diagnostics slots.
-                mirrorMaterialSlot_ = glassMaterialSlot_ = UINT32_MAX;
-                for(uint32_t slot = 0; slot < modelAsset_->materials.size(); ++slot) {
-                    if(modelAsset_->materials[slot].name == "Mirror Sphere") mirrorMaterialSlot_ = slot;
-                    if(modelAsset_->materials[slot].name == "Glass Sphere") glassMaterialSlot_ = slot;
-                }
-                materialRenderer_ = replacementRenderer_.get(); shadows_ = &materialRenderer_->GetShadows(); optics_ = &materialRenderer_->GetOptics();
-                uploadedAssetRevision_ = modelLibrary_->Revision();
-                NEXUS_LOG_INFO("Assets", "Uploaded model and material asset snapshot.");
-                if(workspace_) workspace_->ViewportEditor().SetModel(*modelAsset_, modelPose_);
-            }
         }
-		if(missingAssets) session_.Diagnostics().Set("assets", std::to_string(missingAssets) + " asset references could not be loaded. See Output Log.", true);
-		else session_.Diagnostics().Resolve("assets");
 		if(!extracted) {
 			session_.Diagnostics().Set("scene", extracted.error().GetMessageText(), true);
 			// 描画抽出に失敗したフレームは古い映像を描かず、診断を表示して編集を継続する。
 			renderScene_.primitives.clear(); renderScene_.camera.reset();
 		} else session_.Diagnostics().Resolve("scene");
 		if(workspace_) workspace_->ViewportEditor().Prepare(renderScene_, aspect);
+		const bool previewRequested = extracted && graphicsSystem_ && workspace_ && session_.GetCameraPreview().IsValid() && workspace_->Viewport().IsCameraPreviewVisible();
+		if(graphicsSystem_) { auto prepared = PrepareCameraPreview(previewRequested); if(!prepared) return prepared; }
 		if(extracted && graphicsSystem_ && workspace_ && session_.GetCameraPreview().IsValid()) {
 			auto camera = session_.ResolveCameraPreview(16.0f / 9.0f);
 			if(!camera) session_.Diagnostics().Set("preview.camera", camera.error().GetMessageText(), true);
@@ -562,14 +745,6 @@ namespace NexusEngine {
 					cameraPreviewScene_.camera = *camera;
 					for(auto& item : cameraPreviewScene_.primitives) item.selected = false;
 					if(previewAssetRevision_ != uploadedAssetRevision_) previewInitializationFailed_ = false;
-					if((!cameraPreviewRenderer_ || previewAssetRevision_ != uploadedAssetRevision_) && !previewInitializationFailed_) {
-						auto renderer = std::make_unique<PrimitiveRenderer>();
-						renderer->SetRenderScene(&cameraPreviewScene_); renderer->SetModelInput(modelAsset_.get(), &modelPose_);
-						auto result = graphicsSystem_->ReplaceCameraPreviewRenderer(renderer.get());
-						previewAssetRevision_ = uploadedAssetRevision_;
-						if(result) { cameraPreviewRenderer_ = std::move(renderer); session_.Diagnostics().Resolve("preview.renderer"); }
-						else { previewInitializationFailed_ = true; session_.Diagnostics().Set("preview.renderer", result.error().GetMessageText(), true); }
-					}
 					if(cameraPreviewRenderer_ && !previewInitializationFailed_) {
 						// 設定値は主ビューと揃え、GPU資源と履歴はプレビュー側で独立して保持する。
 						if(shadows_) static_cast<void>(cameraPreviewRenderer_->GetShadows().SetSettings(shadows_->GetSettings()));
@@ -615,6 +790,7 @@ namespace NexusEngine {
 	}
 
 	void EditorApplication::Shutdown() noexcept {
+		FinishAssetPreparation();
 		ReinstancingService::Get().Unregister(this);
 		editPose_.reset();
 		if(workspace_) {

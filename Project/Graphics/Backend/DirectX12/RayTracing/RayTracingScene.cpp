@@ -291,4 +291,18 @@ namespace NexusEngine {
 		device_.Reset();
 		statistics_ = {};
 	}
+	void RayTracingScene::ResetGeometry() noexcept {
+		for(auto& frame : frames_) frame = Frame{};
+		cache_.clear();
+		statistics_ = {};
+	}
+	void RayTracingScene::RetainGeometry(std::span<const uint64_t> generations) {
+		for(auto& frame : frames_) {
+			frame.references.clear(); frame.pendingBuilds.clear(); frame.previous.clear(); frame.current.clear(); frame.built = false;
+		}
+		std::erase_if(cache_, [&](const auto& entry) {
+			return std::find(generations.begin(), generations.end(), entry.first) == generations.end();
+		});
+		statistics_.blasCount = static_cast<uint32_t>(cache_.size());
+	}
 }

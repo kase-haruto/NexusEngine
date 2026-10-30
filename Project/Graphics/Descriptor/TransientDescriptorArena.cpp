@@ -2,6 +2,7 @@
 
 // c++
 #include <utility>
+#include <string>
 
 // engine
 #include "DescriptorAllocator.h"
@@ -15,7 +16,7 @@ namespace NexusEngine {
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
-	// Heap上にFrameごとの固定領域を確保する
+	// Heap上にFrameごとの初期ページを確保する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> TransientDescriptorArena::Initialize(
 		ID3D12Device* const device,
@@ -41,7 +42,7 @@ namespace NexusEngine {
 				Shutdown();
 				return std::unexpected(std::move(allocation.error()));
 			}
-			frames_.push_back(FrameArena { *allocation, 0 });
+			frames_.push_back(FrameArena { { *allocation }, 0, 0 });
 		}
 		return {};
 	}
@@ -49,9 +50,10 @@ namespace NexusEngine {
 	void TransientDescriptorArena::Shutdown() noexcept {
 		if(allocator_ != nullptr) {
 			for(const auto& frame : frames_) {
-				if(!frame.allocation.IsValid()) continue;
-				auto result = allocator_->Free(frame.allocation);
-				if(!result) NEXUS_LOG_ERROR("Graphics", result.error().GetMessageText());
+				for(const auto& page : frame.pages) {
+					auto result = allocator_->Free(page);
+					if(!result) NEXUS_LOG_ERROR("Graphics", result.error().GetMessageText());
+				}
 			}
 		}
 		frames_.clear();
@@ -64,6 +66,7 @@ namespace NexusEngine {
 		if(frameIndex < frames_.size()) {
 			// Descriptor内容は上書き時にCreate*Viewが更新するため、Heapのclearは不要。
 			frames_[frameIndex].cursor = 0;
+			frames_[frameIndex].pageIndex = 0;
 		}
 	}
 
@@ -82,13 +85,24 @@ namespace NexusEngine {
 		}
 
 		auto& frame = frames_[frameIndex];
-		if(frame.cursor >= descriptorsPerFrame_) {
-			return std::unexpected(Error(ErrorCategory::Graphics, kArenaExhausted,
-				"Transient resource descriptor capacity was exhausted for this frame."));
+		if(frame.cursor >= frame.pages[frame.pageIndex].count) {
+			if(frame.pageIndex + 1 == frame.pages.size()) {
+				// 既存Handleと記録済みDrawを維持したまま、同じHeapから追加する。
+				auto allocation = allocator_->Allocate(descriptorsPerFrame_);
+				if(!allocation) {
+					return std::unexpected(Error(ErrorCategory::Graphics, kArenaExhausted,
+						"Transient resource descriptors could not grow for frame " + std::to_string(frameIndex) +
+						": " + allocation.error().GetMessageText()));
+				}
+				frame.pages.push_back(*allocation);
+			}
+			++frame.pageIndex;
+			frame.cursor = 0;
 		}
 
-		const auto cpuHandle = allocator_->GetCpuHandle(frame.allocation, frame.cursor);
-		const auto gpuHandle = allocator_->GetGpuHandle(frame.allocation, frame.cursor);
+		const auto& page = frame.pages[frame.pageIndex];
+		const auto cpuHandle = allocator_->GetCpuHandle(page, frame.cursor);
+		const auto gpuHandle = allocator_->GetGpuHandle(page, frame.cursor);
 		D3D12_CONSTANT_BUFFER_VIEW_DESC desc = {};
 		desc.BufferLocation = bufferLocation;
 		desc.SizeInBytes = sizeInBytes;

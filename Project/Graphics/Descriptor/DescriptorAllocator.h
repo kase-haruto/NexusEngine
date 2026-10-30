@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <mutex>
 
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -53,6 +54,7 @@ namespace NexusEngine {
 		[[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(const DescriptorHandle& allocation, uint32_t offset = 0) const noexcept;
 
 	private:
+		std::mutex allocationMutex_; //< アセット準備スレッドと描画スレッドの確保・解放を排他制御する
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> heap_; //< Descriptor Heap所有者
 		std::vector<bool> allocated_; //< 各Indexの割当状態
 		uint32_t descriptorSize_ = 0; //< Handle計算用Device依存増分

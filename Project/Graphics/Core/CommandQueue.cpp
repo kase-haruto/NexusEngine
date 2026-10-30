@@ -40,14 +40,6 @@ namespace NexusEngine {
 			return std::unexpected(MakeDirectXError(kFenceCreationFailed, result, "Failed to create command queue fence."));
 		}
 
-		// SetEventOnCompletionから通知されるauto-reset Eventを一つだけ共有する。
-		// Waitは直列に呼ばれるため、FrameごとのEvent所有は現段階では不要。
-		fenceEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-		if(fenceEvent_ == nullptr) {
-			const auto nativeCode = static_cast<Error::NativeErrorCode>(GetLastError());
-			Shutdown();
-			return std::unexpected(Error(ErrorCategory::Graphics, kEventCreationFailed, "Failed to create fence event.", nativeCode));
-		}
 		return {};
 	}
 
@@ -55,11 +47,6 @@ namespace NexusEngine {
 	// CPU同期オブジェクトとQueueを依存の逆順で解放する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	void CommandQueue::Shutdown() noexcept {
-		// OS HandleはComPtrの対象外なので、明示的に閉じて二重Closeを防ぐ。
-		if(fenceEvent_ != nullptr) {
-			CloseHandle(fenceEvent_);
-			fenceEvent_ = nullptr;
-		}
 		// FenceはQueueの実行位置を表すため、Queueより先に参照を解放する。
 		fence_.Reset();
 		queue_.Reset();
@@ -80,6 +67,7 @@ namespace NexusEngine {
 	// Queue末尾へ単調増加するFence値を記録する
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<uint64_t> CommandQueue::Signal() {
+		const std::lock_guard lock(signalMutex_);
 		// 値を先に確保し、成功時に呼び出し側が同じ値をFrameContextへ保存できるようにする。
 		const uint64_t fenceValue = nextFenceValue_++;
 		const HRESULT result = queue_->Signal(fence_.Get(), fenceValue);
@@ -103,13 +91,21 @@ namespace NexusEngine {
 		if(fenceValue == 0 || completed >= fenceValue) {
 			return {};
 		}
-		// GPU側Fenceが目標値へ到達した時だけEventがSignalされるよう登録する。
-		const HRESULT result = fence_->SetEventOnCompletion(fenceValue, fenceEvent_);
+		// 描画とアセット準備が同時に待機できるよう、スレッドごとにEventを持つ。
+		// 自動リセットEventを共有すると、別の待機スレッドを起こすおそれがある。
+		struct WaitEvent {
+			HANDLE handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+			~WaitEvent() { if(handle) CloseHandle(handle); }
+		};
+		thread_local WaitEvent event;
+		if(!event.handle) return std::unexpected(Error(ErrorCategory::Graphics, kEventCreationFailed,
+			"Failed to create fence event.", static_cast<Error::NativeErrorCode>(GetLastError())));
+		const HRESULT result = fence_->SetEventOnCompletion(fenceValue, event.handle);
 		if(FAILED(result)) {
 			return std::unexpected(MakeDirectXError(kWaitRegistrationFailed, result, "Failed to register fence completion event."));
 		}
 		// FrameContextのAllocatorを安全にResetするため、対象GPU処理の完了まで待機する。
-		const DWORD waitResult = WaitForSingleObject(fenceEvent_, INFINITE);
+		const DWORD waitResult = WaitForSingleObject(event.handle, INFINITE);
 		if(waitResult != WAIT_OBJECT_0) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kFenceWaitFailed, "GPU Fence wait failed.",
 				static_cast<Error::NativeErrorCode>(GetLastError())));

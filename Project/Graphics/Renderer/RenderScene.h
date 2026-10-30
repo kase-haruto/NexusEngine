@@ -73,6 +73,7 @@ namespace NexusEngine {
 	struct RenderScene {
 		DirectionalLightData directionalLight; //< API非依存Lightingと影の共通入力
 		std::array<float, 3> ambientIrradiance {0.03f, 0.03f, 0.03f};
+		float fallbackEnvironmentIntensity = 1; //< GI未選択時の未遮蔽環境光倍率。GI用の空の強度とは分離する
 		FogSettings fog;
 		BakedLightingSettings bakedLighting; //< 保存済みのライトマップ・プローブ設定
 		DDGISettings ddgi; //< 動的な照度フィールド。GPU参照は保持しない

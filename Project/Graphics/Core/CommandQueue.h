@@ -2,6 +2,7 @@
 
 // c++
 #include <cstdint>
+#include <mutex>
 
 // windows
 #ifndef NOMINMAX
@@ -75,7 +76,7 @@ namespace NexusEngine {
 	private:
 		Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_; //< GPUへCommand Listを投入するQueue
 		Microsoft::WRL::ComPtr<ID3D12Fence> fence_;       //< Queue完了位置を追跡するFence
-		HANDLE fenceEvent_ = nullptr;                     //< CPU待機用イベント
+		std::mutex signalMutex_;                         //< Fence値の採番とQueueへのSignalを直列化する
 		uint64_t nextFenceValue_ = 1;                     //< 次回Signalへ割り当てる単調増加値
 	};
 

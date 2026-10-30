@@ -21,6 +21,10 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class RayTracingScene final {
 	public:
+		/** GPUの完了後、Device接続を維持して旧Geometryの所有権だけを解放する。 */
+		void ResetGeometry() noexcept;
+		/** GPUの完了後、次snapshotで使うBLASだけを残す。 */
+		void RetainGeometry(std::span<const uint64_t> generations);
 		/** \brief AS生成Deviceと既存Frame slot数を接続する。GPU命令はまだ発行しない */
 		[[nodiscard]] Result<void> Initialize(ID3D12Device* device, uint32_t frameCount);
 		/**

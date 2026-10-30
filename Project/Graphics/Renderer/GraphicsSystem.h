@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <stop_token>
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -13,6 +14,8 @@
 
 namespace NexusEngine {
 	class IGraphicsRenderer;
+	class PrimitiveRenderer;
+	struct RendererModelResources;
 	class IGraphicsRenderExtension;
 
 	/*-----------------------------------------------------------------------------------------
@@ -67,6 +70,13 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> AttachRenderer(IGraphicsRenderer* renderer);
         /** \brief 記録開始前にGPU完了を待ち、初期化成功したRendererへ原子的に交換する */
         [[nodiscard]] Result<void> ReplaceRenderer(IGraphicsRenderer* renderer);
+		/** 描画を継続しながら、別スレッドで未公開Rendererを初期化する。完了までSystemを保持すること。 */
+		[[nodiscard]] Result<void> PrepareRenderer(IGraphicsRenderer* renderer);
+		/** モデルの差分準備専用。Pipelineは生成しない。 */
+		Result<void> PrepareModelResources(PrimitiveRenderer* renderer, std::shared_ptr<const RendererModelResources> reuse, std::stop_token cancellation = {});
+		Result<void> PrepareSharedRenderer(PrimitiveRenderer* renderer, std::shared_ptr<const RendererModelResources> reuse);
+		/** 準備済みRendererを、描画記録前にGPUの完了を待って公開する。再初期化は行わない。 */
+		[[nodiscard]] Result<void> AdoptPreparedRenderer(IGraphicsRenderer* renderer);
 		/** \brief 上位描画拡張を初期化してPresent前の記録経路へ接続する */
 		[[nodiscard]] Result<void> AttachRenderExtension(IGraphicsRenderExtension* extension);
 		/** \brief 起動時GPU機能の値を返す。未初期化時は全機能が非対応 */
@@ -81,12 +91,14 @@ namespace NexusEngine {
 		[[nodiscard]] ViewportImage GetSceneViewportImage() const noexcept;
 		/** 独立したカメラプレビュー。作成・交換は描画命令の記録開始前に行う。 */
 		[[nodiscard]] Result<void> ReplaceCameraPreviewRenderer(IGraphicsRenderer* renderer);
+		[[nodiscard]] Result<void> AdoptPreparedCameraPreviewRenderer(IGraphicsRenderer* renderer);
 		/** GPU idle後にプレビュー資源を解放する。モデル差し替え時の旧Asset保持を防ぐ。 */
 		[[nodiscard]] Result<void> ReleaseCameraPreviewRenderer();
 		void SetCameraPreviewActive(bool active) noexcept;
 		[[nodiscard]] ViewportImage GetCameraPreviewImage() const noexcept;
 
 	private:
+		Result<void> SetCameraPreviewRenderer(IGraphicsRenderer* renderer, bool prepared);
 		class Impl;
 		std::unique_ptr<Impl> impl_; //< DirectX 12具体実装の唯一の所有者
 	};

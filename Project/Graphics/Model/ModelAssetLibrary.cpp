@@ -48,6 +48,7 @@ void ModelAssetLibrary::Retain(std::span<const Request> requests) {
         return (entry.first != kStartupModelAssetReference || reloadStartup_) && !meshes.contains(entry.first);
     });
     std::erase_if(textures_, [&](const auto& entry) { return !textures.contains(entry.first); });
+    std::erase_if(textureIds_, [&](const auto& entry) { return !textures.contains(entry.first); });
 }
 Result<std::string> ModelAssetLibrary::Reference(const std::filesystem::path& path) const {
     std::error_code error;
@@ -57,6 +58,17 @@ Result<std::string> ModelAssetLibrary::Reference(const std::filesystem::path& pa
     if(relative.empty() || relative.is_absolute() || *relative.begin() == ".." || !std::filesystem::is_regular_file(resolved, error) || error)
         return std::unexpected(Invalid("Choose a file inside the project Asset folder."));
     return Utf8(relative);
+}
+bool ModelAssetLibrary::MatchesRequests(std::span<const Request> requests) const {
+    std::set<std::pair<std::string, std::string>> keys;
+    for(const auto& request : requests) {
+        if(!IsValidPrimitiveShape(request.shape)) return false;
+        const auto mesh = MeshKey(request.shape, request.mesh);
+        if(!mesh.empty()) keys.emplace(mesh, request.texture);
+    }
+    if(keys.size() != ranges_.size()) return false;
+    for(const auto& key : keys) if(!ranges_.contains(key)) return false;
+    return true;
 }
 Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& reference) {
     if(reference.empty()) return std::unexpected(Invalid("No mesh is assigned."));
@@ -78,6 +90,17 @@ Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& refere
     if(loaded->materials.empty()) loaded->materials.emplace_back();
     return models_.emplace(reference, std::make_shared<ModelAssetData>(std::move(*loaded))).first->second.get();
 }
+const ModelAssetData* ModelAssetLibrary::FindModel(const std::string& reference) const {
+    auto found = models_.find(reference);
+    return found == models_.end() ? nullptr : found->second.get();
+}
+std::optional<ModelAssetLibrary::Range> ModelAssetLibrary::FindRange(PrimitiveShape shape, const std::string& mesh, const std::string& texture) const {
+    if(!IsValidPrimitiveShape(shape)) return std::nullopt;
+    const auto key = MeshKey(shape, mesh);
+    if(key.empty()) return Range{};
+    auto found = ranges_.find({key, texture});
+    return found == ranges_.end() ? std::nullopt : std::optional{found->second};
+}
 Result<const std::vector<uint8_t>*> ModelAssetLibrary::Texture(const std::string& reference) {
     if(auto found = textures_.find(reference); found != textures_.end()) return &found->second;
     auto canonical = Reference(Path(reference));
@@ -90,6 +113,7 @@ Result<const std::vector<uint8_t>*> ModelAssetLibrary::Texture(const std::string
     if(!input) return std::unexpected(Invalid("Cannot read image."));
     auto decoded = WicImageDecoder{}.Decode(bytes);
     if(!decoded) return std::unexpected(decoded.error());
+    textureIds_.emplace(reference, NextModelResourceIdentity());
     return &textures_.emplace(reference, std::move(bytes)).first->second;
 }
 Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& mesh, const std::string& texture) {
@@ -103,7 +127,10 @@ Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& m
     if(!texture.empty()) {
         auto image = Texture(texture);
         if(!image) return std::unexpected(image.error());
-        for(auto& material : addition.materials) material.baseColorImageData = **image;
+        for(auto& material : addition.materials) {
+            material.baseColorImageData = **image;
+            material.baseColorImageId = textureIds_.at(texture);
+        }
     }
     const auto nodeOffset = static_cast<uint32_t>(aggregate_->nodes.size());
     const auto meshOffset = static_cast<uint32_t>(aggregate_->meshes.size());
