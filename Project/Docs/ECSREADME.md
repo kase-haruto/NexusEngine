@@ -116,7 +116,7 @@ Level / Scene → Render Extraction → RenderScene / Queue → Renderer → Dir
 
 Runtime `EntityId`はslot再利用とロード順で変化するため保存しない。`PersistentIdComponent`の128 bit IDをEntityと親子参照の保存鍵にする。ロードは全Entityを生成後、PersistentIdから新しいEntityIdへのmapを使ってHierarchyを再構築する。
 
-version 1のテキスト形式はName、Transform、Hierarchy、Camera、Primitiveを明示的に扱う。GPU Resource、System object、計算済みMatrixは保存しない。新しいComponentを永続化する場合はversion migrationとserializer登録機構を追加する必要がある。
+現在のversion 12は、従来の組み込みComponentに加え、Reflectionで登録した独自ComponentをEntityごとの拡張レコードで保存する。version 1〜11も読める。GPU Resource、System object、計算済みMatrixは保存しない。独自Componentの登録方法と対応型は[ゲーム固有Componentの追加と保存](CustomComponents.md)を参照する。
 
 未対応の非空Component Storage、必須Component不足、無効/重複PersistentIdは保存開始前に拒否する。ロードは循環Hierarchy、参照先不足、非有限Transform、未知version、不正な終端を拒否して旧Worldを維持する。ファイル保存は現段階で直接書込みであり、書込み中のI/O失敗から既存ファイルを守るatomic replacementは今後の課題である。PersistentIdは乱数64 bit名前空間と連番で生成し、暗号学的なUUID保証は提供しない。
 

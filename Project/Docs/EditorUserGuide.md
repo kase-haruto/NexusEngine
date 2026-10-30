@@ -167,6 +167,8 @@ RTX 3060 Tiで実起動し、Docking、Toolbar、SponzaのViewport描画、Conte
 
 ## 今後の範囲
 
+ゲーム固有Componentの自動一覧表示・「その他」での編集・Level保存は[ゲーム固有Componentの追加と保存](CustomComponents.md)を参照してください。
+
 別プロセスRuntimeの起動、実IPC、共有GPU画像、切断復旧は設計契約のみで、今回のローカル再生とは別です。
 glTF / GLB / OBJのMesh選択とBase Color画像の差替えに対応しています。AssetのGUID管理、自動再import、Normal / Metallic等の画像差替えは今後の範囲です。
 Clipboard操作、Component削除、配列/構造体の汎用Drawer、Profilerと専門Asset Editorも今後の範囲です。

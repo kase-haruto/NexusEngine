@@ -17,7 +17,8 @@ $schemas = @()
 $ids = @{}
 $types = @{}
 # 制限された宣言マクロだけを解析する。未対応構文は黙って読み飛ばさずエラーにする。
-foreach($sourceRoot in @('Foundation', 'Runtime', 'Graphics', 'Editor', 'Samples')) {
+foreach($sourceRoot in @('Foundation', 'Runtime', 'Graphics', 'Editor', 'Samples', 'Game')) {
+    if(-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $sourceRoot))) { continue }
     foreach($header in Get-ChildItem -LiteralPath (Join-Path $ProjectRoot $sourceRoot) -Recurse -Filter '*.h' -File | Sort-Object FullName) {
         if($header.FullName.Substring($ProjectRoot.Length) -match '[/\\]Generated[/\\]') { continue }
         $source = [IO.File]::ReadAllText($header.FullName)

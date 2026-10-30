@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "ToolbarLayout.h"
+#include "Runtime/Application/ProjectSettings.h"
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
@@ -31,11 +32,8 @@ public:
         bool gizmo = true; //< トランスフォームGizmo表示
         bool viewport = true; //< Viewport初期表示
     } editor;
-    struct Project {
-        std::string name = "NexusEngine"; //< Project名
-        std::string startupLevel = "Resources/Assets/Levels/DemoLevel.json"; //< 起動Level
-        std::string assetPath = "Resources/Assets"; //< Assetルート
-    } project;
+    using Project = ProjectSettings;
+    Project project;
     /** \brief Project→Editor→Userの順で既定値へ上書きする */
     void Load(const std::filesystem::path& projectRoot);
     /** \brief 個人設定のみ保存する。失敗時は旧ファイルを保持する */

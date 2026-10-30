@@ -27,13 +27,16 @@ namespace NexusEngine {
 
 	public:
 		/** \brief GPU初期化前にデモSceneとCPUモデルを作成する。モデル選択の編集箇所はこの実装 */
-		[[nodiscard]] Result<void>			CreateScene(const std::filesystem::path& assetDirectory);
+		[[nodiscard]] Result<void> CreateScene(const std::filesystem::path& assetDirectory,
+		                                      const std::filesystem::path& startupLevel = {});
 		[[nodiscard]] const ModelAssetData& GetModelAsset() const noexcept { return *modelAsset_; }
 		[[nodiscard]] const ModelInstance&	GetModelPose() const noexcept { return modelPose_; }
 
 		void ShowGui();
 		/** \brief 初期化前に追加Panel/Commandの登録処理を接続する */
 		void AddEditorExtension(std::function<void(EditorWorkspace&)> extension) { editorExtensions_.push_back(std::move(extension)); }
+		/** \brief Play開始時にGame側の共通System構成を生成する。再生中の変更は拒否する */
+		[[nodiscard]] bool SetGameLevelSetup(GameLevelSetup setup) { return session_.SetGameLevelSetup(std::move(setup)); }
 		/** \brief 既存Renderer診断画面を必要時だけ描く */
 		void ShowLegacyDiagnostics();
 		/** \brief Application所有Rendererの設定窓口を非所有接続する */

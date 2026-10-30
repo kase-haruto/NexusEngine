@@ -7,6 +7,7 @@
 #include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Graphics/Renderer/GraphicsSystem.h"
 #include "Samples/OpticalDemoScene.h"
+#include "Samples/StartupAssets.h"
 #include "Foundation/Logging/Logger.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -24,18 +25,6 @@
 #include "Foundation/Reflection/ReinstancingService.h"
 
 namespace NexusEngine {
-	namespace {
-		Result<ModelAssetData> LoadStartupAsset(const std::filesystem::path& directory, OpticalSphereMaterialSlots* slots = nullptr) {
-			auto asset = ModelLoader{}.LoadGltf(directory / L"Models/Sponza/Sponza.gltf");
-			if(!asset) return std::unexpected(std::move(asset.error()));
-			auto spheres = AppendSponzaOpticalSpheres(*asset);
-			if(!spheres) return std::unexpected(std::move(spheres.error()));
-			if(slots) *slots = *spheres;
-			auto testScene = AppendPBRTestScene(*asset);
-			if(!testScene) return std::unexpected(std::move(testScene.error()));
-			return asset;
-		}
-	}
 	Result<void> EditorApplication::PrepareAssets(std::vector<ModelAssetLibrary::Request> requests) {
 		// 空のEntityや組み込み形状の未使用ファイル名は、GPUアセット集合を変えない。
 		std::erase_if(requests, [](const auto& request) { return request.shape == PrimitiveShape::Asset && request.mesh.empty(); });
@@ -243,7 +232,7 @@ namespace NexusEngine {
 		return {};
 	}
 
-	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory) {
+	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory, const std::filesystem::path& startupLevel) {
 		editPose_.reset();
         reportedAssetErrors_.clear();
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。
@@ -252,7 +241,7 @@ namespace NexusEngine {
 
 		// モデル読み込み
 		OpticalSphereMaterialSlots sphereMaterials;
-		auto asset = LoadStartupAsset(assetDirectory, &sphereMaterials);
+		auto asset = LoadSampleStartupAsset(assetDirectory, &sphereMaterials);
 		if(!asset) {
 			// 読み込みに失敗したらエラーを返す
 			return std::unexpected(std::move(asset.error()));
@@ -265,7 +254,7 @@ namespace NexusEngine {
 		glassMaterialSlot_ = sphereMaterials.glass;
 		auto poseResult = modelPose_.Initialize(*modelAsset_);
         modelLibrary_ = std::make_unique<ModelAssetLibrary>(std::move(startupAsset), assetDirectory,
-            [assetDirectory] { return LoadStartupAsset(assetDirectory); });
+            [assetDirectory] { return LoadSampleStartupAsset(assetDirectory); });
         uploadedAssetRevision_ = modelLibrary_->Revision();
 		if(!poseResult) return poseResult;
 
@@ -277,7 +266,8 @@ namespace NexusEngine {
 		}
 		EditorSettingsStore bootSettings;
 		bootSettings.Load(std::filesystem::current_path());
-		auto levelResult = session_.Open(std::filesystem::path{ConvertString(bootSettings.project.startupLevel)});
+		auto levelResult = session_.Open(startupLevel.empty()
+			? std::filesystem::path{ConvertString(bootSettings.project.startupLevel)} : startupLevel);
 		if(!levelResult) return levelResult;
 		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // HDR未指定時の遠方環境の照度
 		renderScene_.fallbackEnvironmentIntensity = .05f; // GIオフ時は弱い環境光だけを残す
@@ -640,10 +630,10 @@ namespace NexusEngine {
 		auto* preview = session_.GetPreviewLevel();
 		if(preview == nullptr) return {};
 		// Transform解決より前にSceneの動きを適用する。同じframeを複数回描画しても時刻は進まない。
-		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return preview->Update(deltaTime);
+		if(!std::isfinite(deltaTime) || deltaTime < 0.0f) return session_.UpdatePreview(deltaTime);
 		const float step = session_.IsPlaying() && !session_.IsPaused() ? deltaTime : 0.0f;
 		modelPose_.Update(step);
-		return preview->Update(step);
+		return session_.UpdatePreview(deltaTime);
 	}
 
 	Result<void> EditorApplication::PrepareRender(const uint32_t width, const uint32_t height) {

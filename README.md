@@ -108,6 +108,8 @@ chore: ビルド設定を更新
 
 ## ドキュメント
 
+EditorのPlayとゲーム単体起動で共通のSystemを動かす方法は、[ゲーム実行基盤](Project/Docs/GameRuntime.md)を参照してください。
+
 エディタの起動、編集操作、拡張方法、検証と制限は[Editor利用ガイド](Project/Docs/EditorUserGuide.md)を参照してください。
 
 Live++ の導入・操作、Reflection の自動生成と Reinstancing による状態移行は

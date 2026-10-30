@@ -156,6 +156,18 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Editor\Gui\Panels\DetailsPanel.cpp" />
+    <ClCompile Include="Runtime\Application\GameRuntime.cpp" />
+    <ClCompile Include="Foundation\Reflection\ReflectionTextArchive.cpp" />
+    <ClInclude Include="Foundation\Reflection\ReflectionTextArchive.h" />
+    <ClInclude Include="Game\Components\MoveComponent.h" />
+    <ClCompile Include="Runtime\Application\GameApplication.cpp" />
+    <ClCompile Include="Game\SampleGame.cpp" />
+    <ClCompile Include="Samples\StartupAssets.cpp" />
+    <ClInclude Include="Runtime\Application\GameRuntime.h" />
+    <ClInclude Include="Runtime\Application\GameApplication.h" />
+    <ClInclude Include="Runtime\Application\ProjectSettings.h" />
+    <ClInclude Include="Game\SampleGame.h" />
+    <ClInclude Include="Samples\StartupAssets.h" />
     <ClCompile Include="Editor\Core\EditorSession.cpp" />
     <ClCompile Include="Foundation\Error\Error.cpp" />
     <ClCompile Include="Foundation\Logging\ConsoleLogSink.cpp" />
@@ -482,6 +494,10 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Runtime\Reflection\Generated\GeneratedReflection.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CopyGameProjectSettings" AfterTargets="Build">
+    <MakeDir Directories="$(OutDir)Config" />
+    <Copy SourceFiles="$(ProjectDir)Config\Project.settings" DestinationFolder="$(OutDir)Config" SkipUnchangedFiles="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <ItemGroup>

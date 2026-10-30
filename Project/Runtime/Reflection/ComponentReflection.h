@@ -13,6 +13,9 @@ public:
         std::type_index nativeType;
         ReflectionValue (*capture)(Scene&);
         void (*restore)(Scene&, const ReflectionValue&);
+        bool (*contains)(Entity);
+        ReflectionValue (*captureEntity)(Entity);
+        void (*restoreEntity)(Entity, const ReflectionValue&);
     };
     template<class T> void Register() {
         const std::string id(ReflectionTraits<T>::Id);
@@ -38,6 +41,24 @@ public:
                     }
                     if(!scene.AddComponent<T>(id, std::move(next))) throw std::runtime_error("Component reinstancing failed");
                 }
+            },
+            [](Entity entity) { return entity.HasComponent<T>(); },
+            [](Entity entity) {
+                const auto* value = entity.GetComponent<T>();
+                if(!value) throw std::runtime_error("Missing component during level save");
+                if constexpr(requires { value->IsValid(); }) {
+                    if(!value->IsValid()) throw std::runtime_error("Component validation failed during level save");
+                }
+                return CaptureReflection(*value);
+            },
+            [](Entity entity, const ReflectionValue& snapshot) {
+                if(entity.HasComponent<T>()) throw std::runtime_error("Duplicate level component");
+                T value{}; RestoreReflection(snapshot, value);
+                if constexpr(requires { value.IsValid(); }) {
+                    if(!value.IsValid()) throw std::runtime_error("Component validation failed during level load");
+                }
+                // ReflectionCodecでも有限値・値域を検証する。追加フィールドは既定値を保つ。
+                if(!entity.AddComponent<T>(std::move(value))) throw std::runtime_error("Cannot restore level component");
             }});
     }
     [[nodiscard]] ReflectionValue Capture(Scene& scene) const;

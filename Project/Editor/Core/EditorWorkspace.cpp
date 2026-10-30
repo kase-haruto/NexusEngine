@@ -178,7 +178,13 @@ void EditorWorkspace::RegisterCommands() {
     commands_.Register("scene.camera", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Camera")); }, editing});
     commands_.Register("scene.model", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Model")); }, editing});
     commands_.Register("scene.light", {[this, sceneResult] { sceneResult(sceneEdits_.Create("DirectionalLight")); }, editing});
-    commands_.Register("play.start", {[this, sceneResult] { properties_.Commit(); sceneResult(session_.StartPlay()); }, editing});
+    commands_.Register("play.start", {[this, sceneResult] {
+        properties_.Commit();
+        if(!session_.StartPlay()) {
+            if(session_.GetPlayError()) notifications_.Push(session_.GetPlayError()->GetMessageText(), true);
+            else sceneResult(false);
+        }
+    }, editing});
     commands_.Register("play.pause", {[this] { session_.TogglePause(); }, [this] { return session_.IsPlaying(); }});
     commands_.Register("play.stop", {[this] { session_.StopPlay(); }, [this] { return session_.IsPlaying(); }});
     commands_.Register("edit.preferences", {[this] { panels_.Open("Preferences"); }, {}});

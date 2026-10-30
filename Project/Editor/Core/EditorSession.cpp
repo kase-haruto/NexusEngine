@@ -65,13 +65,23 @@ void NexusEngine::EditorSession::Close() noexcept {
 }
 
 bool NexusEngine::EditorSession::StartPlay() {
-	if(playLevel_ || !GetLevel() || !GetLevel()->GetScene()) return false;
+	playError_.reset();
+	if(IsPlaying() || !GetLevel() || !GetLevel()->GetScene()) return false;
 	auto scene = GetLevel()->GetScene()->Clone();
 	if(!scene) return false;
 	auto level = std::make_unique<Level>(GetLevel()->GetName());
 	level->Lighting() = GetLevel()->Lighting();
 	level->ExchangeScene(std::move(scene));
-	playLevel_ = std::move(level); paused_ = false; return true;
+	auto result = playRuntime_.Start(std::move(level));
+	if(!result) { playError_ = std::move(result.error()); return false; }
+	return true;
+}
+
+NexusEngine::Result<void> NexusEngine::EditorSession::UpdatePreview(float deltaTime) {
+	if(IsPlaying()) return playRuntime_.Update(deltaTime);
+	if(!std::isfinite(deltaTime) || deltaTime < 0)
+		return std::unexpected(Error(ErrorCategory::Framework, 43, "Preview delta time must be finite and non-negative."));
+	return GetLevel() ? GetLevel()->Update(0.0f) : Result<void>{};
 }
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem::path& path) {
