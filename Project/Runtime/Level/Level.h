@@ -13,6 +13,7 @@
 #include "Runtime/Scene/PersistentIdGenerator.h"
 #include "Runtime/Scene/Scene.h"
 #include "Runtime/Scene/SystemScheduler.h"
+#include "Runtime/Reflection/ReflectionRegistration.h"
 
 namespace NexusEngine {
 	struct LevelLightingSettings {
@@ -37,7 +38,9 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class Level final {
 	public:
-		explicit Level(std::string name = "Level");
+		explicit Level(std::string name = "Level", ReflectionRegistration reflection = {});
+		/** \brief このWorldと同じ型集合を新しいWorldへ引き継ぐための登録方針を返す */
+		[[nodiscard]] ReflectionRegistration GetReflectionRegistration() const noexcept { return reflection_; }
 		~Level()					   = default;
 		Level(const Level&)			   = delete;
 		Level& operator=(const Level&) = delete;
@@ -81,6 +84,7 @@ namespace NexusEngine {
 
 	private:
 		friend class LevelSerializer;
+		ReflectionRegistration reflection_; //< ホスト側の登録関数。Levelより長く生存するコードを参照する
 		std::optional<LevelLightingSettings> lighting_;
 
 		std::string			   name_;						  //< Editorと診断に使うLevel名

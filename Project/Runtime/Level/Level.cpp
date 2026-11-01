@@ -15,7 +15,7 @@ namespace NexusEngine {
 		constexpr int32_t kInvalidDeltaTime = 31;
 	}
 
-	Level::Level(std::string name) : name_(std::move(name)) {
+	Level::Level(std::string name, ReflectionRegistration reflection) : reflection_(reflection), name_(std::move(name)) {
 		// 組み込みSystemはLevelごとに所有し、複数World（Editor/PIE）の状態を分離する。
 		scheduler_.AddSystem<TransformUpdateSystem>();
 	}

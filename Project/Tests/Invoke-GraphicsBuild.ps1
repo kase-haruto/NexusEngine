@@ -1,7 +1,9 @@
 param(
     [ValidateSet('Debug', 'Develop', 'Release')][string]$Configuration = 'Debug',
     [string]$Project = 'Project/NexusEngine.vcxproj',
-    [string]$MSBuildPath
+    [string]$MSBuildPath,
+    [string]$IsolatedOutput,
+    [hashtable]$BuildProperties = @{}
 )
 $ErrorActionPreference = 'Stop'
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -27,6 +29,16 @@ $start.ArgumentList.Add('/p:Platform=x64')
 $start.ArgumentList.Add("/p:SolutionDir=$workspace\Project\")
 $start.ArgumentList.Add('/m')
 $start.ArgumentList.Add('/verbosity:quiet')
+foreach($key in $BuildProperties.Keys) {
+    if($key -notmatch '^[A-Za-z][A-Za-z0-9_]*$') { throw 'Invalid MSBuild property name.' }
+    $start.ArgumentList.Add("/p:${key}=$($BuildProperties[$key])")
+}
+if($IsolatedOutput) {
+    # 並行開発中の既存成果物と中間物には触れず、検証専用Directoryを使う。
+    $isolatedRoot = [IO.Path]::GetFullPath((Join-Path $workspace $IsolatedOutput))
+    $start.ArgumentList.Add("/p:OutDir=$isolatedRoot\bin\")
+    $start.ArgumentList.Add("/p:IntDir=$isolatedRoot\obj\")
+}
 $process = [System.Diagnostics.Process]::Start($start)
 $process.WaitForExit()
 exit $process.ExitCode

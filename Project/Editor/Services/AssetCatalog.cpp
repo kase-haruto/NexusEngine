@@ -29,6 +29,7 @@ std::vector<AssetEntry> AssetCatalog::List(const std::filesystem::path& path) co
     if(error || !Contains(resolved)) return result;
     std::filesystem::directory_iterator iterator(resolved, std::filesystem::directory_options::skip_permission_denied, error), end;
     for(; !error && iterator != end; iterator.increment(error)) {
+        if(iterator->path().filename() == ".gitkeep" || iterator->path().filename() == ".gitignore") continue;
         auto canonical = std::filesystem::weakly_canonical(iterator->path(), error);
         if(error || !Contains(canonical)) { error.clear(); continue; }
         bool directory = iterator->is_directory(error);

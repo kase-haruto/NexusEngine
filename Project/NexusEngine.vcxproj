@@ -84,7 +84,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>bcrypt.lib;d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -112,7 +112,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>bcrypt.lib;d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -142,7 +142,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>bcrypt.lib;d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -470,13 +470,14 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ItemGroup><EditorConfig Include="$(ProjectDir)Config\*.settings" /></ItemGroup>
     <Copy SourceFiles="@(EditorConfig)" DestinationFolder="$(OutDir)Config" SkipUnchangedFiles="true" />
   </Target>
+  <Import Project="Build\Nexus.EngineIdentity.props" />
   <Import Project="LivePP.props" />
   <Import Project="Reflection.props" />
   <ItemGroup>
     <ClCompile Include="Foundation\Reflection\ReflectionArchive.cpp" />
     <ClCompile Include="Foundation\Reflection\ReinstancingService.cpp" />
     <ClCompile Include="Runtime\Reflection\ComponentReflection.cpp" />
-    <ClCompile Include="Runtime\Reflection\Generated\GeneratedReflection.cpp" />
+    <ClCompile Include="Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="Editor\Core\EditorReinstancing.cpp" />
     <ClCompile Include="Editor\Core\EditorWorkspaceReinstancing.cpp" />
     <ClCompile Include="Platform\Development\LiveCodingAgent.cpp" />
@@ -491,7 +492,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Foundation\Reflection\ReinstancingService.h" />
     <ClInclude Include="Runtime\Reflection\ComponentReflection.h" />
     <ClInclude Include="Runtime\Reflection\ReflectedInspector.h" />
-    <ClInclude Include="Runtime\Reflection\Generated\GeneratedReflection.h" />
+    <ClInclude Include="Runtime\Reflection\EngineGenerated\GeneratedReflection.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CopyGameProjectSettings" AfterTargets="Build">
@@ -589,4 +590,20 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Editor\Gui\Properties\MaterialPage.cpp" />
     <ClCompile Include="Editor\Gui\Properties\PropertyCategoryView.cpp" />
 </ItemGroup>
+  <ItemGroup><ClCompile Include="Game\Generated\GeneratedGameReflection.cpp" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Platform\FileSystem\AtomicFile.cpp" />
+    <ClCompile Include="Runtime\Project\ProjectJson.cpp" />
+    <ClCompile Include="Runtime\Project\ProjectSerializer.cpp" />
+    <ClCompile Include="Runtime\Project\ProjectContext.cpp" />
+    <ClCompile Include="Runtime\Project\ProjectService.cpp" />
+    <ClCompile Include="Tools\Project\ProjectRegistry.cpp" />
+    <ClCompile Include="Tools\Project\ProjectBuild.cpp" />
+    <ClCompile Include="Tools\Project\SourceCodeEditor.cpp" />
+    <ClCompile Include="Editor\Services\StandaloneSession.cpp" />
+    <ClCompile Include="Editor\Services\StandaloneCommands.cpp" />
+    <ClCompile Include="Tools\Engine\EngineRegistry.cpp" />
+    <ClCompile Include="Platform\Process\Process.cpp" />
+    <ClCompile Include="Platform\Window\StartupSplash.cpp" />
+  </ItemGroup>
 </Project>

@@ -2,7 +2,7 @@
 
 EditorのPlayと単体起動は、同じ`GameRuntime`とGame側の構築関数を使用する。
 引数なしでは従来どおりEditorが起動し、`--game`ではEditor UIを生成せずゲームを起動する。
-現段階では同じNexusEngine.exeに両方の起動経路を収めている。
+互換用NexusEngine.exeには両方の起動経路を残し、分離構成には専用Runtime / Editorホストを用意している。
 
 ## 起動
 
@@ -20,6 +20,10 @@ EditorのPlayと単体起動は、同じ`GameRuntime`とGame側の構築関数�
 ```
 
 `--project`はProjectルートを指定する。`--level`の相対パスはProjectルートを基準とする。
+新形式では`--project <file.nxproject>`を指定できる。Descriptorの読み込みと実行ホストのEngine照合は
+[Project System](ProjectSystem.md)を参照する。旧ディレクトリ起動との自動マージは行わない。
+起動時にCWDは変更しない。Engine資源は`--engine <root>`、またはexe付近の探索で指定する。
+独立Runtime / Editorホストは[Engine / Game分離](EngineGameSeparation.md)を参照する。
 省略時は`Config/Project.settings`の`startupLevel`と`assetPath`を使用する。
 Project指定がなければ、作業ディレクトリ、次にexeの配置先からProjectルートを探索する。
 未知の引数、読込失敗、単体起動での有効primary Camera不在は終了コード1で報告する。

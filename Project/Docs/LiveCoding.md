@@ -1,8 +1,28 @@
 # Live++・Reflection・Reinstancing
 
+## Game開発側への提供状況
+
+Live++をNexusEngine利用者のGameEditorや開発用GameRuntimeから使う構成は技術的に可能。[公式のProject setup](https://liveplusplus.tech/docs/documentation.html)はstatic/shared libraryの混在を認め、[複数プロセスのhot-reload](https://liveplusplus.tech/docs/documentation.html)にも対応している。Game DLL化は必須条件ではない。
+
+ただし、以下は現在のコードから確認した未接続部分であり、Game開発側で実パッチが通る状態として提供済みではない。
+
+| 項目 | 現在の状態 | 接続が必要な内容 |
+| --- | --- | --- |
+| ビルド設定 | 旧NexusEngine.vcxprojだけがLivePP.propsをimport。Build/Nexus.Common.props、Nexus.Game.props、Gameテンプレートはimportしない | GameEditor/開発用Runtimeと必要なEngineライブラリのpatch対応設定、SDK配置と有効化の明示設定 |
+| Agent起動 | FrameworkはEditor modeのときだけAgentを生成し、未定義NEXUS_WITH_LIVEPPは0 | 対応するホストごとのopt-in。通常Runtime/Releaseには組み込まない |
+| Reflection生成 | Agentのpre-buildはEngine側NEXUS_PROJECT_DIRECTORYを参照 | Engine Rootと外部Game Rootを分離し、Game Sourceの生成集合を更新 |
+| 状態移行 | Editorのedit/play WorldとWorkspaceのReinstancingがある | 外部Game型での実パッチ検証と、別RuntimeのGameApplication/Worldの参加・復元 |
+| Installed Engine | 現行SDKはLive++無効の固定snapshot | 対応する別SDK profile/配置を発行し、必要なPDB/obj等のビルド情報の供給と移動後の検証 |
+
+導入時は関数本体の変更から確認し、Componentのメンバ追加・削除等は既存Reinstancingへ接続して別途検証する。フラグだけを有効化して全レイアウト変更に対応したとは扱わない。既存の固定SDKを上書きせず、Gameごとに対応版を選択する。
+
+配布先がゲーム開発者なら、各開発環境でLive++の導入と有効なライセンスを準備する。[公式のライセンス説明](https://liveplusplus.tech/docs/documentation.html)を参照する。本体・SDKの再配布可否は契約を確認し、ライセンス情報はNexusEngine/GameリポジトリやSDKへコピーしない。完成ゲームを遊ぶユーザー向けの通常Release配布では、開発用Live++機能を無効化する方針とする。
+
+以下の操作・実パッチの記録は、LivePP.propsを使う従来の単一exe構成についてのもの。
+
 ## 操作
 
-公式 Windows SDK **2.11.4** を `Project/ThirdParty/LivePP` に展開済み。
+従来の実パッチ検証には公式 Windows SDK **2.11.4** を使用した。利用する開発PCでは`Project/ThirdParty/LivePP`または明示指定した場所へSDKを配置する必要がある。
 SDK、ローカル設定、ライセンス情報は Git 管理対象外。
 配布元と ZIP のハッシュは `ThirdParty/LivePP.UPSTREAM.md` を参照する。
 
@@ -48,12 +68,15 @@ NEXUS_REFLECT_COMPONENT(CameraComponent, "Camera", "component.camera",
 Transform の派生 Matrix は保存せず、復元後の Update で再計算する。
 新しく保持したいメンバを追加した場合は一覧にも追加する。
 
-`Tools/Reflection/Generate-Reflection.ps1` が Foundation / Runtime / Graphics / Editor / Samples のヘッダを走査する。
+`Tools/Reflection/Generate-Reflection.ps1` はEngine（Foundation / Runtime / Graphics）とGameを別集合で走査する。
 通常の MSBuild と Live++ の pre-build step で同じ生成器を実行し、変更のある生成物だけ更新する。
 重複 ID、不正なメンバ指定、未対応の引数は生成エラーにする。
 
-- `Runtime/Reflection/Generated/GeneratedReflection.h`: 型 ID とメンバアクセサ。
-- `Runtime/Reflection/Generated/GeneratedReflection.cpp`: Component と Inspector の登録関数。
+- `Runtime/Reflection/EngineGenerated/GeneratedReflection.h/.cpp`: Engineの型情報と登録関数。
+- `Game/Generated/GeneratedGameReflection.h/.cpp`: Gameの型情報と登録関数。
+
+旧`Runtime/Reflection/Generated`はビルド入力から除外している。
+新しい静的ライブラリ構成ではLive++を無効化しており、本資料の操作は従来の単一exe構成が対象。
 
 生成ファイルは手で編集しない。
 

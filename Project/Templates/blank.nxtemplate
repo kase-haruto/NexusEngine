@@ -1,0 +1,48 @@
+{
+  "files": [
+    {
+      "replace": false,
+      "target": "@SOURCE@/Game/GameModule.h",
+      "source": "Shared/GameModule.h.in"
+    },
+    {
+      "replace": false,
+      "target": "@SOURCE@/Game/Main.cpp",
+      "source": "Shared/Main.cpp.in"
+    },
+    {
+      "replace": false,
+      "target": "@SOURCE@/Game/HealthComponent.h",
+      "source": "Shared/HealthComponent.h.in"
+    },
+    {
+      "replace": true,
+      "target": "GameRuntime.vcxproj",
+      "source": "Shared/GameRuntime.vcxproj.in"
+    },
+    {
+      "replace": true,
+      "target": "GameEditor.vcxproj",
+      "source": "Shared/GameEditor.vcxproj.in"
+    },
+    {
+      "replace": true,
+      "target": "Game.slnx",
+      "source": "Shared/Game.slnx.in"
+    },
+    {
+      "replace": false,
+      "target": "@CONFIG@/BuildTargets.json",
+      "source": "Shared/BuildTargets.json.in"
+    },
+    {
+      "replace": false,
+      "target": "@LEVELS@/Startup.level",
+      "source": "Blank/Startup.level"
+    }
+  ],
+  "id": "blank",
+  "schemaVersion": 1,
+  "description": "Cameraを備えた最小プロジェクト。",
+  "name": "Blank Project"
+}

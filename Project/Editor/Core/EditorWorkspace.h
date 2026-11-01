@@ -30,7 +30,8 @@ namespace NexusEngine {
 		explicit EditorWorkspace(EditorSession& session);
 		~EditorWorkspace() noexcept;
 		/** \brief ImGui初期化後にPanelとサービスを接続する */
-		void Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions = {});
+		void Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions = {},
+		                const std::filesystem::path& engineRoot = {}, const ProjectContext* project = nullptr);
 		/** \brief OSとメニューから同じ未保存確認を要求する */
 		void RequestExit();
 		/** \brief OSのDPI変更を次frameのStyleへ反映する */
@@ -54,6 +55,8 @@ namespace NexusEngine {
 		const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
 		MainMenuBar&					   Menu() { return menu_; }
 		EditorCommandRegistry&			   Commands() { return commands_; }
+		/** \brief 拡張commandの失敗も既存のログと通知へ表示する */
+		void Report(const Result<void>& result);
 		/** 機能の初期化時に、共通ツールバーへボタンや専用UIを登録するための窓口。 */
 		EditorToolbarRegistry& Toolbar() {
 			return toolbar_;
@@ -65,6 +68,9 @@ namespace NexusEngine {
 		PropertyCategoryRegistry& PropertyCategories() { return categories_; }
 
 	private:
+		enum class PlayMode { Editor, SeparateWindow };
+		PlayMode playMode_ = PlayMode::Editor; //< 実行中は変更しないEditorセッション内の選択
+		std::unique_ptr<AssetCatalog> levels_; //< Asset Rootと独立したLevel保存先の一覧
 		void							   RegisterCommands();
 		void							   RegisterToolbar();
 		void							   DrawFileDialog();
@@ -72,7 +78,6 @@ namespace NexusEngine {
 		void							   ReportDocumentError();
 		void							   OpenLevel(const std::filesystem::path& path);
 		void							   RememberLevel(const std::filesystem::path& path);
-		void							   Report(const Result<void>& result);
 		void							   ApplyUserSettings();
 		void							   SynchronizeDocument();
 		EditorSession&					   session_;					   //< Application所有

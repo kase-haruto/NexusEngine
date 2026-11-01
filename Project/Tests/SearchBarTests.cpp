@@ -4,10 +4,15 @@
 #include <cassert>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 // GPU/Windowを使わず入力イベントを送り、外部状態とImGui登録の契約を検証する。
 void RunLevelMenuTests();
-int main() {
+void RunExecutionModeMenuTests();
+int main(int argc,char** argv) {
+    if(argc == 2 && std::string_view(argv[1]) == "--menus-only") {
+        RunLevelMenuTests(); RunExecutionModeMenuTests(); return 0;
+    }
     ImGui::CreateContext();
     auto& io = ImGui::GetIO();
     io.IniFilename = nullptr;
@@ -89,5 +94,6 @@ int main() {
     assert(changed && first.size() == 9);
     ImGui::DestroyContext();
     RunLevelMenuTests();
+    RunExecutionModeMenuTests();
     std::cout << "SearchBar headless tests passed\n";
 }

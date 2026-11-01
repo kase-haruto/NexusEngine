@@ -22,8 +22,10 @@ EditorWorkspace::~EditorWorkspace() noexcept {
     panels_.Clear(); properties_.Reset(nullptr);
     if(logSink_) Logger::Get().RemoveSink(logSink_);
 }
-void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions) {
-    settings_.Load(root); recent_ = settings_.user.recentLevels;
+void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions,
+                                 const std::filesystem::path& engineRoot, const ProjectContext* project) {
+    settings_.Load(root, project); recent_ = settings_.user.recentLevels;
+    documents_.SetProjectRoot(std::filesystem::absolute(root));
     // 旧Propertiesだけを開いていた利用者も、統合先のDetailsへ移行する。
     if(auto legacy = settings_.user.panels.find("Properties"); legacy != settings_.user.panels.end()) {
         const auto details = settings_.user.panels.find("Details");
@@ -31,12 +33,15 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
         settings_.user.panels["Details"] = detailsWasOpen || legacy->second;
         settings_.user.panels.erase(legacy);
     }
-    if(!text_.Load(root / "Resources/Editor/Localization")) NEXUS_LOG_WARNING("Editor", "Localization dictionary unavailable.");
+    if(!text_.Load((engineRoot.empty() ? root : engineRoot) / "Resources/Editor/Localization")) NEXUS_LOG_WARNING("Editor", "Localization dictionary unavailable.");
     text_.SetLanguage(settings_.user.language);
-    RegisterSceneTypes(types_); RegisterGeneratedInspectorTypes(types_); drawers_.RegisterDefaults();
+    RegisterSceneTypes(types_);
+    if(const auto registration = session_.GetReflectionRegistration(); registration.inspector) registration.inspector(types_);
+    drawers_.RegisterDefaults();
     RegisterPropertyPages(categories_);
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     assets_ = std::make_unique<AssetCatalog>(root / std::filesystem::path{ConvertString(settings_.project.assetPath)});
+    levels_ = std::make_unique<AssetCatalog>(project ? project->Levels() : assets_->Root() / "Levels");
     logs_ = std::make_shared<BufferedLogBuffer>();
     auto sink = std::make_unique<BufferedLogSink>(logs_); logSink_ = sink.get();
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
@@ -48,7 +53,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     panels_.RegisterFactory("Terminal", "panel.terminal", [this] { return std::make_unique<TerminalPanel>(console_); });
     panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
         return std::make_unique<ContentBrowserPanel>(*assets_, [this](const auto& path) {
-            if(path.extension() == ".json" && path.parent_path().filename() == "Levels") OpenLevel(path);
+            if((path.extension() == ".json" || path.extension() == ".level") && path.parent_path() == levels_->Root()) OpenLevel(path);
             else notifications_.Push(AssetCatalog::Utf8(path));
         });
     });
@@ -130,6 +135,9 @@ void EditorWorkspace::RegisterToolbar() {
     toolbar_.RegisterButton("edit.undo", "edit.undo", "edit.undo", 20);
     toolbar_.RegisterButton("edit.redo", "edit.redo", "edit.redo", 30);
     toolbar_.RegisterButton("scene.entity", "edit.create", "scene.entity", 40);
+    toolbar_.RegisterSection({"play.mode",90,12,[this](const auto& text,const auto&) {
+        ImGui::TextDisabled("%s",text.Text(playMode_ == PlayMode::Editor ? "play.mode.editor" : "play.mode.window").c_str());
+    }});
     toolbar_.RegisterButton("play.start", "play.start", "play.start", 100);
 
     // Pauseは現在状態に応じて表示名が変わるため、専用セクションとして登録する。
@@ -143,7 +151,9 @@ void EditorWorkspace::RegisterToolbar() {
         ImGui::EndDisabled();
 
         if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("%s", text.Text(label).c_str());
+            ImGui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28);
+            ImGui::TextUnformatted(text.Text(std::string(label) + ".hint").c_str());
+            ImGui::PopTextWrapPos(); ImGui::EndTooltip();
         }
     }});
     toolbar_.RegisterButton("play.stop", "play.stop", "play.stop", 120);
@@ -178,15 +188,33 @@ void EditorWorkspace::RegisterCommands() {
     commands_.Register("scene.camera", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Camera")); }, editing});
     commands_.Register("scene.model", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Model")); }, editing});
     commands_.Register("scene.light", {[this, sceneResult] { sceneResult(sceneEdits_.Create("DirectionalLight")); }, editing});
+    const auto canChangeMode = [this] { return !session_.IsPlaying() && !commands_.IsChecked("project.runStandalone"); };
+    EditorCommandRegistry::Command editorMode{[this] { playMode_ = PlayMode::Editor; },canChangeMode};
+    editorMode.isChecked = [this] { return playMode_ == PlayMode::Editor; };
+    commands_.Register("play.mode.editor",std::move(editorMode));
+    EditorCommandRegistry::Command windowMode{[this] { playMode_ = PlayMode::SeparateWindow; },[this,canChangeMode] {
+        return canChangeMode() && commands_.CanExecute("project.runStandalone");
+    }};
+    windowMode.isChecked = [this] { return playMode_ == PlayMode::SeparateWindow; };
+    commands_.Register("play.mode.window",std::move(windowMode));
     commands_.Register("play.start", {[this, sceneResult] {
+        if(playMode_ == PlayMode::SeparateWindow) { commands_.Execute("project.runStandalone"); return; }
         properties_.Commit();
         if(!session_.StartPlay()) {
             if(session_.GetPlayError()) notifications_.Push(session_.GetPlayError()->GetMessageText(), true);
             else sceneResult(false);
         }
-    }, editing});
-    commands_.Register("play.pause", {[this] { session_.TogglePause(); }, [this] { return session_.IsPlaying(); }});
-    commands_.Register("play.stop", {[this] { session_.StopPlay(); }, [this] { return session_.IsPlaying(); }});
+    }, [this,editing] {
+        return editing() && !commands_.IsChecked("project.runStandalone") &&
+            (playMode_ == PlayMode::Editor || commands_.CanExecute("project.runStandalone"));
+    }});
+    EditorCommandRegistry::Command pause{[this] { session_.TogglePause(); },[this] { return session_.IsPlaying(); }};
+    pause.isChecked = [this] { return session_.IsPaused(); };
+    commands_.Register("play.pause",std::move(pause));
+    commands_.Register("play.stop", {[this] {
+        if(session_.IsPlaying()) session_.StopPlay();
+        else commands_.Execute("project.stopStandalone");
+    }, [this] { return session_.IsPlaying() || commands_.CanExecute("project.stopStandalone"); }});
     commands_.Register("edit.preferences", {[this] { panels_.Open("Preferences"); }, {}});
     commands_.Register("focus.details", {[this] { panels_.Open("Details"); ImGui::SetWindowFocus(text_.Label("panel.details", "Details").c_str()); }, {}});
     commands_.Register("window.reset", {[this] { layout_.Reset(); }, {}});
@@ -264,8 +292,8 @@ void EditorWorkspace::Draw() {
     menu_.Draw(text_, commands_, panels_, recent_, [this](const auto& path) { OpenLevel(std::filesystem::path{ConvertString(path)}); },
         [this] {
             std::vector<std::string> levels;
-            for(const auto& entry : *assets_->Snapshot(assets_->Root() / "Levels"))
-                if(!entry.directory && entry.typeKey == "asset.level") levels.push_back(AssetCatalog::Utf8(entry.path));
+            for(const auto& entry : *levels_->Snapshot(levels_->Root()))
+                if(!entry.directory && (entry.path.extension() == ".json" || entry.path.extension() == ".level")) levels.push_back(AssetCatalog::Utf8(entry.path));
             return levels;
         }, activeLevel);
     DrawEditorToolbar(text_, commands_, activeLevel.empty() ? text_.Text("file.untitled") : activeLevel,

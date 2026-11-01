@@ -5,6 +5,7 @@
 #include "Editor/Gui/Core/GuiContext.h"
 #include "Editor/ImGui/ImGuiRenderer.h"
 #include "EditorSession.h"
+#include "Runtime/Application/ApplicationPaths.h"
 #include "Graphics/Model/ModelAssetData.h"
 #include "Graphics/Model/ModelInstance.h"
 #include "Graphics/Model/ModelAssetLibrary.h"
@@ -26,7 +27,13 @@ namespace NexusEngine {
 	class EditorApplication final : public IGraphicsRenderExtension, public IFrameworkUpdateClient {
 
 	public:
-		/** \brief GPU初期化前にデモSceneとCPUモデルを作成する。モデル選択の編集箇所はこの実装 */
+		/** \brief 現在のProject情報。所有する不変snapshotへの非所有参照 */
+		const ProjectContext* Project() const noexcept { return paths_.project.get(); }
+		/** \brief ホストが選択したGame型を編集・Playへ接続する */
+		explicit EditorApplication(ReflectionRegistration reflection = {}, ApplicationPaths paths = {},
+		                           ModelAssetLibrary::ReloadStartup startup = {})
+		    : paths_(std::move(paths)), startupLoader_(std::move(startup)), session_(reflection) {}
+		/** \brief GPU初期化前に指定LevelとCPUアセットを準備する。旧参照のLoaderはホストが提供する */
 		[[nodiscard]] Result<void> CreateScene(const std::filesystem::path& assetDirectory,
 		                                      const std::filesystem::path& startupLevel = {});
 		[[nodiscard]] const ModelAssetData& GetModelAsset() const noexcept { return *modelAsset_; }
@@ -88,6 +95,8 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+		ApplicationPaths paths_; //< ホストが選択したGame / Engineのルート
+		ModelAssetLibrary::ReloadStartup startupLoader_; //< 旧Level互換用。具体的なSample処理はホストから注入する
 		struct PreparedAssets {
 			std::unique_ptr<ModelAssetLibrary> library;
 			std::shared_ptr<const ModelAssetData> asset;
@@ -130,8 +139,6 @@ namespace NexusEngine {
 		ShadowSystem*	   shadows_			   = nullptr; //< Runtime設定/診断のみ参照する。ImGuiはEditor内に限定
 		OpticalSystem*	   optics_			   = nullptr; //< Optical Passの設定のみを編集する非所有参照
 		PrimitiveRenderer* materialRenderer_   = nullptr; //< 光学Materialの設定窓口、非所有
-		uint32_t		   mirrorMaterialSlot_ = 0;
-		uint32_t		   glassMaterialSlot_  = 0;
 
 		ImGuiRenderer imguiRenderer_;		   //< imgui描画
 		UI::Context	  guiContext_;			   //< gui

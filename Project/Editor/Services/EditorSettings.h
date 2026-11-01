@@ -35,7 +35,7 @@ public:
     using Project = ProjectSettings;
     Project project;
     /** \brief Project→Editor→Userの順で既定値へ上書きする */
-    void Load(const std::filesystem::path& projectRoot);
+    void Load(const std::filesystem::path& projectRoot, const ProjectContext* context = nullptr);
     /** \brief 個人設定のみ保存する。失敗時は旧ファイルを保持する */
     [[nodiscard]] bool SaveUser() const;
     /** \brief プロジェクト共有設定を明示的に保存する */
@@ -44,6 +44,8 @@ public:
     [[nodiscard]] bool SaveEditor() const;
     [[nodiscard]] const std::filesystem::path& UserDirectory() const { return userDirectory_; }
 private:
+    std::filesystem::path descriptorFile_; //< Descriptor起動時の保存対象。旧起動では空
+    std::string projectId_; //< 保存前にProjectの同一性を確認する識別子
     std::filesystem::path userDirectory_; //< LOCALAPPDATA/NexusEngine/Editor
     std::filesystem::path projectDirectory_; //< ProjectRoot/Config
 };

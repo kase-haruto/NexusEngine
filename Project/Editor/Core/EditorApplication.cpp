@@ -6,8 +6,7 @@
 #include "Graphics/RayTracing/OpticalSystem.h"
 #include "Graphics/Renderer/PrimitiveRenderer.h"
 #include "Graphics/Renderer/GraphicsSystem.h"
-#include "Samples/OpticalDemoScene.h"
-#include "Samples/StartupAssets.h"
+#include "Runtime/Application/ProjectSettings.h"
 #include "Foundation/Logging/Logger.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -20,6 +19,7 @@
 #include <cctype>
 
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "Editor/ImGui/ImGuiStyle.h"
 #include "Foundation/Reflection/ReinstancingService.h"
@@ -76,11 +76,6 @@ namespace NexusEngine {
 							cameraPreviewRenderer_.reset();
 						}
 						previewInitializationFailed_ = false; editPose_.reset();
-						mirrorMaterialSlot_ = glassMaterialSlot_ = UINT32_MAX;
-						for(uint32_t slot = 0; slot < modelAsset_->materials.size(); ++slot) {
-							if(modelAsset_->materials[slot].name == "Mirror Sphere") mirrorMaterialSlot_ = slot;
-							if(modelAsset_->materials[slot].name == "Glass Sphere") glassMaterialSlot_ = slot;
-						}
 						if(workspace_) workspace_->ViewportEditor().SetModel(*modelAsset_, modelPose_);
 						++renderScene_.ddgi.revision;
 					}
@@ -233,28 +228,39 @@ namespace NexusEngine {
 	}
 
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory, const std::filesystem::path& startupLevel) {
+		imguiRenderer_.SetFontDirectory(paths_.engineRoot / "Resources/Assets/Fonts");
 		editPose_.reset();
         reportedAssetErrors_.clear();
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。
 		modelPose_.Shutdown();
 		session_.Close();
 
-		// モデル読み込み
-		OpticalSphereMaterialSlots sphereMaterials;
-		auto asset = LoadSampleStartupAsset(assetDirectory, &sphereMaterials);
-		if(!asset) {
-			// 読み込みに失敗したらエラーを返す
-			return std::unexpected(std::move(asset.error()));
-		}
+		if(paths_.projectRoot.empty() || paths_.engineRoot.empty())
+			return std::unexpected(Error(ErrorCategory::FileSystem, 150, "Editor requires explicit project and engine roots."));
+		EditorSettingsStore bootSettings;
+		bootSettings.Load(paths_.projectRoot, paths_.project.get());
+		auto levelPath = ResolveProjectPath(paths_.projectRoot, startupLevel.empty()
+			? std::filesystem::path{ConvertString(bootSettings.project.startupLevel)} : startupLevel);
+		if(!levelPath) return std::unexpected(levelPath.error());
+		auto levelResult = session_.Open(*levelPath);
+		if(!levelResult) return levelResult;
 
-		// モデルアセットに所有権を移動
-		auto startupAsset = std::make_shared<ModelAssetData>(std::move(*asset));
+		// 旧参照を使うLevelだけ、ホストから注入した互換モデルを準備する。
+		auto startupAsset = std::make_shared<ModelAssetData>();
+		bool usesStartup = false;
+		session_.GetLevel()->GetScene()->ForEach<PrimitiveRenderComponent>([&](Entity, const PrimitiveRenderComponent& item) {
+			usesStartup |= item.shape == PrimitiveShape::Asset && item.meshAsset == kStartupModelAssetReference;
+		});
+		if(usesStartup) {
+			if(!startupLoader_) return std::unexpected(Error(ErrorCategory::Resource, 49, "Level uses :startup without a startup asset loader."));
+			auto asset = startupLoader_();
+			if(!asset) return std::unexpected(asset.error());
+			*startupAsset = std::move(*asset);
+		}
 		modelAsset_ = startupAsset;
-		mirrorMaterialSlot_ = sphereMaterials.mirror;
-		glassMaterialSlot_ = sphereMaterials.glass;
 		auto poseResult = modelPose_.Initialize(*modelAsset_);
         modelLibrary_ = std::make_unique<ModelAssetLibrary>(std::move(startupAsset), assetDirectory,
-            [assetDirectory] { return LoadSampleStartupAsset(assetDirectory); });
+            startupLoader_);
         uploadedAssetRevision_ = modelLibrary_->Revision();
 		if(!poseResult) return poseResult;
 
@@ -264,19 +270,12 @@ namespace NexusEngine {
 				return poseResult;
 			}
 		}
-		EditorSettingsStore bootSettings;
-		bootSettings.Load(std::filesystem::current_path());
-		auto levelResult = session_.Open(startupLevel.empty()
-			? std::filesystem::path{ConvertString(bootSettings.project.startupLevel)} : startupLevel);
-		if(!levelResult) return levelResult;
 		renderScene_.ambientIrradiance = {1.5f, 1.8f, 2.4f}; // HDR未指定時の遠方環境の照度
 		renderScene_.fallbackEnvironmentIntensity = .05f; // GIオフ時は弱い環境光だけを残す
 		renderScene_.globalIllumination.enabled = false;
 		renderScene_.bakedLighting.enabled = false;
 		renderScene_.ddgi.enabled = bootSettings.editor.giMode == "DDGI";
-		renderScene_.bakedLighting.cachePath = "Generated/Lighting/DemoLevel.nxgi";
-		constexpr char bakedPath[] = "Generated/Lighting/DemoLevel.nxgi";
-		std::copy_n(bakedPath, sizeof(bakedPath), bakedPath_.begin());
+		renderScene_.bakedLighting.cachePath = paths_.projectRoot / "Generated/Lighting" / (levelPath->stem().wstring() + L".nxgi");
 		renderScene_.fog.enabled = true;
 		return session_.GetLevel()->Update(0.0f);
 	}
@@ -378,11 +377,8 @@ namespace NexusEngine {
 			if(materialRenderer_) {
 				const auto materials = materialRenderer_->GetOpticalMaterials();
 				for(uint32_t slot = 0; slot < materials.size(); ++slot) {
-					if(slot != mirrorMaterialSlot_ && slot != glassMaterialSlot_) {
-						continue;
-					}
 					ImGui::PushID(static_cast<int>(slot));
-					ImGui::SeparatorText(slot == mirrorMaterialSlot_ ? "Mirror Sphere (Left)" : "Glass Sphere (Right)");
+					ImGui::SeparatorText(slot < modelAsset_->materials.size() ? modelAsset_->materials[slot].name.c_str() : "Material");
 					auto material = materials[slot].optics;
 					bool edited = ImGui::SliderFloat("Reflectivity", &material.reflectivity, 0, 1);
 					edited |= ImGui::SliderFloat("Transmission", &material.transmission, 0, 1);
@@ -447,8 +443,12 @@ namespace NexusEngine {
 				ImGui::SeparatorText("Environment / PBR");
 				ImGui::InputText("HDR image path", environmentPath_.data(), environmentPath_.size());
 				if(ImGui::Button("Load / Reload HDR")) {
-					environment.imagePath = std::filesystem::path(reinterpret_cast<const char8_t*>(environmentPath_.data()));
-					++environment.revision;
+					if(environmentPath_[0] == '\0') { environment.imagePath.clear(); ++environment.revision; }
+					else {
+						auto image = ResolveProjectPath(paths_.projectRoot, std::filesystem::path(reinterpret_cast<const char8_t*>(environmentPath_.data())));
+						if(image) { environment.imagePath = *image; ++environment.revision; }
+						else NEXUS_LOG_ERROR("Environment", image.error().GetMessageText());
+					}
 				}
 				ImGui::Checkbox("IBL Enabled", &environment.enabled);
 				ImGui::DragFloat("IBL Intensity", &environment.intensity, 0.01f, 0, 100);
@@ -502,16 +502,18 @@ namespace NexusEngine {
 					ImGui::DragFloat3("Probe Maximum",baked.probeMax.data(),.1f);
 				}
 				if(ImGui::Button("Bake and Save (CPU)") && materialRenderer_) {
-					baked.cachePath=std::filesystem::path(reinterpret_cast<const char8_t*>(bakedPath_.data()));
+					auto cache = ResolveProjectPath(paths_.projectRoot, std::filesystem::path(reinterpret_cast<const char8_t*>(bakedPath_.data())));
 					// 編集時の明示操作のみCPUベイクする。描画ループからは呼び出さない。
-					auto status=materialRenderer_->BakeLighting(baked);
+					if(cache) baked.cachePath = *cache;
+					auto status = cache ? materialRenderer_->BakeLighting(baked) : Result<void>{std::unexpected(cache.error())};
 					if(status) ++baked.revision;
 					else NEXUS_LOG_ERROR("BakedGI",status.error().GetMessageText());
 				}
 				ImGui::SameLine();
 				if(ImGui::Button("Reload Baked GI")) {
-					baked.cachePath=std::filesystem::path(reinterpret_cast<const char8_t*>(bakedPath_.data()));
-					++baked.revision;
+					auto cache = ResolveProjectPath(paths_.projectRoot, std::filesystem::path(reinterpret_cast<const char8_t*>(bakedPath_.data())));
+					if(cache) { baked.cachePath = *cache; ++baked.revision; }
+					else NEXUS_LOG_ERROR("BakedGI", cache.error().GetMessageText());
 				}
 				ImGui::TextUnformatted("CPU bake pauses editing. Runtime samples saved lighting without GI rays.");
 				ImGui::BeginDisabled(baked.enabled || ddgi.enabled);
@@ -585,7 +587,7 @@ namespace NexusEngine {
 
 	Result<void> EditorApplication::CreateWorkspace(float dpiScale) {
 		workspace_ = std::make_unique<EditorWorkspace>(session_);
-		workspace_->Initialize(std::filesystem::current_path(), editorExtensions_);
+		workspace_->Initialize(paths_.projectRoot, editorExtensions_, paths_.engineRoot, paths_.project.get());
 		workspace_->SetDpiScale(dpiScale);
 		workspace_->ViewportEditor().SetModel(*modelAsset_, modelPose_);
         workspace_->AssetEditor().Configure(modelLibrary_->Root(),
@@ -660,7 +662,7 @@ namespace NexusEngine {
 			if(const auto* document = session_.GetLevelDocument()) {
 				auto stem = document->GetFilePath().value_or(std::filesystem::path{"UnsavedLevel"}).stem();
 				stem += ".nxgi";
-				renderScene_.bakedLighting.cachePath = std::filesystem::path{"Generated/Lighting"} / stem;
+				renderScene_.bakedLighting.cachePath = paths_.projectRoot / "Generated/Lighting" / stem;
 				auto path = AssetCatalog::Utf8(renderScene_.bakedLighting.cachePath);
 				std::snprintf(bakedPath_.data(),bakedPath_.size(),"%s",path.c_str());
 			}
@@ -670,6 +672,12 @@ namespace NexusEngine {
 			renderScene_.ddgi.enabled = mode == "DDGI";
 			renderScene_.globalIllumination.enabled = mode == "RTGI";
 			renderScene_.bakedLighting.enabled = mode == "Baked";
+		}
+		// Level内の参照は保存値を変えず、GPUへ渡すsnapshotだけ絶対化する。
+		if(!renderScene_.environment.imagePath.empty()) {
+			auto image = ResolveProjectPath(paths_.projectRoot, renderScene_.environment.imagePath);
+			if(!image) return std::unexpected(image.error());
+			renderScene_.environment.imagePath = *image;
 		}
 		uint32_t sceneWidth = width, sceneHeight = height;
 		if(graphicsSystem_) {

@@ -14,7 +14,7 @@ ItemResult ImageButton(Context& context, const ImageButtonDesc& desc);
 
 ## Editorでの使用方針
 
-- 色・余白・角丸の基準は`Editor/ImGui/ImGuiStyle.cpp`の既存黒基調/Orange Accent。
+- 色・余白・角丸の基準は`Tools/UI/ImGuiStyle.h`の既存黒基調/Orange Accent。
   `ImGuiRenderer`初期化とPreferencesは同じ`UI::ApplyEditorStyle()`を使う。
   標準Dark/Lightテーマでこの配色を上書きしない。
 - 検索欄は既存`SearchBar`を使用する。Outliner、Content Browser、Output Logで再利用する。

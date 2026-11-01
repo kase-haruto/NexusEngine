@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Develop|x64"><Configuration>Develop</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{@EDITOR_GUID@}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'!='Release'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(ProjectDir)Nexus.Engine.local.props" Condition="Exists('$(ProjectDir)Nexus.Engine.local.props')" />
+  <PropertyGroup><NexusWithEditor>true</NexusWithEditor><NexusEngineAssociation Condition="'$(NexusEngineAssociation)'==''">@ENGINE_ASSOCIATION@</NexusEngineAssociation><NexusProjectFile>$(ProjectDir)@PROJECT_FILE@</NexusProjectFile></PropertyGroup>
+  <Import Project="$(NexusEngineRoot)\Build\Nexus.Game.props" />
+  <PropertyGroup><OutDir>$(ProjectDir)Build\Bin\$(Platform)\$(Configuration)\</OutDir><IntDir>$(ProjectDir)Intermediate\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir></PropertyGroup>
+  <PropertyGroup><DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor><LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory><LocalDebuggerCommandArguments>--project &quot;$(NexusProjectFile)&quot; --engine &quot;$(NexusEngineDataRoot)&quot; --engine-manifest &quot;$(NexusEngineManifest)&quot;</LocalDebuggerCommandArguments></PropertyGroup>
+  <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(ProjectDir)@SOURCE@;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile></ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="$(ProjectDir)@SOURCE@\Game\**\*.cpp" Exclude="$(ProjectDir)@SOURCE@\Game\Generated\**" /><ClCompile Include="$(ProjectDir)@SOURCE@\Game\Generated\GeneratedGameReflection.cpp" /><ClInclude Include="$(ProjectDir)@SOURCE@\Game\**\*.h" /></ItemGroup>
+  <Target Name="GenerateGameTypes" BeforeTargets="ClCompile"><Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusEngineRoot)\Tools\Reflection\Generate-Reflection.ps1&quot; -ProjectRoot &quot;$(NexusEngineRoot)\.&quot; -GameRoot &quot;$(ProjectDir)@SOURCE@\.&quot; -Module Game" /></Target>
+  <Target Name="WriteGameIdentity" AfterTargets="Build" Condition="'$(NexusEngineManifest)'!=''"><Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusEngineRoot)\Tools\Project\Write-GameBuildStamp.ps1&quot; -ProjectFile &quot;$(NexusProjectFile)&quot; -EngineManifest &quot;$(NexusEngineManifest)&quot; -Executable &quot;$(TargetPath)&quot; -Configuration &quot;$(Configuration)&quot; -HostKind Editor" /></Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

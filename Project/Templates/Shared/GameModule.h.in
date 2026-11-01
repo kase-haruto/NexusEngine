@@ -1,0 +1,20 @@
+#pragma once
+#include "Runtime/Application/GameRuntime.h"
+#include "Runtime/Reflection/ReflectionRegistration.h"
+#include "Game/Generated/GeneratedGameReflection.h"
+
+namespace Game {
+/** \brief Game固有型をEngine型へ追加する */
+inline void Components(NexusEngine::ComponentReflection& registry) {
+    NexusEngine::RegisterGeneratedComponents(registry);
+    NexusEngine::RegisterGameComponents(registry);
+}
+/** \brief 同じGame型をEditorのDetailsへ公開する */
+inline void Inspector(NexusEngine::TypeRegistry& registry) {
+    NexusEngine::RegisterGeneratedInspectorTypes(registry);
+    NexusEngine::RegisterGameInspectorTypes(registry);
+}
+inline NexusEngine::ReflectionRegistration Reflection() { return {Components, Inspector}; }
+/** \brief LevelごとにGameのSystemを構築する。所有権はLevelのSchedulerへ渡す */
+inline NexusEngine::Result<void> Setup(NexusEngine::Level&) { return {}; }
+}

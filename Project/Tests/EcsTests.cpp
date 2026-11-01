@@ -1,13 +1,17 @@
 // c++
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <cstdlib>
+#include <crtdbg.h>
 
 // engine
 #include "Runtime/Level/Level.h"
 #include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Model/ModelAssetReference.h"
 #include "Graphics/Model/ModelInstance.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
@@ -102,7 +106,8 @@ namespace NexusEngine::Tests {
 		assert(parent.IsAlive() && child.IsAlive());
 		assert(child.AddComponent<HierarchyComponent>(HierarchyComponent { parent.GetId() }) != nullptr);
 		const PersistentId savedParentId = parent.GetComponent<PersistentIdComponent>()->value;
-		const std::filesystem::path path = std::filesystem::temp_directory_path() / "nexus_ecs_test.level";
+		const auto path = std::filesystem::temp_directory_path() /
+			("nexus_ecs_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".level");
 		assert(source.Save(path).has_value());
 
 		Level restored;
@@ -219,9 +224,20 @@ namespace NexusEngine::Tests {
 		assert(!extractor.ExtractInto(*lighting.GetScene(), 1, litScene).has_value());
 		std::filesystem::remove(path);
 
-		// Startup content is authored in the existing DemoLevel file.
+		// 制作中のDemoLevelの内容ではなく、テスト専用の起動Worldを保存・復元する。
+		const auto buildFixture = [](Level& level, uint32_t first, uint32_t count) {
+			assert(level.LoadEmpty());
+			assert(level.CreateEntity("Camera").AddComponent<CameraComponent>());
+			assert(level.CreateEntity("Light").AddComponent<DirectionalLightComponent>());
+			for(uint32_t node = first; node < first + count; ++node) {
+				auto* primitive = level.CreateEntity("Mesh").AddComponent<PrimitiveRenderComponent>();
+				assert(primitive); primitive->nodeIndex = node; primitive->meshAsset = kStartupModelAssetReference;
+			}
+		};
+		Level startup("DemoLevel"); buildFixture(startup, 0, 3);
+		assert(startup.Save(path));
 		Level demo;
-		assert(demo.Load("Project/Resources/Assets/Levels/DemoLevel.json").has_value());
+		assert(demo.Load(path).has_value());
 		assert(demo.GetName() == "DemoLevel");
 		assert(demo.Update(0).has_value());
 		RenderScene demoSnapshot;
@@ -234,8 +250,12 @@ namespace NexusEngine::Tests {
 			demoNodes[primitive.nodeIndex] = true;
 		}
 		assert(demoNodes[0] && demoNodes[1] && demoNodes[2]);
+		Level pbrFixture("PBRTestLevel"); buildFixture(pbrFixture, 3, 13);
+		pbrFixture.Lighting().emplace();
+		pbrFixture.Lighting()->environment.imagePath = "Resources/Assets/Environments/PBRStudio.hdr";
+		assert(pbrFixture.Save(path));
 		Level pbr;
-		assert(pbr.Load("Project/Resources/Assets/Levels/PBRTestLevel.json").has_value());
+		assert(pbr.Load(path).has_value());
 		assert(pbr.Update(0).has_value());
 		RenderScene pbrSnapshot;
 		assert(extractor.ExtractInto(*pbr.GetScene(),16.f/9.f,pbrSnapshot).has_value());
@@ -247,8 +267,14 @@ namespace NexusEngine::Tests {
 		assert(pbrRestored.GetName()=="PBRTestLevel");
 		assert(pbr.Lighting() && pbr.Lighting()->environment.imagePath=="Resources/Assets/Environments/PBRStudio.hdr");
 		assert(pbrRestored.Lighting()->environment.imagePath==pbr.Lighting()->environment.imagePath);
+		Level sponzaFixture("SponzaLevel"); buildFixture(sponzaFixture, 0, 3);
+		sponzaFixture.Lighting().emplace();
+		sponzaFixture.Lighting()->skyIrradiance = {4, 4.8f, 6.4f};
+		sponzaFixture.Lighting()->probes.counts = {16, 6, 8};
+		sponzaFixture.Lighting()->probes.raysPerProbe = 64;
+		assert(sponzaFixture.Save(path));
 		Level sponzaLevel;
-		assert(sponzaLevel.Load("Project/Resources/Assets/Levels/SponzaLevel.json").has_value());
+		assert(sponzaLevel.Load(path).has_value());
 		assert(sponzaLevel.Lighting() && sponzaLevel.Lighting()->IsValid());
 		assert(sponzaLevel.Lighting()->skyIrradiance[0]==4 && sponzaLevel.Lighting()->probes.counts[0]==16);
 		assert(sponzaLevel.Lighting()->probes.raysPerProbe==64);
@@ -271,6 +297,9 @@ namespace NexusEngine::Tests {
 
 #if defined(NEXUS_ECS_TEST_MAIN)
 int main() {
+	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 	NexusEngine::Tests::RunEcsTests();
 	return 0;
 }

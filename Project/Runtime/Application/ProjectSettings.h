@@ -1,5 +1,6 @@
 #pragma once
 #include "Foundation/Error/Result.h"
+#include "Runtime/Project/ProjectContext.h"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -12,12 +13,14 @@ namespace NexusEngine {
 /** Project共有の起動設定。Editor個人設定には依存しない。 */
 struct ProjectSettings {
     std::string name = "NexusEngine";
-    std::string startupLevel = "Resources/Assets/Levels/DemoLevel.json";
+    std::string startupLevel; //< 起動LevelはGameの共有設定で明示する
     std::string assetPath = "Resources/Assets";
 };
 
 /** \brief UTF-8の共有設定を読む。不正な既知項目と読込失敗を報告する */
-[[nodiscard]] inline Result<ProjectSettings> LoadProjectSettings(const std::filesystem::path& root) {
+[[nodiscard]] inline Result<ProjectSettings> LoadProjectSettings(const std::filesystem::path& root, const ProjectContext* context = nullptr) {
+    // Descriptor起動では共有メタデータを唯一の正とし、旧設定へfallbackしない。
+    if(context) return ProjectSettings{context->Descriptor().name, context->Descriptor().startupLevel, context->Descriptor().paths.assets};
     std::ifstream input(root / "Config/Project.settings");
     if(!input) return std::unexpected(Error(ErrorCategory::FileSystem, 44, "Cannot read Config/Project.settings."));
     ProjectSettings settings;
@@ -34,6 +37,8 @@ struct ProjectSettings {
         if(key == "assetPath") settings.assetPath = value;
     }
     if(input.bad()) return std::unexpected(Error(ErrorCategory::FileSystem, 44, "Failed reading Config/Project.settings."));
+    if(settings.startupLevel.empty())
+        return std::unexpected(Error(ErrorCategory::FileSystem, 45, "Config/Project.settings requires startupLevel."));
     return settings;
 }
 
@@ -45,8 +50,7 @@ struct ProjectSettings {
     while(!directory.empty()) {
         for(const auto& candidate : {directory, directory / "Project"}) {
             if(std::filesystem::is_regular_file(candidate / "Config/Project.settings", error) &&
-               std::filesystem::is_directory(candidate / "Resources/Assets", error) &&
-               std::filesystem::is_directory(candidate / "Shaders", error)) return candidate;
+               std::filesystem::is_directory(candidate / "Resources/Assets", error)) return candidate;
         }
         const auto parent = directory.parent_path();
         if(parent == directory) break;

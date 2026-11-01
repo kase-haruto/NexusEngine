@@ -19,6 +19,7 @@
 #include "ThirdParty/imgui/imgui_internal.h"
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include <cstring>
+#include <fstream>
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 
@@ -43,8 +44,6 @@ namespace NexusEngine {
 		constexpr int32_t kBackendInitializationFailed = 2;
 		constexpr int32_t kFontLoadFailed = 3;
 		constexpr float kEditorFontSize = 18.0f;
-		constexpr const char* kInterFontPath = "Resources/Assets/Fonts/inter.ttf";
-		constexpr const char* kJapaneseFontPath = "Resources/Assets/Fonts/NotoSerifJP.ttf";
 
 	}
 
@@ -62,7 +61,21 @@ namespace NexusEngine {
 
 		// 欧文UIはInterを使用し、日本語グリフだけをNoto Serif JPから同じFontへ補完する。
 		// Dear ImGui 1.92以降は必要なGlyphを動的にRasterizeするため、固定Glyph Rangeは指定しない。
-		ImFont* const interFont = io.Fonts->AddFontFromFileTTF(kInterFontPath, kEditorFontSize);
+		// Win32の狭い文字列fopenを通さず、Unicodeのfilesystem::pathで読む。
+		fontData_.clear();
+		const auto loadFont = [&](const wchar_t* name, ImFontConfig config) -> ImFont* {
+			std::ifstream input(fontDirectory_ / name, std::ios::binary | std::ios::ate);
+			if(!input) return nullptr;
+			const auto size = input.tellg();
+			if(size <= 0 || size > 64 * 1024 * 1024) return nullptr;
+			fontData_.emplace_back(static_cast<size_t>(size));
+			auto& bytes = fontData_.back();
+			input.seekg(0); input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+			if(!input) return nullptr;
+			config.FontDataOwnedByAtlas = false;
+			return io.Fonts->AddFontFromMemoryTTF(bytes.data(), static_cast<int>(bytes.size()), kEditorFontSize, &config);
+		};
+		ImFont* const interFont = loadFont(L"inter.ttf", {});
 		if(interFont == nullptr) {
 			ImGui::DestroyContext();
 			return std::unexpected(Error(ErrorCategory::Graphics, kFontLoadFailed, "Failed to load Resources/Assets/Fonts/inter.ttf."));
@@ -70,7 +83,7 @@ namespace NexusEngine {
 		ImFontConfig japaneseFontConfig;
 		japaneseFontConfig.MergeMode = true;
 		japaneseFontConfig.PixelSnapH = true;
-		if(io.Fonts->AddFontFromFileTTF(kJapaneseFontPath, kEditorFontSize, &japaneseFontConfig) == nullptr) {
+		if(loadFont(L"NotoSerifJP.ttf", japaneseFontConfig) == nullptr) {
 			ImGui::DestroyContext();
 			return std::unexpected(Error(ErrorCategory::Graphics, kFontLoadFailed, "Failed to load Resources/Assets/Fonts/NotoSerifJP.ttf."));
 		}

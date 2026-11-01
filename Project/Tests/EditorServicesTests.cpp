@@ -724,6 +724,42 @@ void AxisWidgetInteraction() {
     ImGui::DestroyContext();
 }
 void RunReinstancingTests();
+void ExecutionModeRouting() {
+    Fixture f;
+    ImGui::CreateContext(); ImGui::GetIO().IniFilename = nullptr;
+    {
+        EditorWorkspace workspace(f.session); workspace.Initialize(std::filesystem::absolute("Project"));
+        auto& commands = workspace.Commands();
+        assert(commands.IsChecked("play.mode.editor"));
+        assert(!commands.CanExecute("play.mode.window"));
+        assert(commands.Execute("play.start") && f.session.IsPlaying());
+        assert(!commands.CanExecute("play.mode.editor"));
+        assert(commands.Execute("play.pause") && f.session.IsPaused());
+        assert(commands.Execute("play.stop") && !f.session.IsPlaying());
+        bool external = false; int starts = 0, stops = 0;
+        EditorCommandRegistry::Command run{[&] { external = true; ++starts; },[&] { return !external; }};
+        run.isChecked = [&] { return external; };
+        assert(commands.Register("project.runStandalone",std::move(run)));
+        assert(commands.Register("project.stopStandalone",{[&] { external = false; ++stops; },[&] { return external; }}));
+        assert(commands.Execute("play.mode.window") && commands.IsChecked("play.mode.window"));
+        commands.Dispatch(false,false,false,[](int key) { return key == ImGuiKey_F5; });
+        assert(starts == 1 && external && !f.session.IsPlaying());
+        assert(!commands.CanExecute("play.start") && !commands.CanExecute("play.pause"));
+        assert(!commands.Execute("play.mode.editor"));
+        commands.Dispatch(false,true,false,[](int key) { return key == ImGuiKey_F5; });
+        assert(stops == 1 && !external);
+        auto snapshot = workspace.CaptureForReinstancing();
+        assert(commands.Execute("play.mode.editor"));
+        workspace.RestoreAfterReinstancing(snapshot);
+        assert(commands.IsChecked("play.mode.window"));
+        assert(commands.Execute("play.mode.editor"));
+        assert(commands.Execute("play.start") && f.session.IsPlaying() && starts == 1);
+        assert(commands.Execute("play.stop"));
+        workspace.Shutdown();
+    }
+    ImGui::DestroyContext();
+    std::cout << "PASS: one Run/Stop command pair routes by menu mode, blocks mode changes while active, preserves F5/Shift+F5 and restores selection.\n";
+}
 void RunGameRuntimeTests();
 void RunReflectedComponentTests();
 int main() {
@@ -733,6 +769,7 @@ int main() {
     RunReinstancingTests();
     RunGameRuntimeTests();
     RunReflectedComponentTests();
+    ExecutionModeRouting();
     EditorToolbarTests();
     EditorToolbarSettingsTests();
     AxisWidgetInteraction();

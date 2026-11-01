@@ -2,13 +2,13 @@
 
 namespace NexusEngine {
 Result<void> LevelDocument::Create(std::optional<std::string> name) {
-    auto level = std::make_unique<Level>(name.value_or("New Level"));
+    auto level = std::make_unique<Level>(name.value_or("New Level"), reflection_);
     auto result = level->LoadEmpty();
     if(!result) return result;
     level_ = std::move(level); filePath_.reset(); return {};
 }
 Result<void> LevelDocument::Open(const std::filesystem::path& path) {
-    auto level = std::make_unique<Level>();
+    auto level = std::make_unique<Level>("Level", reflection_);
     auto result = level->Load(path);
     if(!result) return result;
     level_ = std::move(level); filePath_ = path; return {};

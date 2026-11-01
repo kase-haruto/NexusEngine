@@ -1,0 +1,14 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="NexusRuntime.vcxproj" />
+  <Project Path="NexusEditorSupport.vcxproj" />
+  <Project Path="SampleGame.vcxproj" />
+  <Project Path="SampleGameRuntime.vcxproj" />
+  <Project Path="SampleGameEditor.vcxproj" />
+  <Project Path="NexusEditor.vcxproj" />
+  <Project Path="NexusRuntimeHost.vcxproj" />
+  <Project Path="NexusProjectTool.vcxproj" />
+  <Project Path="NexusLauncher.vcxproj" />
+</Solution>

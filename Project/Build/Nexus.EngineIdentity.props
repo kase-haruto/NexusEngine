@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NexusHostEngineId Condition="'$(NexusHostEngineId)'==''">nexus-development</NexusHostEngineId>
+    <NexusHostEngineVersion Condition="'$(NexusHostEngineVersion)'==''">0.1.0-dev</NexusHostEngineVersion>
+    <NexusHostEngineAssociation Condition="'$(NexusHostEngineAssociation)'==''">development</NexusHostEngineAssociation>
+  </PropertyGroup>
+  <ItemDefinitionGroup><ClCompile>
+    <PreprocessorDefinitions>NEXUS_HOST_ENGINE_ID=&quot;$(NexusHostEngineId)&quot;;NEXUS_HOST_ENGINE_VERSION=&quot;$(NexusHostEngineVersion)&quot;;NEXUS_HOST_ENGINE_ASSOCIATION=&quot;$(NexusHostEngineAssociation)&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+  </ClCompile></ItemDefinitionGroup>
+</Project>

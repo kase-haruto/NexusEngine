@@ -101,7 +101,11 @@ namespace NexusEngine {
 
 		// 非対応Componentを黙って落とすとEditorの保存でデータを失うため、I/O前に拒否する。
 		ComponentReflection components;
-		RegisterGeneratedComponents(components);
+		try {
+			if(level.reflection_.components) level.reflection_.components(components);
+		} catch(const std::exception& exception) {
+			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, std::string("Component registration failed: ") + exception.what()));
+		}
 		auto supported = BuiltinComponents();
 		for(const auto& [id, type] : components.Types()) supported.insert(type.nativeType);
 		bool supportedStorages = true;
@@ -276,7 +280,11 @@ namespace NexusEngine {
 		}
 		auto loadedScene = std::make_unique<Scene>();
         ComponentReflection components;
-        RegisterGeneratedComponents(components);
+        try {
+            if(level.reflection_.components) level.reflection_.components(components);
+        } catch(const std::exception& exception) {
+            return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, std::string("Component registration failed: ") + exception.what()));
+        }
 		std::map<PersistentKey, EntityId> loadedEntities;
 		std::vector<PendingParent> pendingParents;
 

@@ -18,6 +18,7 @@ public:
         int key = 0; //< GUI adapterが解釈するキー値。0は割当なし
         bool ctrl = false, shift = false, alt = false; //< 完全一致する修飾キー
         std::string shortcut; //< メニュー・Tooltipと共有する割当表示
+        std::function<bool()> isChecked; //< 実行モードや継続中の操作の選択状態
     };
     /** \brief 安定IDでコマンドを追加する */
     bool Register(std::string id, Command command) {
@@ -43,6 +44,11 @@ public:
     bool CanExecute(std::string_view id) const {
         auto it = commands_.find(id);
         return it != commands_.end() && it->second.execute && (!it->second.canExecute || it->second.canExecute());
+    }
+    /** \brief 選択状態をCommandの所有者へ照会する。未登録なら非選択 */
+    bool IsChecked(std::string_view id) const {
+        auto it = commands_.find(id);
+        return it != commands_.end() && it->second.isChecked && it->second.isChecked();
     }
     /** \brief 実行可能性を再検査して操作要求を実行する */
     bool Execute(std::string_view id) const {

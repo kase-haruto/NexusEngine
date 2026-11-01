@@ -1,10 +1,11 @@
-#include "Runtime/Reflection/Generated/GeneratedReflection.h"
+#include "Game/GameReflection.h"
 #include "Runtime/Reflection/ReflectedInspector.h"
 #include "Runtime/Reflection/ComponentReflection.h"
 #include "Foundation/Reflection/ReflectionTextArchive.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Services/PropertyEditService.h"
 #include "Editor/Services/SceneEditService.h"
+#include "Editor/Services/EditorDocumentService.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
@@ -29,8 +30,8 @@ void WriteFile(const std::filesystem::path& file, const std::string& text) {
     std::ofstream output(file, std::ios::binary | std::ios::trunc); output << text;
 }
 void EditorComponentRoundTrip() {
-    EditorSession session; assert(session.Create());
-    TypeRegistry types; RegisterSceneTypes(types); RegisterGeneratedInspectorTypes(types);
+    EditorSession session(NexusGame::SampleReflection()); assert(session.Create());
+    TypeRegistry types; RegisterSceneTypes(types); NexusGame::RegisterInspector(types);
     PropertyEditService properties(types); properties.Reset(session.GetLevel());
     SceneEditService edits(session, properties);
     const auto* type = types.Find("Game.Move");
@@ -64,7 +65,7 @@ void EditorComponentRoundTrip() {
     assert(session.GetLevel()->FindEntity(id).GetComponent<MoveComponent>()->speed == 7.5f);
     assert(!session.GetLevel()->FindEntity(otherId).HasComponent<MoveComponent>());
     // Live++の値キャプチャにも同じ生成登録が含まれる。
-    ComponentReflection registry; RegisterGeneratedComponents(registry);
+    ComponentReflection registry; NexusGame::RegisterComponents(registry);
     auto snapshot = registry.Capture(*session.GetLevel()->GetScene());
     Scene restored; registry.Restore(restored, snapshot);
     int count = 0;
@@ -75,10 +76,10 @@ void EditorComponentRoundTrip() {
     assert(!session.GetLevel()->Save(file)); assert(ReadFile(file) == saved);
 }
 void GeneratedComponentMenuAndDetails() {
-    EditorSession session; assert(session.Create());
+    EditorSession session(NexusGame::SampleReflection()); assert(session.Create());
     auto entity = session.GetLevel()->CreateEntity("Menu test");
     const auto id = entity.GetComponent<PersistentIdComponent>()->value; session.Select(id);
-    TypeRegistry types; RegisterSceneTypes(types); RegisterGeneratedInspectorTypes(types);
+    TypeRegistry types; RegisterSceneTypes(types); NexusGame::RegisterInspector(types);
     PropertyEditService properties(types); properties.Reset(session.GetLevel());
     SceneEditService edits(session, properties);
     PropertyDrawerRegistry drawers; drawers.RegisterDefaults();
@@ -121,7 +122,7 @@ void GeneratedComponentMenuAndDetails() {
 }
 void LevelValidationAndSchemaDefaults() {
     const auto file = std::filesystem::path{"Generated/ReflectedComponentTests/Validation.level"};
-    Level level; assert(level.LoadEmpty());
+    Level level("Level", NexusGame::SampleReflection()); assert(level.LoadEmpty());
     auto entity = level.CreateEntity("Keep me");
     const auto id = entity.GetComponent<PersistentIdComponent>()->value;
     assert(entity.AddComponent<MoveComponent>(MoveComponent{7.5f}));
@@ -152,13 +153,13 @@ void LevelValidationAndSchemaDefaults() {
     WriteFile(file, valid); assert(level.Load(file));
 }
 void GameLoadsAuthoredComponent() {
-    Level level; assert(level.Load("Project/Resources/Assets/Levels/RuntimeDemoLevel.json"));
+    Level level("Level", NexusGame::SampleReflection()); assert(level.Load("Project/Resources/Assets/Levels/RuntimeDemoLevel.json"));
     const PersistentId id{70001, 3};
     auto entity = level.FindEntity(id); assert(entity.IsAlive());
     assert(entity.AddComponent<MoveComponent>(MoveComponent{2}));
     const auto file = std::filesystem::path{"Generated/ReflectedComponentTests/Runtime.level"};
     assert(level.Save(file));
-    GameApplication game; assert(game.SetGameLevelSetup(NexusGame::SetupSampleGame));
+    GameApplication game(NexusGame::SampleReflection()); assert(game.SetGameLevelSetup(NexusGame::SetupSampleGame));
     assert(game.Load(file, "Project/Resources/Assets")); assert(game.Update(0.5f));
     auto played = game.Runtime().GetLevel()->FindEntity(id);
     assert(played.GetComponent<TransformComponent>()->translation.x == 1);
@@ -185,9 +186,49 @@ void TextArchiveTypesAndInvalidData() {
     try { static_cast<void>(ReadReflectionTextArchive(inputDeep)); } catch(const std::exception&) { rejected = true; }
     assert(rejected);
 }
+void ExplicitGameRegistration() {
+    // Engineだけで作ったWorldにはGame型を読み込ませない。
+    const auto file = std::filesystem::path{"Generated/ReflectedComponentTests/Explicit.level"};
+    Level authored("Game", NexusGame::SampleReflection()); assert(authored.LoadEmpty());
+    auto entity = authored.CreateEntity("Game entity");
+    assert(entity.AddComponent<MoveComponent>(MoveComponent{5})); assert(authored.Save(file));
+    Level engineOnly; assert(engineOnly.LoadEmpty());
+    auto* previous = engineOnly.GetScene();
+    assert(!engineOnly.Load(file)); assert(engineOnly.GetScene() == previous);
+
+    EditorSession session(NexusGame::SampleReflection()); assert(session.Open(file));
+    assert(session.StartPlay());
+    assert(session.GetPlayLevel()->GetReflectionRegistration().components == NexusGame::RegisterComponents);
+    const auto played = std::filesystem::path{"Generated/ReflectedComponentTests/Played.level"};
+    assert(session.GetPlayLevel()->Save(played)); session.StopPlay();
+    Level restored("Game", NexusGame::SampleReflection()); assert(restored.Load(played));
+    int count = 0;
+    restored.GetScene()->ForEach<MoveComponent>([&](Entity, const MoveComponent& component) { ++count; assert(component.speed == 5); });
+    assert(count == 1);
+
+    const auto before = ReadFile(file);
+    ReflectionRegistration duplicate{[](ComponentReflection& registry) {
+        NexusGame::RegisterComponents(registry); NexusGame::RegisterComponents(registry);
+    }, nullptr};
+    Level invalid("Duplicate", duplicate); assert(invalid.LoadEmpty());
+    assert(!invalid.Save(file)); assert(ReadFile(file) == before);
+    assert(!invalid.Load(file));
+
+    TypeRegistry types; RegisterSceneTypes(types); NexusGame::RegisterInspector(types);
+    PropertyEditService properties(types); properties.Reset(session.GetLevel());
+    EditorDocumentService documents(session, properties);
+    const auto root = std::filesystem::absolute(file.parent_path());
+    documents.SetProjectRoot(root);
+    assert(documents.Save("Relative.level"));
+    assert(session.GetLevelDocument()->GetFilePath() == root / "Relative.level");
+    auto* current = session.GetLevel();
+    assert(!documents.Save(root.parent_path() / "Outside.level"));
+    documents.Request(EditorDocumentService::Action::Open, root.parent_path() / "Outside.level");
+    assert(!documents.Error().empty() && session.GetLevel() == current);
+}
 }
 void RunReflectedComponentTests() {
     EditorComponentRoundTrip(); GeneratedComponentMenuAndDetails(); LevelValidationAndSchemaDefaults();
-    GameLoadsAuthoredComponent(); TextArchiveTypesAndInvalidData();
+    GameLoadsAuthoredComponent(); TextArchiveTypesAndInvalidData(); ExplicitGameRegistration();
     std::cout << "PASS: game component registration, edit/undo, Level persistence, schema defaults, runtime loading and malformed data rejection\n";
 }

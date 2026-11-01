@@ -1,8 +1,14 @@
 #include "EditorDocumentService.h"
+#include "Runtime/Application/ApplicationPaths.h"
 
 namespace NexusEngine {
 void EditorDocumentService::Request(Action action, std::filesystem::path path) {
     if(pending_ != Action::None || saveAs_ || session_.IsPlaying()) return;
+    if(action == Action::Open && !projectRoot_.empty()) {
+        auto resolved = ResolveProjectPath(projectRoot_, path);
+        if(!resolved) { error_ = resolved.error().GetMessageText(); return; }
+        path = *resolved;
+    }
     properties_.Commit(); error_.clear(); pending_ = action; path_ = std::move(path);
     if(IsDirty()) confirmation_ = true; else Perform();
 }
@@ -22,6 +28,11 @@ void EditorDocumentService::Discard() { confirmation_ = false; Perform(); }
 bool EditorDocumentService::Save(std::optional<std::filesystem::path> path) {
     auto* document = session_.GetLevelDocument();
     if(!document || session_.IsPlaying()) return false;
+    if(path && !projectRoot_.empty()) {
+        auto resolved = ResolveProjectPath(projectRoot_, *path);
+        if(!resolved) { error_ = resolved.error().GetMessageText(); return false; }
+        path = *resolved;
+    }
     properties_.Commit(); error_.clear();
     if(!path && !document->GetFilePath()) { confirmation_ = false; saveAs_ = true; return false; }
     auto result = path ? document->SaveAs(*path) : document->Save();

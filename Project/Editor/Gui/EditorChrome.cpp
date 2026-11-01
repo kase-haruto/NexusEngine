@@ -52,7 +52,12 @@ namespace NexusEngine {
 
 			// 無効な操作にも説明を出す。Shortcutはメニューと同じCommand登録から取得する。
 			if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-				ImGui::SetTooltip("%s %s", text.Text(labelKey).c_str(), commands.Shortcut(command));
+				const auto key = labelKey + ".hint";
+				const auto hint = text.Text(key);
+				ImGui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28);
+				ImGui::TextUnformatted((hint == key ? text.Text(labelKey) : hint).c_str());
+				if(*commands.Shortcut(command)) ImGui::TextDisabled("%s",commands.Shortcut(command));
+				ImGui::PopTextWrapPos(); ImGui::EndTooltip();
 			}
 		};
 

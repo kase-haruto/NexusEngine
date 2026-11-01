@@ -5,6 +5,7 @@
 .idea/
 .ai/
 .vscode/
+/NexusEngine.*.nxengine
 
 imgui.ini
 
@@ -19,6 +20,14 @@ generated/
 !Project/Runtime/Reflection/Generated/
 !Project/Runtime/Reflection/Generated/*.h
 !Project/Runtime/Reflection/Generated/*.cpp
+!Project/Runtime/Reflection/EngineGenerated/
+!Project/Runtime/Reflection/EngineGenerated/*.h
+!Project/Runtime/Reflection/EngineGenerated/*.cpp
+!Project/Runtime/Reflection/EngineGenerated/*.json
+!Project/Game/Generated/
+!Project/Game/Generated/*.h
+!Project/Game/Generated/*.cpp
+!Project/Game/Generated/*.json
 # Initial standalone ECS builds used these local intermediate directories.
 Project/Tests/NexusEcsTests/
 Project/Tests/x64/

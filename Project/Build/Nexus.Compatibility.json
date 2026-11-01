@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "projectSchema": 1,
+  "minimumLevelFormat": 1,
+  "maximumLevelFormat": 12,
+  "assetStorage": "loose-files-v1",
+  "cppCompatibility": "rebuild-required"
+}

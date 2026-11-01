@@ -12,6 +12,8 @@ class EditorDocumentService final {
 public:
     enum class Action { None, New, Open, Exit };
     EditorDocumentService(EditorSession& session, PropertyEditService& properties) : session_(session), properties_(properties) {}
+    /** \brief 起動ホストが解決したRootにLevel操作を限定する。未設定時は独立Documentとして扱う */
+    void SetProjectRoot(std::filesystem::path root) { projectRoot_ = std::move(root); }
     /** \brief 未保存なら確認待ちにし、変更がなければ直ちに実行する */
     void Request(Action action, std::filesystem::path path = {});
     /** \brief 保留操作を取消し、Documentは保持する */
@@ -30,6 +32,7 @@ private:
     PropertyEditService& properties_; //< 保存位置と未確定編集
     Action pending_ = Action::None; //< 確認後に継続する操作
     std::filesystem::path path_; //< Open先
+    std::filesystem::path projectRoot_; //< Editorが開いているGameのRoot
     std::string error_; //< UIが通知する直近のエラー
     bool confirmation_ = false, saveAs_ = false, exit_ = false; //< 非同期UIの進行状態
 };

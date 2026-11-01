@@ -63,6 +63,8 @@ namespace NexusEngine {
 		[[nodiscard]] std::optional<WindowResizeEvent> ConsumeResizeEvent() noexcept;
 		/** \brief Platform非依存な所有者からWin32メッセージ処理を接続する */
 		void SetMessageHandler(MessageHandler handler, void* userData) noexcept;
+		/** \brief 初期描画が準備できたときなどに、所有Windowの表示を切り替える */
+		void SetVisible(bool visible) noexcept;
 
 	private:
 		static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;

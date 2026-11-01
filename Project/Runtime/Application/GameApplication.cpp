@@ -6,7 +6,7 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
                                    ModelAssetLibrary::ReloadStartup loadStartup) {
     if(runtime_.IsRunning() || library_)
         return std::unexpected(Error(ErrorCategory::Framework, 46, "Game application is already loaded."));
-    auto level = std::make_unique<Level>();
+    auto level = std::make_unique<Level>("Level", reflection_);
     auto result = level->Load(path);
     if(!result) return result;
     result = runtime_.Start(std::move(level));
@@ -17,6 +17,11 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
         const auto lighting = active.Lighting().value_or(LevelLightingSettings{});
         renderScene_.ambientIrradiance = lighting.skyIrradiance;
         renderScene_.environment = lighting.environment;
+        if(!paths_.projectRoot.empty() && !renderScene_.environment.imagePath.empty()) {
+            auto image = ResolveProjectPath(paths_.projectRoot, renderScene_.environment.imagePath);
+            if(!image) return std::unexpected(image.error());
+            renderScene_.environment.imagePath = *image;
+        }
         renderScene_.globalIllumination.enabled = false;
         renderScene_.bakedLighting.enabled = false;
         renderScene_.ddgi.enabled = false;

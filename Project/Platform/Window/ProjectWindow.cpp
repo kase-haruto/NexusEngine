@@ -30,6 +30,9 @@ namespace NexusEngine {
 	ProjectWindow::~ProjectWindow() noexcept {
 		Shutdown();
 	}
+	void ProjectWindow::SetVisible(bool visible) noexcept {
+		if(window_) ShowWindow(window_,visible ? SW_SHOW : SW_HIDE);
+	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	//	Win32ウィンドウを初期化する
@@ -63,6 +66,8 @@ namespace NexusEngine {
 		windowClass.lpfnWndProc	  = &ProjectWindow::WindowProcedure;
 		windowClass.hInstance	  = instance_;
 		windowClass.hCursor		  = LoadCursorW(nullptr, IDC_ARROW);
+		windowClass.hIcon = LoadIconW(instance_,MAKEINTRESOURCEW(101));
+		windowClass.hIconSm = windowClass.hIcon;
 		windowClass.lpszClassName  = className_.c_str();
 
 		if(RegisterClassExW(&windowClass) == 0) {
@@ -116,7 +121,7 @@ namespace NexusEngine {
 		clientWidth_ = detail.clientWidth;
 		clientHeight_ = detail.clientHeight;
 		running_ = true;
-		ShowWindow(window_, SW_SHOW);
+		ShowWindow(window_, detail.visible ? SW_SHOW : SW_HIDE);
 		UpdateWindow(window_);
 		NEXUS_LOG_INFO("Window", "Project window initialized.");
 		return {};
@@ -225,7 +230,8 @@ namespace NexusEngine {
 		const LPARAM lParam) noexcept {
 		// Windowは購読側の型を知らず、ImGuiなど任意の上位層へ入力メッセージを転送する。
 		if(messageHandler_ != nullptr && messageHandler_(messageHandlerUserData_, window, message, wParam, lParam)) {
-			return 1;
+			// サイズ制約は購読側がMINMAXINFOへ書き込み、Win32の規約どおり0を返す。
+			return message == WM_GETMINMAXINFO ? 0 : 1;
 		}
 		switch(message) {
 		case WM_DPICHANGED: {

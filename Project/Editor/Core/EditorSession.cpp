@@ -47,7 +47,7 @@ bool NexusEngine::EditorSession::SetStaticLighting(PersistentId id, bool enabled
 
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
-	auto document = std::make_unique<LevelDocument>();
+	auto document = std::make_unique<LevelDocument>(reflection_);
 	auto result = document->Create("EditorLevel");
 	if(!result) return result;
 	Close();
@@ -69,7 +69,7 @@ bool NexusEngine::EditorSession::StartPlay() {
 	if(IsPlaying() || !GetLevel() || !GetLevel()->GetScene()) return false;
 	auto scene = GetLevel()->GetScene()->Clone();
 	if(!scene) return false;
-	auto level = std::make_unique<Level>(GetLevel()->GetName());
+	auto level = std::make_unique<Level>(GetLevel()->GetName(), reflection_);
 	level->Lighting() = GetLevel()->Lighting();
 	level->ExchangeScene(std::move(scene));
 	auto result = playRuntime_.Start(std::move(level));
@@ -85,7 +85,7 @@ NexusEngine::Result<void> NexusEngine::EditorSession::UpdatePreview(float deltaT
 }
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem::path& path) {
-	auto document = std::make_unique<LevelDocument>();
+	auto document = std::make_unique<LevelDocument>(reflection_);
 	auto result = document->Open(path);
 	if(!result) return result;
 	Close();

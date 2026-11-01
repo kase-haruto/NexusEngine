@@ -3,6 +3,7 @@
 // c++
 #include <chrono>
 #include <cstdint>
+#include <functional>
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -28,6 +29,7 @@ namespace NexusEngine {
 		Editor,
 		Headless
 	};
+	enum class FrameworkStartupStage : uint8_t { Window, Graphics, Renderer, Extension, FirstFrame };
 
 	/*-----------------------------------------------------------------------------------------
 	 * FrameworkDesc
@@ -43,6 +45,8 @@ namespace NexusEngine {
 		IFrameworkUpdateClient* updateClient = nullptr; //< Application所有のframe更新先
 		ProjectWindow::MessageHandler messageHandler = nullptr; //< 任意の上位Window message購読関数
 		void* messageHandlerUserData = nullptr; //< messageHandlerへ渡す非所有Context
+		std::function<void(FrameworkStartupStage)> startupProgress; //< 起動表示などの任意通知。Graphics型は公開しない
+		bool deferWindowUntilReady = false; //< 最初の描画が成功してからWindowを表示する
 	};
 
 	/*-----------------------------------------------------------------------------------------
