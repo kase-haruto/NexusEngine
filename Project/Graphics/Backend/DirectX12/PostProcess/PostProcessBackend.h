@@ -2,15 +2,28 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <span>
+#include <vector>
 #include <d3d12.h>
 #include <wrl/client.h>
 #include "Foundation/Error/Result.h"
 #include "Graphics/PostProcess/PostProcessSettings.h"
+#include "Graphics/PostProcess/ScreenEffect.h"
 
 namespace NexusEngine {
     // Direct queue owns ordering. Resize/destruction require GPU idle.
     class PostProcessBackend final {
     public:
+        struct EffectPipeline {
+            ScreenEffect settings;
+            Microsoft::WRL::ComPtr<ID3D12PipelineState> pipeline;
+        };
+        // Prepare without modifying live state; commit only at a GPU-idle frame boundary.
+        [[nodiscard]] Result<std::vector<EffectPipeline>> PrepareEffects(ID3D12Device*,
+            const std::filesystem::path&, std::span<const ScreenEffect>) const;
+        void CommitEffects(std::vector<EffectPipeline> effects) { effects_ = std::move(effects); }
+        [[nodiscard]] Result<void> UpdateEffect(size_t, const std::array<float, 16>&, bool);
+        [[nodiscard]] const std::vector<EffectPipeline>& GetEffects() const noexcept { return effects_; }
         /** Create shader pipelines and scene/bloom targets. No GPU work is submitted. */
         [[nodiscard]] Result<void> Initialize(ID3D12Device*, const std::filesystem::path&, uint32_t, uint32_t);
         /** Atomically replace HDR resources; caller guarantees GPU idle. */
@@ -27,12 +40,15 @@ namespace NexusEngine {
             Microsoft::WRL::ComPtr<ID3D12Resource> resource;
             uint32_t width = 0, height = 0;
         };
-        // Scene HDR, five bloom levels, then full-resolution display colour for FXAA.
-        std::array<Target, 7> targets_;
+        // Scene HDR, five bloom levels, then two full-resolution display ping-pong images.
+        std::array<Target, 8> targets_;
         Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_, srvHeap_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> root_;
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> effectRoot_;
+        std::vector<uint8_t> fullscreenVertex_;
+        std::vector<EffectPipeline> effects_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> downsample_, composite_, antiAliasing_;
-        uint32_t rtvStride_ = 0;
+        uint32_t rtvStride_ = 0, srvStride_ = 0;
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE Rtv(uint32_t) const noexcept;
     };
 }

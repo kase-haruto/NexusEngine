@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <utility>
 #include "Graphics/Shader/ShaderCompiler.h"
+#include "Graphics/Shader/Shader.h"
 
 namespace NexusEngine {
     namespace {
@@ -33,7 +34,8 @@ namespace NexusEngine {
     void PostProcessBackend::Shutdown() noexcept {
         for(auto& target : targets_) target = {};
         downsample_.Reset(); composite_.Reset(); antiAliasing_.Reset(); root_.Reset();
-        srvHeap_.Reset(); rtvHeap_.Reset(); rtvStride_ = 0;
+        effects_.clear(); effectRoot_.Reset(); fullscreenVertex_.clear();
+        srvHeap_.Reset(); rtvHeap_.Reset(); rtvStride_ = srvStride_ = 0;
     }
 
     Result<void> PostProcessBackend::Initialize(ID3D12Device* device, const std::filesystem::path& directory,
@@ -47,7 +49,8 @@ namespace NexusEngine {
         if(!composite) return std::unexpected(std::move(composite.error()));
         auto aa = compiler.Compile({directory / L"PostProcess/PostProcess.hlsl", L"AntiAliasing", L"ps_6_0"});
         if(!aa) return std::unexpected(std::move(aa.error()));
-        D3D12_DESCRIPTOR_RANGE range {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 7, 0, 0, 0};
+        fullscreenVertex_ = *vs;
+        D3D12_DESCRIPTOR_RANGE range {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 8, 0, 0, 0};
         D3D12_ROOT_PARAMETER parameters[2] {};
         parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         parameters[0].DescriptorTable = {1, &range};
@@ -66,6 +69,13 @@ namespace NexusEngine {
         if(FAILED(hr)) return std::unexpected(MakeDirectXError(80, hr, "Post-process root signature serialization failed."));
         hr = device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(&root_));
         if(FAILED(hr)) return std::unexpected(MakeDirectXError(81, hr, "Post-process root signature creation failed."));
+        range.NumDescriptors = 1;
+        parameters[1].Constants.Num32BitValues = 16;
+        serialized.Reset(); errors.Reset();
+        hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &serialized, &errors);
+        if(FAILED(hr)) return std::unexpected(MakeDirectXError(89, hr, "Screen-effect root serialization failed."));
+        hr = device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(&effectRoot_));
+        if(FAILED(hr)) return std::unexpected(MakeDirectXError(90, hr, "Screen-effect root creation failed."));
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pso {};
         pso.pRootSignature = root_.Get(); pso.VS = {vs->data(), vs->size()};
         for(auto& blend : pso.BlendState.RenderTarget)
@@ -92,10 +102,10 @@ namespace NexusEngine {
         if(width == 0 || height == 0)
             return std::unexpected(Error(ErrorCategory::Graphics, 84, "Post-process dimensions must be nonzero."));
         // Build a complete replacement before releasing the previous resources.
-        std::array<Target, 7> replacement;
+        std::array<Target, 8> replacement;
         const auto displayWidth = width, displayHeight = height;
         Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv, srv;
-        D3D12_DESCRIPTOR_HEAP_DESC heap {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 7, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0};
+        D3D12_DESCRIPTOR_HEAP_DESC heap {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 8, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0};
         auto hr = device->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&rtv));
         if(FAILED(hr)) return std::unexpected(MakeDirectXError(85, hr, "Post-process RTV heap creation failed."));
         heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -106,7 +116,7 @@ namespace NexusEngine {
         auto r = rtv->GetCPUDescriptorHandleForHeapStart(); auto s = srv->GetCPUDescriptorHandleForHeapStart();
         D3D12_HEAP_PROPERTIES properties {}; properties.Type = D3D12_HEAP_TYPE_DEFAULT;
         for(auto& target : replacement) {
-            const bool display = &target == &replacement[6];
+            const bool display = &target >= &replacement[6];
             if(display) { width = displayWidth; height = displayHeight; }
             target.width = width; target.height = height;
             D3D12_RESOURCE_DESC desc {};
@@ -125,7 +135,7 @@ namespace NexusEngine {
             r.ptr += rtvStride; s.ptr += srvStride;
             width = (std::max)(1u, width / 2); height = (std::max)(1u, height / 2);
         }
-        targets_ = std::move(replacement); rtvHeap_ = std::move(rtv); srvHeap_ = std::move(srv); rtvStride_ = rtvStride;
+        targets_ = std::move(replacement); rtvHeap_ = std::move(rtv); srvHeap_ = std::move(srv); rtvStride_ = rtvStride; srvStride_ = srvStride;
         return {};
     }
     void PostProcessBackend::BeginScene(ID3D12GraphicsCommandList* commands, D3D12_CPU_DESCRIPTOR_HANDLE depth, const float* clear) {
@@ -162,17 +172,85 @@ namespace NexusEngine {
             }
         }
         commands->SetPipelineState(composite_.Get());
-        if(settings.antiAliasingEnabled)
+        const bool hasEffects = std::any_of(effects_.begin(), effects_.end(), [](const auto& e) { return e.settings.enabled; });
+        const bool intermediate = settings.antiAliasingEnabled || hasEffects;
+        if(intermediate)
             Transition(commands, targets_[6].resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        const auto compositeOutput = settings.antiAliasingEnabled ? Rtv(6) : output;
+        const auto compositeOutput = intermediate ? Rtv(6) : output;
         commands->OMSetRenderTargets(1, &compositeOutput, FALSE, nullptr);
         Viewport(commands, targets_[0].width, targets_[0].height);
         commands->SetGraphicsRoot32BitConstants(1, 24, &c, 0); commands->DrawInstanced(3, 1, 0, 0);
-        if(settings.antiAliasingEnabled) {
+        uint32_t source = 6;
+        if(intermediate)
             Transition(commands, targets_[6].resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        size_t remaining = static_cast<size_t>(std::count_if(effects_.begin(), effects_.end(), [](const auto& e) { return e.settings.enabled; }));
+        for(const auto& effect : effects_) {
+            if(!effect.settings.enabled) continue;
+            --remaining;
+            const bool internalOutput = remaining != 0 || settings.antiAliasingEnabled;
+            const uint32_t destination = source == 6 ? 7 : 6;
+            if(internalOutput)
+                Transition(commands, targets_[destination].resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            const auto effectOutput = internalOutput ? Rtv(destination) : output;
+            commands->OMSetRenderTargets(1, &effectOutput, FALSE, nullptr);
+            commands->SetGraphicsRootSignature(effectRoot_.Get());
+            auto srv = srvHeap_->GetGPUDescriptorHandleForHeapStart();
+            srv.ptr += static_cast<UINT64>(source) * srvStride_;
+            commands->SetGraphicsRootDescriptorTable(0, srv);
+            commands->SetGraphicsRoot32BitConstants(1, 16, effect.settings.parameters.data(), 0);
+            commands->SetPipelineState(effect.pipeline.Get());
+            commands->DrawInstanced(3, 1, 0, 0);
+            if(internalOutput)
+                Transition(commands, targets_[destination].resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            source = destination;
+        }
+        if(settings.antiAliasingEnabled) {
+            commands->SetGraphicsRootSignature(root_.Get());
+            commands->SetGraphicsRootDescriptorTable(0, srvHeap_->GetGPUDescriptorHandleForHeapStart());
+            c.source = source;
+            commands->SetGraphicsRoot32BitConstants(1, 24, &c, 0);
             commands->SetPipelineState(antiAliasing_.Get());
             commands->OMSetRenderTargets(1, &output, FALSE, nullptr);
             commands->DrawInstanced(3, 1, 0, 0);
         }
+    }
+    Result<std::vector<PostProcessBackend::EffectPipeline>> PostProcessBackend::PrepareEffects(
+        ID3D12Device* device, const std::filesystem::path& directory, std::span<const ScreenEffect> effects) const {
+        std::vector<EffectPipeline> prepared;
+        for(const auto& effect : effects) {
+            if(!effect.IsValid()) return std::unexpected(Error(ErrorCategory::Graphics, 91, "Invalid screen effect."));
+            Shader shader;
+            auto result = shader.Initialize({directory / effect.shaderPath, effect.entryPoint, L"ps_6_0", true, {directory}}, ShaderStage::Pixel);
+            if(!result) return std::unexpected(std::move(result.error()));
+            for(const auto& binding : shader.GetMetadata().resources) {
+                const bool validType = binding.type == ShaderResourceType::Texture || binding.type == ShaderResourceType::Sampler ||
+                    (binding.type == ShaderResourceType::ConstantBuffer && binding.constantBufferSize <= 64);
+                if(!validType || binding.bindPoint != 0 || binding.registerSpace != 0 || binding.bindCount != 1)
+                    return std::unexpected(Error(ErrorCategory::Graphics, 92, "Screen effects support only t0, s0 and b0 (64 bytes)."));
+            }
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC pso {};
+            pso.pRootSignature = effectRoot_.Get(); pso.VS = {fullscreenVertex_.data(), fullscreenVertex_.size()};
+            const auto pixel = shader.GetBytecode(); pso.PS = {pixel.data(), pixel.size()};
+            for(auto& blend : pso.BlendState.RenderTarget)
+                blend = {FALSE,FALSE,D3D12_BLEND_ONE,D3D12_BLEND_ZERO,D3D12_BLEND_OP_ADD,D3D12_BLEND_ONE,D3D12_BLEND_ZERO,D3D12_BLEND_OP_ADD,D3D12_LOGIC_OP_NOOP,D3D12_COLOR_WRITE_ENABLE_ALL};
+            pso.SampleMask = UINT_MAX;
+            pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID; pso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+            pso.RasterizerState.DepthClipEnable = TRUE;
+            pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+            pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            pso.NumRenderTargets = 1; pso.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM; pso.SampleDesc.Count = 1;
+            EffectPipeline replacement; replacement.settings = effect;
+            auto hr = device->CreateGraphicsPipelineState(&pso, IID_PPV_ARGS(&replacement.pipeline));
+            if(FAILED(hr)) return std::unexpected(MakeDirectXError(93, hr, "Screen-effect pipeline creation failed."));
+            prepared.push_back(std::move(replacement));
+        }
+        return prepared;
+    }
+    Result<void> PostProcessBackend::UpdateEffect(size_t index, const std::array<float, 16>& parameters, bool enabled) {
+        if(index >= effects_.size()) return std::unexpected(Error(ErrorCategory::Graphics, 94, "Screen-effect index out of range."));
+        for(float value : parameters) if(!std::isfinite(value))
+            return std::unexpected(Error(ErrorCategory::Graphics, 95, "Screen-effect parameters must be finite."));
+        effects_[index].settings.parameters = parameters; effects_[index].settings.enabled = enabled;
+        return {};
     }
 }

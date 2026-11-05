@@ -25,7 +25,7 @@ namespace NexusEngine {
 			NEXUS_LOG_ERROR("RayTracing", error.GetMessageText() + " [code=" + std::to_string(error.GetCode()) +
 				", native=" + std::to_string(error.GetNativeCode()) + "]");
 		}
-		Matrix4x4 MakeLightMatrix(const DirectionalLightData& light, const Matrix4x4& inverseVp, float extent) {
+		Matrix4x4 MakeLightMatrix(const DirectionalLightData& light, const Matrix4x4& inverseVp, float extent, uint32_t resolution) {
 			// Fit a configurable orthographic volume around the camera frustum's center.
 			// Directional lights have no position, so only the camera anchor and ray direction matter.
 			Vector3 center;
@@ -48,8 +48,11 @@ namespace NexusEngine {
 				const float z[3] { forward.x, forward.y, forward.z };
 				view.At(row, 0) = x[row]; view.At(row, 1) = y[row]; view.At(row, 2) = z[row];
 			}
-			view.At(3, 0) = -Vector3::Dot(eye, right);
-			view.At(3, 1) = -Vector3::Dot(eye, correctedUp);
+			// Anchor the light-space XY grid to world-space texels. Sub-texel camera
+			// motion must not re-rasterize every stationary caster at a different phase.
+			const float texelSize = 2.0f * extent / static_cast<float>(resolution);
+			view.At(3, 0) = -std::round(Vector3::Dot(eye, right) / texelSize) * texelSize;
+			view.At(3, 1) = -std::round(Vector3::Dot(eye, correctedUp) / texelSize) * texelSize;
 			view.At(3, 2) = -Vector3::Dot(eye, forward);
 			Matrix4x4 projection;
 			projection.At(0, 0) = 1.0f / extent;
@@ -299,7 +302,7 @@ namespace NexusEngine {
 		initialMaskState_ = mask.state;
 		recording_ = true;
 		constants.inverseViewProjection = *inverse;
-		constants.lightViewProjection = MakeLightMatrix(light, *inverse, settings.shadowMapExtent);
+		constants.lightViewProjection = MakeLightMatrix(light, *inverse, settings.shadowMapExtent, settings.shadowMapResolution);
 		const auto direction = lightVector.Normalized();
 		constants.lightDirectionAngularRadius = { direction.x, direction.y, direction.z, settings.softShadow ? light.angularRadius : 0.0f };
 		constants.biases = { settings.rayOriginBias, settings.rayTMin, settings.rayTMax, settings.shadowMapBias };

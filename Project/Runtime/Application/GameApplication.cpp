@@ -48,10 +48,6 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
         asset_ = library_->SharedSnapshot();
         auto initialized = pose_.Initialize(*asset_);
         if(!initialized) return initialized;
-        if(!asset_->animations.empty()) {
-            auto play = pose_.Play(0, true);
-            if(!play) return play;
-        }
         return ResolveDrawRanges();
     };
     try {
@@ -69,7 +65,6 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
 
 Result<void> GameApplication::Update(float deltaTime) {
     auto result = runtime_.Update(deltaTime);
-    if(result && runtime_.IsRunning() && !runtime_.IsPaused()) pose_.Update(deltaTime);
     return result;
 }
 
@@ -81,6 +76,9 @@ Result<void> GameApplication::PrepareRender(uint32_t width, uint32_t height) {
     }
     if(width == 0 || height == 0) return {};
     auto result = extractor_.ExtractInto(*level->GetScene(), static_cast<float>(width) / static_cast<float>(height), renderScene_);
+    renderScene_.screenEffects = level->ScreenEffects();
+    for(auto& effect : renderScene_.screenEffects)
+        if(effect.shaderPath.is_relative() && !paths_.projectRoot.empty()) effect.shaderPath = paths_.projectRoot / effect.shaderPath;
     if(!result) return result;
     return ResolveDrawRanges();
 }
@@ -93,6 +91,7 @@ Result<void> GameApplication::ResolveDrawRanges() {
             return std::unexpected(Error(ErrorCategory::Resource, 48,
                 "Game requested an asset not prepared at startup: " + item.meshAsset + " / " + item.baseColorTexture));
         item.nodeBegin = range->begin; item.nodeEnd = range->end; item.materialBegin = range->materialBegin;
+        range->ResolveAnimation(item);
         if(item.shape != PrimitiveShape::Asset) item.nodeIndex = PrimitiveRenderItem::kAllNodes;
         if(item.nodeIndex != PrimitiveRenderItem::kAllNodes) {
             if(item.nodeIndex >= range->end - range->begin) item.nodeEnd = 0;

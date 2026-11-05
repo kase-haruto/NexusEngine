@@ -11,10 +11,13 @@
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Graphics/Model/ModelAssetLibrary.h"
 #include "Graphics/Model/ModelThumbnail.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/FogComponent.h"
 #include "Editor/Core/EditorWorkspace.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
@@ -46,6 +49,93 @@ struct Fixture {
     EditorDocumentService documents{session, properties};
     Fixture() { assert(session.Create()); RegisterSceneTypes(types); properties.Reset(session.GetLevel()); }
 };
+void SkyEntityEditing() {
+    Fixture f;
+    assert(f.edits.Create("Sky"));
+    const auto id = f.session.GetSelection();
+    assert(f.session.GetLevel()->FindEntity(id).HasComponent<SkyRendererComponent>());
+    assert(f.properties.Undo());
+    assert(!f.session.GetLevel()->FindEntity(id).IsAlive());
+    assert(f.properties.Redo());
+    const PropertyHandle intensity{id, "SkyRenderer", "intensity"};
+    assert(f.properties.Preview(intensity, 0.4f)); f.properties.Commit();
+    assert(!f.properties.Preview(intensity, -1.0f));
+    assert(f.properties.Undo());
+    assert(std::get<float>(*f.properties.Read(intensity)) == 1);
+    assert(f.properties.Redo());
+    assert(f.edits.Create("Sky"));
+    const auto second = f.session.GetSelection();
+    const PropertyHandle enabled{second, "SkyRenderer", "enabled"};
+    assert(!std::get<bool>(*f.properties.Read(enabled)));
+    assert(!f.properties.Preview(enabled, true));
+    const auto path = std::filesystem::path("Generated/EditorTests/Sky.level");
+    std::filesystem::create_directories(path.parent_path());
+    assert(f.documents.Save(path));
+    assert(f.session.StartPlay());
+    assert(f.session.GetPreviewLevel()->FindEntity(id).GetComponent<SkyRendererComponent>()->intensity == 0.4f);
+    f.session.StopPlay();
+    assert(f.session.Open(path)); f.properties.Reset(f.session.GetLevel());
+    assert(f.session.GetLevel()->FindEntity(id).GetComponent<SkyRendererComponent>()->intensity == 0.4f);
+    f.session.Select(id);
+    assert(f.edits.DeleteSelection());
+    RenderScene scene;
+    assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(), 1, scene));
+    assert(!scene.skyIntensity);
+    assert(f.properties.Undo());
+    assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(), 1, scene));
+    assert(scene.skyIntensity == 0.4f);
+    std::cout << "PASS: sky entity creation, properties, uniqueness, save/load, PIE, deletion and undo.\n";
+}
+void AnimationPlayerEditing() {
+    Fixture f;
+    RegisterGeneratedInspectorTypes(f.types);
+    assert(f.edits.Create("Model")); const auto id = f.session.GetSelection();
+    const auto* type = f.types.Find("AnimationPlayer"); assert(type && type->properties.size() == 5);
+    assert(f.edits.AddComponent(*type));
+    assert(f.properties.Undo());
+    assert(!f.session.GetSelectedEntity().HasComponent<AnimationPlayerComponent>());
+    assert(f.properties.Redo());
+    const PropertyHandle speed{id, "AnimationPlayer", "playbackSpeed"};
+    assert(f.properties.Preview(speed, 2.0f)); f.properties.Commit();
+    assert(!f.properties.Preview(speed, -1.0f));
+    assert(f.properties.Undo()); assert(std::get<float>(*f.properties.Read(speed)) == 1);
+    assert(f.properties.Redo());
+    assert(f.session.UpdatePreview(1));
+    assert(f.session.GetSelectedEntity().GetComponent<AnimationPlayerComponent>()->time == 0);
+    assert(f.session.StartPlay()); assert(f.session.UpdatePreview(.25f));
+    auto* playing = f.session.GetPlayLevel()->FindEntity(id).GetComponent<AnimationPlayerComponent>();
+    assert(playing && playing->time == .5f);
+    f.session.TogglePause(); assert(f.session.UpdatePreview(1)); assert(playing->time == .5f);
+    f.session.StopPlay();
+    assert(f.session.GetSelectedEntity().GetComponent<AnimationPlayerComponent>()->time == 0);
+}
+void FogComponentEditing() {
+    Fixture f;
+    assert(f.edits.Create("Entity", "Fog"));
+    const auto id = f.session.GetSelection();
+    const auto* type = f.types.Find("Fog"); assert(type && type->add);
+    assert(f.edits.AddComponent(*type));
+    assert(f.session.GetLevel()->FindEntity(id).HasComponent<FogComponent>());
+    assert(f.properties.Undo());
+    assert(!f.session.GetLevel()->FindEntity(id).HasComponent<FogComponent>());
+    assert(f.properties.Redo());
+    const PropertyHandle start{id, "Fog", "startDistance"};
+    assert(f.properties.Preview(start, 4.0f)); f.properties.Commit();
+    assert(!f.properties.Preview(start, 40.0f));
+    assert(f.properties.Undo()); assert(std::get<float>(*f.properties.Read(start)) == 8);
+    assert(f.properties.Redo());
+    const PropertyHandle color{id, "Fog", "color"};
+    assert(f.properties.Preview(color, std::array<float,4>{.5f,.5f,.5f,1})); f.properties.Commit();
+    assert(std::abs(f.session.GetLevel()->FindEntity(id).GetComponent<FogComponent>()->color[0] - .214041f) < 1e-5f);
+    assert(f.edits.Create("Entity", "Second Fog"));
+    assert(f.edits.AddComponent(*type));
+    const PropertyHandle enabled{f.session.GetSelection(), "Fog", "enabled"};
+    assert(!std::get<bool>(*f.properties.Read(enabled)));
+    assert(!f.properties.Preview(enabled, true));
+    RenderScene frame; RenderSceneExtractor extractor;
+    assert(extractor.ExtractInto(*f.session.GetLevel()->GetScene(), 1, frame));
+    assert(frame.fog.enabled && frame.fog.startDistance == 4);
+}
 void ComponentAndAssetEditing() {
     Fixture f;
     auto a = f.session.GetLevel()->CreateEntity("A"), b = f.session.GetLevel()->CreateEntity("B");
@@ -511,6 +601,14 @@ void ViewportPickingAndValidation() {
     assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(),1,frame));
     tools.Prepare(frame,1);
     f.session.Selection().Clear(); assert(tools.Pick(0.5f,0.5f,false)); assert(f.session.GetSelection() == selected);
+    AnimationClip clip; clip.duration = 1;
+    NodeAnimationChannel channel; channel.translations = {{0,{0,0,0},{},{}},{1,{100,0,0},{},{}}};
+    clip.channels.push_back(channel); model.animations.push_back(clip);
+    frame.primitives[0].animation = PrimitiveRenderItem::AnimationSample{0,1,false};
+    assert(!tools.Pick(.5f,.5f,false)); // Selection follows the sampled pose, not the bind pose.
+    frame.primitives[0].animation->time = 0;
+    assert(tools.Pick(.5f,.5f,false));
+    frame.primitives[0].animation.reset();
     assert(tools.Pick(0.5f,0.5f,true)); assert(f.session.Selection().All().empty());
     assert(!tools.Pick(0,0,false)); assert(!tools.Pick(-1,0,false));
     // Only the submitted index range is selectable, with the draw's base vertex.
@@ -684,6 +782,7 @@ void CacheAndWorkspaceIntegration() {
 #include "ViewportSceneGuidesTests.inl"
 #include "ViewportPreviewTests.inl"
 #include "EditorToolbarTests.inl"
+#include "PostProcessGraphTests.inl"
 // Composite axis controls must forward activation and release even on frames
 // without a value change; the property service uses these to bound one undo step.
 void AxisWidgetInteraction() {
@@ -766,6 +865,7 @@ int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    PostProcessGraphTests();
     RunReinstancingTests();
     RunGameRuntimeTests();
     RunReflectedComponentTests();
@@ -774,6 +874,8 @@ int main() {
     EditorToolbarSettingsTests();
     AxisWidgetInteraction();
     ComponentAndAssetEditing();
+    SkyEntityEditing(); AnimationPlayerEditing();
+    FogComponentEditing();
     EntityConsoleTests();
     TerminalSuggestionTests();
     PrimitiveShapeTests();

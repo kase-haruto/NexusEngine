@@ -63,4 +63,9 @@
   <ItemGroup>
     <ClCompile Include="..\Tools\Project\ProjectRegistry.cpp" />
   </ItemGroup>
-<ItemGroup><ClCompile Include="..\Tools\Engine\EngineRegistry.cpp" /><ClCompile Include="..\Tools\Project\ProjectBuild.cpp" /><ClCompile Include="..\Tools\Project\SourceCodeEditor.cpp" /></ItemGroup></Project>
+<ItemGroup><ClCompile Include="..\Tools\Engine\EngineRegistry.cpp" /><ClCompile Include="..\Tools\Project\ProjectBuild.cpp" /><ClCompile Include="..\Tools\Project\SourceCodeEditor.cpp" /></ItemGroup>  <ItemGroup>
+    <ClCompile Include="..\Editor\Services\PostProcessGraphDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\PostProcessGraphPanel.cpp" />
+    <ClCompile Include="..\ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemGroup>
+</Project>

@@ -5,6 +5,14 @@ float3 SafeNormalize(float3 value, float3 fallback) {
     float len2 = dot(value, value); return len2 > 1e-12 ? value * rsqrt(len2) : fallback;
 }
 // BRDF terms only: no NdotL, radiance or shadow visibility.
+// Specular AA: broaden subpixel direct-light lobes using angular N-H variance.
+// Keep this separate from material roughness so mirror environment reflections stay sharp.
+float FilterDirectSpecularRoughness(float roughness, float3 lobeDx, float3 lobeDy) {
+    float variance = 0.25 * (dot(lobeDx, lobeDx) + dot(lobeDy, lobeDy));
+    float kernel = min(2 * variance, 0.18);
+    float alpha = roughness * roughness;
+    return sqrt(sqrt(saturate(alpha * alpha + kernel)));
+}
 float DistributionGGX(float nh, float roughness) {
     float alpha = max(roughness * roughness, 0.0025), a2 = alpha * alpha;
     float d = (1 - nh * nh) + nh * nh * a2;

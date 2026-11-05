@@ -99,6 +99,10 @@ void EnvironmentLightingIntegration() {
         "Fallback sky lost tinted metallic reflection or introduced metal diffuse.");
     Require(values[33][0]<values[32][0] && values[33][0]>.3f,"Fallback sky ignored roughness.");
     Require(values[34][0]==0 && values[35][0]==0,"Fallback reflection ignored AO or zero sky intensity.");
+    for(uint32_t c=0;c<3;++c)
+        Require(std::abs(values[36][c]-decoded->pixels[0][c])<.03f,
+            "White zero-roughness metal lost uniform environment radiance.");
+    Require(values[36][3]==0,"White metal received diffuse environment lighting.");
     settings.imagePath=directional; Check(lighting.Prepare(settings));
     auto next=lighting.GetDrawData(settings);
     Require(next.textures[3]==original.textures[3],"BRDF LUT was regenerated on reload.");

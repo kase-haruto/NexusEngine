@@ -4,6 +4,7 @@
 #include "Graphics/Resource/ConstantBuffer.h"
 #include <limits>
 #include <bit>
+#include "Graphics/Grid/GridRenderer.h"
 
 namespace {
 void ColorManagementIntegration() {
@@ -24,9 +25,10 @@ void ColorManagementIntegration() {
     // Reference patches deliberately vary the clear colour. Ignore only this
     // fast-clear performance advisory; resource/binding/colour errors still fail.
     if(test.info) {
-        D3D12_MESSAGE_ID advisory = D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE;
+        D3D12_MESSAGE_ID advisories[] = {D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+            D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE};
         D3D12_INFO_QUEUE_FILTER filter {};
-        filter.DenyList.NumIDs = 1; filter.DenyList.pIDList = &advisory;
+        filter.DenyList.NumIDs = 2; filter.DenyList.pIDList = advisories;
         Native(test.info->AddStorageFilterEntries(&filter));
     }
     PostProcessBackend post;
@@ -72,10 +74,12 @@ void ColorManagementIntegration() {
     pipelineDesc.depthStencilFormat = DepthStencilFormat::D32Float;
     Check(test.factory.CreateGraphicsPipeline(samplePipeline, std::move(vs), std::move(ps), pipelineDesc));
     ConstantBuffer selection; Check(test.factory.CreateConstantBuffer(selection, 16));
+    GridRenderer grid;
+    Check(grid.Initialize({test.factory, std::filesystem::path(L"Project/Shaders"), std::filesystem::path{}}));
     TransientDescriptorArena transient; Check(transient.Initialize(test.device.GetDevice(), &test.descriptors.Resources(), 2, 16));
 
     auto render = [&](std::array<float, 4> linear, PostProcessSettings settings, uint32_t texture = 0,
-        uint32_t sampler = 0, float lod = 0, uint32_t sampleMode = 0) {
+        uint32_t sampler = 0, float lod = 0, uint32_t sampleMode = 0, int gridMode = 0) {
         Check(test.queue.WaitForIdle()); Native(test.allocator->Reset()); Native(test.commands->Reset(test.allocator.Get(), nullptr));
         post.BeginScene(test.commands.Get(), dsv, linear.data());
         if(texture != 0) {
@@ -87,6 +91,16 @@ void ColorManagementIntegration() {
             std::array<uint32_t, 4> indices {texture, sampler, std::bit_cast<uint32_t>(lod), sampleMode};
             Check(selection.Write(0, {reinterpret_cast<const uint8_t*>(indices.data()), sizeof(indices)}));
             Check(context.SetGraphicsConstantBufferTable(samplePipeline, selection)); context.Draw(3);
+        }
+        if(gridMode) {
+            test.commands->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, gridMode == 2 ? 0.0f : 1.0f, 0, 0, nullptr);
+            transient.ResetFrame(0); test.bindless.Bind(test.commands.Get());
+            auto context = GraphicsBackendTestAccess::Context(test.commands.Get(), test.bindless, 0, 8, 8);
+            GraphicsBackendTestAccess::Targets(context, post.GetSceneRtv().ptr, dsv.ptr, &transient);
+            Matrix4x4 view; view.elements.fill(0);
+            view.At(0, 0) = 1; view.At(2, 1) = 1; view.At(1, 2) = -0.1f; view.At(3, 2) = 0.5f; view.At(3, 3) = 1;
+            GridSettings config; config.enabled = true; config.spacing = 0.5f;
+            Check(grid.Render(context, view, {0, 2, 0}, config));
         }
         post.Resolve(test.commands.Get(), outputRtv, settings);
         D3D12_RESOURCE_BARRIER barrier {}; barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -177,13 +191,53 @@ void ColorManagementIntegration() {
     Require(withinByteTolerance(render({0.18f, 0.18f, 0.18f, 1}, settings)[0], 118), "Legacy linear clamp override was ignored.");
     Check(post.Resize(test.device.GetDevice(), 8, 8));
     Require(withinByteTolerance(render({0.18f, 0.18f, 0.18f, 1}, settings)[0], 118), "Resize broke colour processing.");
-    post.Shutdown(); samplePipeline.Shutdown(); transient.Shutdown();
+    // Custom passes must consume the preceding pass and preserve order for both FXAA paths.
+    ScreenEffect multiply, add;
+    multiply.shaderPath = add.shaderPath = std::filesystem::absolute(L"Project/Tests/ScreenEffectTest.hlsl");
+    multiply.parameters[0] = 0.5f; add.parameters[0] = 1; add.parameters[1] = 0.25f;
+    auto install = [&](std::vector<ScreenEffect> effects) {
+        Check(test.queue.WaitForIdle());
+        auto pipelines = post.PrepareEffects(test.device.GetDevice(), L"Project/Shaders", effects); Check(pipelines);
+        post.CommitEffects(std::move(*pipelines));
+    };
+    for(bool aa : {false, true}) {
+        settings.antiAliasingEnabled = aa;
+        install({multiply});
+        Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 128), "Single screen effect failed.");
+        install({multiply, add});
+        auto ordered = render({1, 1, 1, 1}, settings);
+        Require(withinByteTolerance(ordered[0], 192), "Screen-effect order/FXAA source failed.");
+        install({add, multiply});
+        Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 128), "Screen-effect order was ignored.");
+        install({multiply, add, multiply});
+        Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 96), "Three-pass ping-pong failed.");
+        Check(post.UpdateEffect(1, add.parameters, false));
+        Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 64), "Disabled effect was executed.");
+        Check(post.Resize(test.device.GetDevice(), 8, 8));
+        Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 64), "Resize lost custom effects.");
+    }
+    auto invalidEffect = multiply;
+    invalidEffect.parameters[0] = std::numeric_limits<float>::infinity();
+    Require(!post.PrepareEffects(test.device.GetDevice(), L"Project/Shaders", std::vector{invalidEffect}), "Nonfinite effect accepted.");
+    invalidEffect = multiply; invalidEffect.entryPoint = L"InvalidBinding";
+    Require(!post.PrepareEffects(test.device.GetDevice(), L"Project/Shaders", std::vector{invalidEffect}), "Unsupported shader binding accepted.");
+    invalidEffect = multiply; invalidEffect.shaderPath = L"missing.hlsl";
+    Require(!post.PrepareEffects(test.device.GetDevice(), L"Project/Shaders", std::vector{invalidEffect}), "Missing effect accepted.");
+    Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 64), "Failed prepare replaced the live effect chain.");
+    install({});
+    auto patch = std::array<float, 4>{0.21404114f, 0.21404114f, 0.21404114f, 1};
+    auto withoutGrid = render(patch, settings);
+    Require(render(patch, settings, 0, 0, 0, 0, 1) != withoutGrid, "Grid produced no pixels.");
+    Require(render(patch, settings, 0, 0, 0, 0, 2) == withoutGrid, "Grid ignored depth occlusion.");
+    GridSettings invalidGrid; invalidGrid.spacing = 0;
+    Require(!invalidGrid.IsValid(), "Zero grid spacing accepted.");
+    grid.Shutdown(); post.Shutdown(); samplePipeline.Shutdown(); transient.Shutdown();
     Check(test.factory.RetirePersistentShaderResource(*colourRef)); Check(test.factory.RetirePersistentShaderResource(*dataRef));
     for(auto ref : mipRefs) Check(test.factory.RetirePersistentShaderResource(ref));
     Check(test.factory.RetirePersistentShaderResource(*mipSampler));
     Check(test.factory.RetirePersistentShaderResource(*anisotropicSampler));
     test.shadows.ReleaseTexture(depth); Check(test.descriptors.RenderTargets().Free(*outputSlot));
     test.Validate();
-    std::cout << "Mip chains, implicit LOD, anisotropy, sRGB/HDR/odd-size filtering, colour space, tone mapping, exposure, FXAA and resize passed.\n";
+    std::cout << "Colour management, screen-effect chains/order/FXAA/resize/failure retention and grid depth occlusion passed.\n";
 }
 }

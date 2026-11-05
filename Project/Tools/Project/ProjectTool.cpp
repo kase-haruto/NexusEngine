@@ -1,6 +1,7 @@
 #include "Runtime/Project/ProjectService.h"
 #include "Runtime/Level/Level.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ProjectRegistry.h"
 #include "Tools/Engine/EngineRegistry.h"
@@ -128,11 +129,13 @@ int RunProjectTool(int argc, wchar_t** argv) {
         descriptor.engine = {NEXUS_HOST_ENGINE_ASSOCIATION, NEXUS_HOST_ENGINE_ID,
             std::string(NEXUS_HOST_ENGINE_ASSOCIATION) == "development" ? "" : NEXUS_HOST_ENGINE_VERSION};
         auto result = ProjectService::Create(argv[2], std::move(descriptor), [](const ProjectContext& context) -> Result<void> {
-            // Template UIとは分けた最小起動データ。Camera以外のGame固有データを作らない。
+            // Engine defaults are explicit scene entities, matching the bundled templates.
             Level level(context.Descriptor().name);
             auto loaded = level.LoadEmpty(); if(!loaded) return loaded;
             if(!level.CreateEntity("Camera").AddComponent<CameraComponent>())
                 return std::unexpected(Error(ErrorCategory::Scene, 166, "Cannot create initial Camera."));
+            if(!level.CreateEntity("Sky").AddComponent<NexusEngine::SkyRendererComponent>())
+                return std::unexpected(Error(ErrorCategory::Scene, 167, "Cannot create initial Sky."));
             return level.Save(context.StartupLevel());
         });
         if(!result) return Fail(result.error());

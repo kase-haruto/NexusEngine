@@ -15,6 +15,7 @@
 #include "Graphics/Renderer/GraphicsSystem.h"
 #include "Graphics/Resource/TextureFormatDx12.h"
 #include "Graphics/Resource/Depthstencil/DepthstencilFormatDx12.h"
+#include "Platform/Window/ProjectWindow.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/imgui_internal.h"
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
@@ -58,6 +59,7 @@ namespace NexusEngine {
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 		// 欧文UIはInterを使用し、日本語グリフだけをNoto Serif JPから同じFontへ補完する。
 		// Dear ImGui 1.92以降は必要なGlyphを動的にRasterizeするため、固定Glyph Rangeは指定しない。
@@ -136,6 +138,10 @@ namespace NexusEngine {
 			return std::unexpected(Error(ErrorCategory::Graphics, kBackendInitializationFailed, "ImGui DX12 backend initialization failed."));
 		}
 		initialized_ = true;
+		nativeWindow_ = context.nativeWindow;
+		ProjectWindow::ConfigureCustomTitleBar(static_cast<HWND>(nativeWindow_),
+			MulDiv(38, static_cast<int>(GetDpiForWindow(static_cast<HWND>(nativeWindow_))), 96),
+			MulDiv(138, static_cast<int>(GetDpiForWindow(static_cast<HWND>(nativeWindow_))), 96));
 		graphicsSystem_ = context.graphicsSystem;
 		return {};
 	}
@@ -157,6 +163,77 @@ namespace NexusEngine {
 		ImGui::NewFrame();
         ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
         ImGuizmo::BeginFrame();
+		DrawTitleBar();
+	}
+
+	void ImGuiRenderer::DrawTitleBar() {
+		const auto window = static_cast<HWND>(nativeWindow_);
+		if(!window) return;
+		auto* viewport = ImGui::GetMainViewport();
+		const float scale = static_cast<float>(GetDpiForWindow(window)) / 96.0f;
+		const float height = 38.0f * scale, buttonWidth = 46.0f * scale;
+		ProjectWindow::ConfigureCustomTitleBar(window, static_cast<int>(height), static_cast<int>(buttonWidth * 3));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+		const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+		if(ImGui::BeginViewportSideBar("###EditorTitleBar", viewport, ImGuiDir_Up, height, flags)) {
+			auto* draw = ImGui::GetWindowDrawList();
+			const auto origin = ImGui::GetWindowPos();
+			const float width = ImGui::GetWindowSize().x;
+			const bool focused = GetForegroundWindow() == window;
+			const auto foreground = ImGui::GetColorU32(focused ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+			const auto accent = IM_COL32(242, 125, 46, focused ? 255 : 160);
+			// Same NX paths and backing as Resources/Editor/Branding/NexusEngine.svg.
+			const float logoSize = 28 * scale;
+			const ImVec2 logo{origin.x + 12 * scale, origin.y + (height - logoSize) * .5f};
+			const auto point = [&](float x, float y) { return ImVec2{logo.x + x * logoSize / 256, logo.y + y * logoSize / 256}; };
+			draw->AddRectFilled(point(8, 8), point(248, 248), IM_COL32(35, 35, 35, 255), logoSize * 44 / 256);
+			const ImVec2 n[]{point(42, 180), point(42, 76), point(114, 180), point(114, 76)};
+			draw->AddPolyline(n, 4, accent, ImDrawFlags_None, logoSize * 13 / 256);
+			draw->AddLine(point(146, 76), point(214, 180), accent, logoSize * 13 / 256);
+			draw->AddLine(point(214, 76), point(146, 180), accent, logoSize * 13 / 256);
+			const auto titleSize = ImGui::CalcTextSize("NexusEngine");
+			const float controlsStart = origin.x + width - buttonWidth * 3;
+			draw->PushClipRect({origin.x + 52 * scale, origin.y}, {controlsStart, origin.y + height}, true);
+			draw->AddText({origin.x + (width - titleSize.x) * .5f, origin.y + (height - titleSize.y) * .5f}, foreground, "NexusEngine");
+			draw->PopClipRect();
+			const bool maximized = IsZoomed(window) != FALSE;
+			const bool resizable = (GetWindowLongPtrW(window, GWL_STYLE) & WS_MAXIMIZEBOX) != 0;
+			const char* ids[]{"###Minimize", "###Maximize", "###Close"};
+			const char* hints[]{"Minimize", maximized ? "Restore" : "Maximize", "Close"};
+			for(int i = 0; i < 3; ++i) {
+				const ImVec2 start{controlsStart + buttonWidth * i, origin.y};
+				ImGui::SetCursorScreenPos(start);
+				ImGui::BeginDisabled(i == 1 && !resizable);
+				const bool clicked = ImGui::InvisibleButton(ids[i], {buttonWidth, height});
+				const bool hovered = ImGui::IsItemHovered();
+				if(hovered || ImGui::IsItemActive()) draw->AddRectFilled(start, {start.x + buttonWidth, start.y + height},
+					i == 2 ? IM_COL32(196, 43, 52, 255) : ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
+				const ImVec2 center{start.x + buttonWidth * .5f, start.y + height * .5f};
+				const float r = 5 * scale, stroke = 1.2f * scale;
+				const auto color = i == 2 && hovered ? IM_COL32_WHITE : (i == 1 && !resizable ? ImGui::GetColorU32(ImGuiCol_TextDisabled) : foreground);
+				if(i == 0) draw->AddLine({center.x - r, center.y}, {center.x + r, center.y}, color, stroke);
+				else if(i == 1) {
+					if(maximized) {
+						draw->AddRect({center.x - r + 3 * scale, center.y - r}, {center.x + r, center.y + r - 3 * scale}, color, 0, 0, stroke);
+						draw->AddRectFilled({center.x - r, center.y - r + 3 * scale}, {center.x + r - 3 * scale, center.y + r}, ImGui::GetColorU32(hovered ? ImGuiCol_ButtonHovered : ImGuiCol_WindowBg));
+						draw->AddRect({center.x - r, center.y - r + 3 * scale}, {center.x + r - 3 * scale, center.y + r}, color, 0, 0, stroke);
+					} else draw->AddRect({center.x - r, center.y - r}, {center.x + r, center.y + r}, color, 0, 0, stroke);
+				} else {
+					draw->AddLine({center.x - r, center.y - r}, {center.x + r, center.y + r}, color, stroke);
+					draw->AddLine({center.x - r, center.y + r}, {center.x + r, center.y - r}, color, stroke);
+				}
+				if(hovered) ImGui::SetTooltip("%s", hints[i]);
+				ImGui::EndDisabled();
+				// Queue the close request so the owner's WM_CLOSE/save-confirmation path runs next frame.
+				if(clicked) PostMessageW(window, WM_SYSCOMMAND, i == 0 ? SC_MINIMIZE : i == 1 ? (maximized ? SC_RESTORE : SC_MAXIMIZE) : SC_CLOSE, 0);
+			}
+			draw->AddLine({origin.x, origin.y + height - 1}, {origin.x + width, origin.y + height - 1}, ImGui::GetColorU32(ImGuiCol_Border));
+		}
+		ImGui::End();
+		ImGui::PopStyleColor();
+		ImGui::PopStyleVar();
 	}
 
 	void ImGuiRenderer::Record(GraphicsContext& context) {
@@ -166,7 +243,15 @@ namespace NexusEngine {
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 	}
 
+    void ImGuiRenderer::AfterSubmit() {
+        if(!initialized_ || !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)) return;
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
+    }
+
 	void ImGuiRenderer::Shutdown() noexcept {
+		ProjectWindow::ConfigureCustomTitleBar(static_cast<HWND>(nativeWindow_), 0, 0);
+		nativeWindow_ = nullptr;
 		graphicsSystem_ = nullptr;
 		if(initialized_) {
             // NewFrame前に作られた画像もBackendの停止対象へ含める。

@@ -27,6 +27,7 @@
 #include "Tools/Project/SourceCodeEditor.h"
 #endif
 #include "Graphics/Renderer/PrimitiveRenderer.h"
+#include "Graphics/PostProcess/PostProcessGraphAsset.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "Runtime/Application/GameApplication.h"
@@ -160,6 +161,16 @@ int wmain(int argc, wchar_t** argv) {
     const auto levelPath = *levelResult;
 
     if(gameMode) {
+        std::optional<NexusEngine::CompiledPostProcessGraph> renderPipeline;
+        const auto pipelineFile=(context ? context->Config() : *projectRoot/"Config")/"RenderPipeline.json";
+        if(std::filesystem::exists(pipelineFile)) {
+            auto graph=NexusEngine::LoadPostProcessGraph(pipelineFile);
+            if(!graph) return failStartup(graph.error().GetMessageText());
+            NexusEngine::ResolvePostProcessGraphShaders(*graph,*projectRoot);
+            auto compiled=graph->Compile();
+            if(!compiled) return failStartup(compiled.error().GetMessageText());
+            renderPipeline=std::move(*compiled);
+        }
         NexusEngine::GameApplication game(NEXUS_PROJECT_REFLECTION, paths);
         if(!game.SetGameLevelSetup(NEXUS_PROJECT_SETUP)) return failStartup("Cannot configure game systems.");
         auto result = game.Load(levelPath, assetRoot, NEXUS_PROJECT_STARTUP_LOADER(assetRoot));
@@ -179,6 +190,10 @@ int wmain(int argc, wchar_t** argv) {
         gameDesc.window.title = NexusEngine::ConvertString(project->name) + L" - NexusEngine Runtime";
         gameDesc.graphics.assetDirectory = assetRoot;
         gameDesc.graphics.shaderDirectory = *engineRoot / "Shaders";
+        if(renderPipeline) {
+            gameDesc.graphics.postProcess=renderPipeline->settings;
+            gameDesc.graphics.screenEffects=std::move(renderPipeline->effects);
+        }
         gameDesc.renderer = &renderer;
         gameDesc.updateClient = &game;
         return run(gameDesc,game);

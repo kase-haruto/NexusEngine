@@ -129,7 +129,7 @@ namespace NexusEngine {
             NEXUS_LOG_INFO("Live++", "Snapshot prepared; applying synchronized reload.");
             impl_->agent.Reload(lpp::LPP_RELOAD_BEHAVIOUR_WAIT_UNTIL_CHANGES_ARE_APPLIED);
             reinstancing.FinishAttempt();
-            if(reinstancing.Generation() != generation) NEXUS_LOG_INFO("Live++", "Reload completed; reflected instances are ready.");
+            if(reinstancing.Generation() != generation) NEXUS_LOG_SUCCESS("Live++", "Reload completed; reflected instances are ready.");
             else NEXUS_LOG_INFO("Live++", "No patch was applied; existing reflected instances retained.");
         }
 #endif

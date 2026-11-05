@@ -1,5 +1,9 @@
 # 色空間・トーンマッピング・ポストプロセス
 
+ノードによる接続・パラメーター編集・保存は[描画パイプライングラフ](RenderPipelineGraph.md)を参照してください。
+
+独自HLSLの追加は[シェーダー拡張](ShaderExtensions.md)を参照してください。画面エフェクトはsRGB符号化後、FXAAの前へ登録順に挿入されます。
+
 シーンの作業色空間は **線形Rec.709 / D65** です。描画先はRGBA16_FLOATで、1を超える光を保持します。処理順は、線形HDR描画 → Bloom → EV露出 → ホワイトバランス → 色調整 → トーンマッピング → sRGB符号化 → FXAA → Editor UIです。
 
 ## 入力と出力
@@ -39,7 +43,7 @@ Bloomは露出前の線形HDRからソフト閾値で抽出し、1/2～1/32解�
 
 FXAAは既定で有効です。Anti-aliasing (FXAA)で切り替えられます。トーンマッピング後のsRGB画像に適用し、Editor UIには適用しません。無効時はFXAA用中間画像への描画とフィルターパスを省略します。細部が柔らかくなる場合があり、時間方向のちらつきへの対策は含みません。
 
-PostProcessBackendがHDR画像6枚とFXAA用のフル解像度SDR画像1枚を所有します。CPU/HLSLの設定レイアウトは24DWORDです。各フレームの終端で内部画像をSRV状態に戻し、Resize・ShutdownはGPU idle後に行います。
+PostProcessBackendがHDR画像6枚と独自画面エフェクト・FXAA用のフル解像度SDR画像2枚を所有します。CPU/HLSLの設定レイアウトは24DWORDです。各フレームの終端で内部画像をSRV状態に戻し、Resize・ShutdownはGPU idle後に行います。
 
 ## 検証
 

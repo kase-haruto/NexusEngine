@@ -8,7 +8,9 @@ struct SurfaceData {
 SurfaceData MakeSurface(float3 color, float metallic, float roughness, float3 normal, float ao, float3 emissive) {
     SurfaceData s;
     s.baseColor = saturate(color); s.metallic = saturate(metallic);
-    s.roughness = clamp(roughness, 0.05, 1); s.normal = normal;
+    // Preserve polished materials for IBL, ray reflections and material diagnostics.
+    // The analytic BRDF applies its numerical floor locally.
+    s.roughness = saturate(roughness); s.normal = normal;
     s.ambientOcclusion = saturate(ao); s.emissive = max(emissive, 0);
     return s;
 }

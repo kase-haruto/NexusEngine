@@ -4,21 +4,27 @@
 #include "Runtime/Reflection/ReflectedInspector.h"
 namespace NexusEngine {
 void RegisterGeneratedComponents(ComponentReflection& registry) {
+    registry.Register<AnimationPlayerComponent>();
     registry.Register<CameraComponent>();
     registry.Register<DirectionalLightComponent>();
+    registry.Register<FogComponent>();
     registry.Register<HierarchyComponent>();
     registry.Register<NameComponent>();
     registry.Register<PersistentIdComponent>();
     registry.Register<PrimitiveRenderComponent>();
+    registry.Register<SkyRendererComponent>();
     registry.Register<TransformComponent>();
 }
 void RegisterGeneratedInspectorTypes(TypeRegistry& registry) {
+    RegisterReflectedInspector<AnimationPlayerComponent>(registry);
     RegisterReflectedInspector<CameraComponent>(registry);
     RegisterReflectedInspector<DirectionalLightComponent>(registry);
+    RegisterReflectedInspector<FogComponent>(registry);
     RegisterReflectedInspector<HierarchyComponent>(registry);
     RegisterReflectedInspector<NameComponent>(registry);
     RegisterReflectedInspector<PersistentIdComponent>(registry);
     RegisterReflectedInspector<PrimitiveRenderComponent>(registry);
+    RegisterReflectedInspector<SkyRendererComponent>(registry);
     RegisterReflectedInspector<TransformComponent>(registry);
 }
 }

@@ -64,6 +64,8 @@
     <ClCompile Include="..\Graphics\Renderer\GraphicsResourceFactory.cpp" />
     <ClCompile Include="..\Graphics\Renderer\GraphicsSystem.cpp" />
     <ClCompile Include="..\Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Grid\GridRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Sky\SkyRenderer.cpp" />
     <ClCompile Include="..\Graphics\Resource\ConstantBuffer.cpp" />
     <ClCompile Include="..\Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
     <ClCompile Include="..\Graphics\Resource\HdrImage.cpp" />
@@ -110,4 +112,5 @@
     <ClCompile Include="..\Runtime\Project\ProjectContext.cpp" />
     <ClCompile Include="..\Runtime\Project\ProjectService.cpp" />
   </ItemGroup>
-<ItemGroup><ClCompile Include="..\Platform\Process\Process.cpp" /></ItemGroup></Project>
+<ItemGroup><ClCompile Include="..\Platform\Process\Process.cpp" /></ItemGroup>  <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
+</Project>

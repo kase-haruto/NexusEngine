@@ -196,6 +196,7 @@ namespace NexusEngine {
 		return {};
 	}
 	void PrimitiveRenderer::CommitPreparedModel(PrimitiveRenderer& prepared) {
+        animationPoses_.clear();
 		model_.Swap(prepared.model_); materialResources_.swap(prepared.materialResources_);
 		modelTextures_.swap(prepared.modelTextures_); materialSamplers_.swap(prepared.materialSamplers_);
 		meshletResources_.swap(prepared.meshletResources_); meshletAttempted_.swap(prepared.meshletAttempted_);
@@ -287,6 +288,8 @@ namespace NexusEngine {
 		// モデルの選択・CPUロード・再生設定はScene側で済ませる。ここではGPU転送だけを担当する。
         result = selectionOutline_.Initialize(context.resources, context.shaderDirectory);
         if(!result) return result;
+        result = grid_.Initialize(context);
+        if(!result) return result;
 		mark(initializationProfile_.selectionMs);
 
         if(modelAsset_ == nullptr || modelPose_ == nullptr || modelPose_->GetAsset() != modelAsset_) {
@@ -332,9 +335,11 @@ namespace NexusEngine {
 	}
 
 	void PrimitiveRenderer::Shutdown() noexcept {
+        animationPoses_.clear();
 		meshShadersSupported_ = false;
         selectionDraws_.clear();
         selectionOutline_.Shutdown();
+        grid_.Shutdown();
 		// GraphicsSystem の GPU idle 後に呼ばれる。元 Vertex Buffer より先に解放する。
 		meshletResources_.clear();
 		meshPipeline_.Shutdown();
@@ -376,6 +381,19 @@ namespace NexusEngine {
 		// Sceneがない場合は描画しない。Renderer自身がゲーム空間やCameraを補完しない。
 		if(renderScene_ == nullptr || !renderScene_->camera.has_value() || modelPose_ == nullptr) return;
 		const size_t	objectCount = renderScene_->primitives.size();
+        animationPoses_.resize(objectCount);
+        // Sample once per object/frame. Forward, shadow and selection use the same pose.
+        std::vector<const ModelInstance*> objectPoses(objectCount, modelPose_);
+        for(size_t index = 0; index < objectCount; ++index) {
+            const auto& sample = renderScene_->primitives[index].animation;
+            if(!sample) continue;
+            auto& pose = animationPoses_[index];
+            if(pose.GetAsset() != modelAsset_) {
+                pose.Shutdown();
+                if(!pose.Initialize(*modelAsset_)) continue;
+            }
+            if(pose.Sample(sample->index, sample->time, sample->loop)) objectPoses[index] = &pose;
+        }
 		const Matrix4x4 projection	= renderScene_->camera->viewProjectionMatrix;
 		const auto cameraWorld = TryInverse(renderScene_->camera->viewMatrix);
 		if(!cameraWorld) return;
@@ -409,9 +427,11 @@ namespace NexusEngine {
 		// Extract Geometry from the already available draw snapshot, never walk Scene/ECS
 		// again. Static meshes are shared by all Instances, while transforms remain per-instance.
 		shadowDraws_.clear();
-		const auto& shadowNodeTransforms = modelPose_->GetNodeWorldTransforms();
 		opticalDraws_.clear();
-		for(const auto& object : renderScene_->primitives) {
+		for(size_t objectIndex = 0; objectIndex < objectCount; ++objectIndex) {
+            const auto& object = renderScene_->primitives[objectIndex];
+            const auto* objectPose = objectPoses[objectIndex];
+            const auto& shadowNodeTransforms = objectPose->GetNodeWorldTransforms();
 			for(size_t nodeIndex = 0; nodeIndex < model_.GetNodes().size(); ++nodeIndex) {
 				if(object.nodeIndex != PrimitiveRenderItem::kAllNodes && object.nodeIndex != nodeIndex) continue;
                 if(nodeIndex < object.nodeBegin || nodeIndex >= object.nodeEnd) continue;
@@ -427,7 +447,7 @@ namespace NexusEngine {
 					draw.world		= skinned ? object.worldMatrix : Multiply(shadowNodeTransforms[nodeIndex], object.worldMatrix);
 					if(!TryInverse(draw.world)) continue; // Match Forward's non-invertible transform rejection.
 					if(skinned) {
-						const auto* palette = modelPose_->GetSkinPalette(skin);
+						const auto* palette = objectPose->GetSkinPalette(skin);
 						if(!palette || palette->size() > kMaxSkinJoints) continue;
 						draw.jointPalette = *palette;
 					}
@@ -463,8 +483,9 @@ namespace NexusEngine {
 		bool meshPipelineBound = false; //< Mesh -> Traditional の切替時だけ PSO を復元する
         selectionDraws_.clear();
 		context.SetPrimitiveTopology(PrimitiveTopology::TriangleList);
-		const auto& nodeTransforms = modelPose_->GetNodeWorldTransforms();
 		for(size_t objectIndex = 0; objectIndex < objectCount; ++objectIndex) {
+            const auto* objectPose = objectPoses[objectIndex];
+            const auto& nodeTransforms = objectPose->GetNodeWorldTransforms();
 			const Matrix4x4 instanceWorld = renderScene_->primitives[objectIndex].worldMatrix;
 			for(std::size_t nodeIndex = 0; nodeIndex < model_.GetNodes().size(); ++nodeIndex) {
 				const auto selectedNode = renderScene_->primitives[objectIndex].nodeIndex;
@@ -487,7 +508,7 @@ namespace NexusEngine {
 				drawData_.skinningEnabled		= hasSkin ? 1U : 0U;
 				drawData_.jointPalette.fill(Matrix4x4::Identity());
 				if(hasSkin) {
-					const auto* palette = modelPose_->GetSkinPalette(skinIndex);
+					const auto* palette = objectPose->GetSkinPalette(skinIndex);
 					if(palette == nullptr || palette->size() > drawData_.jointPalette.size()) continue;
 					std::copy(palette->begin(), palette->end(), drawData_.jointPalette.begin());
 				}
@@ -562,6 +583,11 @@ namespace NexusEngine {
 				}
 			}
 		}
+        if(renderScene_->grid.enabled) {
+            auto grid = grid_.Render(context, projection,
+                {cameraWorld->At(3, 0), cameraWorld->At(3, 1), cameraWorld->At(3, 2)}, renderScene_->grid);
+            if(!grid) NEXUS_LOG_ERROR("Grid", grid.error().GetMessageText());
+        }
         auto outlined = selectionOutline_.Render(context, selectionDraws_);
         if(!outlined) NEXUS_LOG_ERROR("Selection", outlined.error().GetMessageText());
 	}

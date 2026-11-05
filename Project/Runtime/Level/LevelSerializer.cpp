@@ -429,6 +429,7 @@ namespace NexusEngine {
 		level.scene_ = std::move(loadedScene);
 		level.name_ = std::move(loadedName);
 		level.lighting_ = std::move(lighting);
+        level.screenEffects_.clear();
 		level.state_ = LevelState::Loaded;
 		return {};
 	}

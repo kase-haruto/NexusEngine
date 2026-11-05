@@ -102,6 +102,11 @@ void SampleParityAndGameAssets() {
     assert(!game.Load(file, root));
     assert(game.Update(0.25f)); assert(editor.UpdatePreview(0.25f));
     assert(game.PrepareRender(1280, 720));
+    // The standalone host must keep the same weak, unoccluded sky as editor Play.
+    // Full-strength fallback sky washes out direct-light shadows after tone mapping.
+    assert(game.GetRenderScene().fallbackEnvironmentIntensity == .05f);
+    assert(!game.GetRenderScene().ddgi.enabled && !game.GetRenderScene().globalIllumination.enabled &&
+           !game.GetRenderScene().bakedLighting.enabled);
     RenderScene snapshot;
     assert(RenderSceneExtractor{}.ExtractInto(*editor.GetPlayLevel()->GetScene(), 1280.f/720.f, snapshot));
     assert(snapshot.primitives.size() == 1 && game.GetRenderScene().primitives.size() == 1);

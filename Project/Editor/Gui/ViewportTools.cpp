@@ -195,10 +195,15 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
     if(!near || !far) return false;
     const auto direction = (*far-*near).Normalized();
     float closest = std::numeric_limits<float>::max(); EntityId picked;
-    const auto& transforms = pose_->GetNodeWorldTransforms();
-    std::vector<std::vector<Vector3>> deformed(model_->meshes.size());
-    std::vector<Bounds> deformedBounds(model_->meshes.size());
-    for(const auto& object : frame_->primitives) for(size_t node = 0; node < model_->nodes.size() && node < transforms.size(); ++node) {
+    for(const auto& object : frame_->primitives) {
+        ModelInstance sampled;
+        const ModelInstance* objectPose = pose_;
+        if(object.animation && sampled.Initialize(*model_) &&
+            sampled.Sample(object.animation->index, object.animation->time, object.animation->loop)) objectPose = &sampled;
+        const auto& transforms = objectPose->GetNodeWorldTransforms();
+        std::vector<std::vector<Vector3>> deformed(model_->meshes.size());
+        std::vector<Bounds> deformedBounds(model_->meshes.size());
+        for(size_t node = 0; node < model_->nodes.size() && node < transforms.size(); ++node) {
         if(object.nodeIndex != PrimitiveRenderItem::kAllNodes && object.nodeIndex != node) continue;
         if(node < object.nodeBegin || node >= object.nodeEnd) continue;
         for(auto meshIndex : model_->nodes[node].meshIndices) {
@@ -206,7 +211,7 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
             const auto& mesh = model_->meshes[meshIndex];
             const bool skinned = mesh.skinIndex != MeshAssetData::kNoSkin;
             if(skinned && deformed[meshIndex].empty()) {
-                const auto* palette = pose_->GetSkinPalette(mesh.skinIndex);
+                const auto* palette = objectPose->GetSkinPalette(mesh.skinIndex);
                 if(!palette || mesh.vertexStride != sizeof(ModelVertex)) continue;
                 auto& positions = deformed[meshIndex];
                 auto& bound = deformedBounds[meshIndex];
@@ -252,6 +257,7 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
                 }
             }
         }
+    }
     }
     properties_.Commit();
     auto entity = level && level->GetScene() ? level->GetScene()->GetEntity(picked) : Entity{};
@@ -358,11 +364,15 @@ void ViewportTools::DrawToolbar(const LocalizationService& text) {
 }
 std::optional<ViewportTools::Bounds> ViewportTools::GetEntityLocalBounds(Entity entity) const {
     if(frame_ && model_ && pose_ && entity.IsAlive()) {
-        const auto& nodes = pose_->GetNodeWorldTransforms();
         const auto local = entity.GetId();
         const uint64_t packed = (static_cast<uint64_t>(local.generation)<<32)|local.index;
         Vector3 low{1e30f,1e30f,1e30f}, high{-1e30f,-1e30f,-1e30f}; bool found = false;
         for(const auto& item : frame_->primitives) if(item.sourceObject.value == packed) {
+            ModelInstance sampled;
+            const ModelInstance* objectPose = pose_;
+            if(item.animation && sampled.Initialize(*model_) &&
+                sampled.Sample(item.animation->index, item.animation->time, item.animation->loop)) objectPose = &sampled;
+            const auto& nodes = objectPose->GetNodeWorldTransforms();
             for(size_t node = item.nodeBegin; node < std::min(model_->nodes.size(), static_cast<size_t>(item.nodeEnd)) && node < nodes.size(); ++node) {
                 if(item.nodeIndex != PrimitiveRenderItem::kAllNodes && item.nodeIndex != node) continue;
                 for(auto mesh : model_->nodes[node].meshIndices) if(mesh < bounds_.size() && bounds_[mesh].valid) {

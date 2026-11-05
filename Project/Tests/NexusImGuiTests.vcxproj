@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations"><ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration></ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{167B6352-EE44-48BC-A49C-F41EC3B57E38}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Build\Nexus.Common.props" />
+  <ItemGroup><ClCompile Include="ImGuiViewportTests.cpp" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="..\Build\NexusEditorSupport.vcxproj" /><ProjectReference Include="..\Build\NexusRuntime.vcxproj" /></ItemGroup>
+  <Target Name="CopyShaderCompiler" AfterTargets="Build"><Copy SourceFiles="$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll;$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" /></Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

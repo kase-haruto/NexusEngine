@@ -34,6 +34,7 @@
 namespace NexusEngine {
 	class GraphicsBackendTestAccess {
 	public:
+        static const std::vector<ShadowDrawItem>& ShadowDraws(const PrimitiveRenderer& renderer) { return renderer.shadowDraws_; }
         static std::shared_ptr<MeshResource> Mesh(const PrimitiveRenderer& renderer, uint32_t index) { return renderer.model_.meshes_.at(index); }
         static const MeshletResource* Meshlets(const PrimitiveRenderer& renderer, uint32_t index) { return renderer.meshletResources_.at(index).get(); }
         static ID3D12Device* Device(GraphicsResourceFactory& factory) { return static_cast<ID3D12Device*>(factory.nativeDevice_); }
@@ -327,7 +328,7 @@ namespace {
 	#include "DDGITests.inl"
     #include "SelectionOutlineTests.inl"
     #include "TransientDescriptorTests.inl"
-	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false, PrimitiveShape primitiveShape = PrimitiveShape::Asset) {
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false, PrimitiveShape primitiveShape = PrimitiveShape::Asset, uint32_t animationTest = 0) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = performanceMeasurement ? 1280U : (sponza || metalTest ? 384U : (opticalDemo ? 256U : 64U));
         const uint32_t height = performanceMeasurement ? 720U : (sponza || metalTest ? 216U : (opticalDemo ? 192U : 64U));
@@ -348,6 +349,7 @@ namespace {
 		if(pbrVariant != 0) {
 			auto& material = test.asset.materials[0];
 			material.roughnessFactor = pbrVariant == 1 || pbrVariant == 2 ? 0.1f : 1;
+            if(pbrVariant == 9 || pbrVariant == 10) material.roughnessFactor = pbrVariant == 9 ? 0.0f : 0.05f;
 			material.metallicFactor = pbrVariant == 2 || pbrVariant == 5 ? 1.0f : 0.0f;
 			auto pixelImage = [](uint8_t r, uint8_t g, uint8_t b) {
 				std::vector<uint8_t> bytes(58, 0);
@@ -380,9 +382,29 @@ namespace {
         if(primitiveShape != PrimitiveShape::Asset) {
             auto generated = PrimitiveMeshBuilder::Build(primitiveShape); Check(generated);
             test.asset = std::move(*generated);
+            if(pbrVariant == 9 || pbrVariant == 10) test.asset.materials[0].roughnessFactor = pbrVariant == 9 ? 0.0f : 0.05f;
+        }
+        if(animationTest) {
+            AnimationClip clip; clip.duration = 1;
+            NodeAnimationChannel channel; channel.nodeIndex = 0;
+            channel.translations = {{0, {0,0,0}, {}, {}}, {1, {.8f,0,0}, {}, {}}};
+            clip.channels.push_back(channel); test.asset.animations.push_back(clip);
+            if(animationTest == 2) {
+                test.asset.skins.push_back({"test", {0}, {Matrix4x4::Identity()}});
+                auto& mesh = test.asset.meshes[0]; mesh.skinIndex = 0;
+                for(size_t offset = 0; offset < mesh.vertexData.size(); offset += sizeof(ModelVertex)) {
+                    ModelVertex vertex;
+                    std::memcpy(&vertex, mesh.vertexData.data() + offset, sizeof(vertex));
+                    vertex.jointIndices[0] = 0; vertex.jointWeights[0] = 1;
+                    std::memcpy(mesh.vertexData.data() + offset, &vertex, sizeof(vertex));
+                }
+            }
         }
 		ModelInstance pose; Check(pose.Initialize(test.asset));
 		RenderScene scene; scene.camera = RenderCamera {};
+        Require(scene.fallbackEnvironmentIntensity == .05f, "Editor/Runtime GI-off default must attenuate the unoccluded environment.");
+        // Reference fixtures compare full-strength lighting with explicit attenuation below.
+        scene.fallbackEnvironmentIntensity = 1;
         if(opticalDemo) {
             scene.camera->viewMatrix = *TryInverse(MakeAffineMatrix(Vector3::One(),
                 Quaternion::FromEulerRadians(sponza ? Vector3{0.12f,1.57079633f,0} : Vector3{0.08f,0,0}),
@@ -508,6 +530,7 @@ namespace {
 				uint16_t half = 0;
 				std::memcpy(&half, static_cast<uint8_t*>(mapped) + footprint.Offset + y * footprint.Footprint.RowPitch + x * 8 + channel * 2, 2);
 				const int exponent = (half >> 10) & 31;
+                if(pbrVariant == 9 || pbrVariant == 10) Require(exponent != 31, "Polished surface produced non-finite HDR radiance.");
 				const float value = exponent == 0 ? std::ldexp(static_cast<float>(half & 1023), -24)
 					: exponent == 31 ? 1.0f : std::ldexp(1.0f + static_cast<float>(half & 1023) / 1024.0f, exponent - 15);
 				pixels[(y * width + x) * 4 + channel] = static_cast<uint8_t>(std::lround(std::clamp((half & 0x8000) ? -value : value, 0.0f, 1.0f) * 255));
@@ -528,6 +551,29 @@ namespace {
 		}
 		if(giVariant != 0) {
             return ValidateGIIntegration(giVariant,forceUnsupported,scene,renderer,render,test,depth,rtv,transient,width,height);
+        }
+        if(animationTest) {
+            const auto bind = render(ShadowMode::ShadowMap, false);
+            scene.primitives[0].animation = PrimitiveRenderItem::AnimationSample{0, .5f, true};
+            const auto moved = render(ShadowMode::ShadowMap, true);
+            Require(bind != moved, "Animated model did not move GPU pixels.");
+            Require(render(ShadowMode::ShadowMap, true) == moved, "Rendering advanced animation time.");
+            auto second = scene.primitives[0]; second.sourceObject = {2}; second.animation->time = .25f;
+            scene.primitives.push_back(second);
+            render(ShadowMode::ShadowMap, true);
+            const auto& draws = GraphicsBackendTestAccess::ShadowDraws(renderer);
+            Require(draws.size() == 2, "Animated instances did not generate independent shadow draws.");
+            for(size_t i = 0; i < draws.size(); ++i) {
+                const auto& transform = animationTest == 2 ? draws[i].jointPalette[0] : draws[i].world;
+                Require(std::abs(transform.At(3,0) - (i == 0 ? .4f : .2f)) < .0001f,
+                    "Shadow pose does not match the individual animation time.");
+            }
+            scene.primitives.resize(1); scene.primitives[0].animation.reset();
+            Require(render(ShadowMode::ShadowMap, false) == bind, "Removing animation did not restore bind pose.");
+            Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
+            std::cout << "PASS: per-instance animation GPU pixels, repeat rendering, shadow pose and removal; skin=" << (animationTest == 2) << '\n';
+            return moved;
         }
         if(overrideTest) {
             const auto before = render(ShadowMode::Auto,false);
@@ -708,7 +754,11 @@ namespace {
                 auto indirect=render(ShadowMode::Auto,false);
                 if(pbrVariant == 8) Require(visible(indirect)==0,"AO texture did not occlude indirect lighting.");
                 else Require(indirect==on,"Indirect-only debug does not match unlit environment scene.");
-                for(uint32_t mode=3;mode<=10;++mode) { scene.environment.debugMode=static_cast<LightingDebugMode>(mode); render(ShadowMode::Auto,false); }
+                for(uint32_t mode=3;mode<=10;++mode) {
+                    scene.environment.debugMode=static_cast<LightingDebugMode>(mode);
+                    auto debug = render(ShadowMode::Auto,false);
+                    if(mode == 7 && pbrVariant == 9) Require(visible(debug)==0,"Zero roughness was clamped before material/IBL evaluation.");
+                }
                 scene.environment.debugMode=LightingDebugMode::Final;
                 scene.environment.intensity=0;
                 auto zeroIntensity=render(ShadowMode::Auto,false);
@@ -941,7 +991,9 @@ namespace {
 }
 
 #include "ColorManagementTests.inl"
+#include "AdaptiveGridTests.inl"
 #include "EnvironmentLightingTests.inl"
+#include "SkyRenderingTests.inl"
 #include "ViewportRenderingTests.inl"
 #include "BackgroundAssetTests.inl"
 #include "MeshAssignmentProfileTests.inl"
@@ -951,6 +1003,25 @@ int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+        if(argc==2 && std::strcmp(argv[1],"--shadow-stability")==0) {
+            Run(false); Run(true); Run(true,true); return 0;
+        }
+        if(argc==2 && std::strcmp(argv[1],"--polished")==0) {
+            std::filesystem::create_directories("Generated");
+            WriteEnvironmentFixture(L"Generated/IBLDirectional.hdr", true);
+            const auto mirror = ForwardIntegration(false,false,false,9,false,true);
+            const auto smooth = ForwardIntegration(false,false,false,10,false,true);
+            Require(mirror != smooth,"Zero and 0.05 roughness produced identical environment reflections.");
+            ForwardIntegration(false,false,false,9);
+            ForwardIntegration(false,false,false,9,false,false,0,0,4,0,false,false,false,PrimitiveShape::Sphere);
+            std::cout << "Polished material roughness/IBL/direct-light integration passed.\n"; return 0;
+        }
+        if(argc==2 && std::strcmp(argv[1],"--animation")==0) {
+            for(uint32_t kind : {1U, 2U}) ForwardIntegration(true,false,false,0,false,false,0,0,4,0,false,false,false,PrimitiveShape::Asset,kind);
+            return 0;
+        }
+        if(argc==2 && std::strcmp(argv[1],"--sky")==0) { SkyRenderingTests(); return 0; }
+        if(argc==2 && std::strcmp(argv[1],"--adaptive-grid")==0) { AdaptiveGridTests(); return 0; }
 		if(argc == 2 && std::strcmp(argv[1], "--transient-descriptors") == 0) { TransientDescriptorTests(); return 0; }
 		if(argc == 2 && std::strcmp(argv[1], "--meshlet-lazy") == 0) {
 			const auto raster = ForwardIntegration(false,false,false,6);

@@ -40,12 +40,6 @@ float3 SurfaceNormal(PSInput input) {
 
 float4 main(PSInput input) : SV_TARGET
 {
-    if (opticalRadianceIndex != 0 && (environment.options.z == 0 || environment.options.z == 2))
-    {
-        Texture2D<float4> radiance = ResourceDescriptorHeap[opticalRadianceIndex];
-        const float4 optical = radiance.Load(int3(uint2(input.position.xy), 0));
-        if (optical.a > 0.5) return float4(clamp(environment.options.z == 0 ? ApplyDistanceFog(optical.rgb, input.worldPosition) : optical.rgb, 0, 65504), 1);
-    }
     Texture2D<float4> materialTexture = NexusGetTexture2D(textureIndex);
     SamplerState materialSampler = NexusGetSampler(samplerIndex);
     const float3 lightDirection = SafeNormalize(lightDirectionIntensity.xyz, float3(0, 1, 0));
@@ -79,6 +73,18 @@ float4 main(PSInput input) : SV_TARGET
         ao = MaterialOcclusion(map.Sample(state, input.texcoord).r, emissiveOcclusion.w);
     }
     SurfaceData surface = MakeSurface(albedo.rgb, metallicRoughness.x, metallicRoughness.y, n, ao, emission);
+    // Evaluate derivatives before the per-pixel optical return diverges the quad.
+    // N-H varies even on a flat surface under a perspective camera. Filtering
+    // only N misses subpixel highlights caused by changes in the view direction.
+    float3 halfVector = SafeNormalize(v + lightDirection, n);
+    float3 lobeOffset = n - halfVector;
+    float directRoughness = FilterDirectSpecularRoughness(surface.roughness, ddx(lobeOffset), ddy(lobeOffset));
+    if (opticalRadianceIndex != 0 && (environment.options.z == 0 || environment.options.z == 2))
+    {
+        Texture2D<float4> opticalTexture = ResourceDescriptorHeap[opticalRadianceIndex];
+        const float4 optical = opticalTexture.Load(int3(uint2(input.position.xy), 0));
+        if (optical.a > 0.5) return float4(clamp(environment.options.z == 0 ? ApplyDistanceFog(optical.rgb, input.worldPosition) : optical.rgb, 0, 65504), 1);
+    }
     float4 diffuseGI = 0;
     // 材質検査や直接光だけの表示では、8点のプローブ参照を省略する。
     if(environment.options.z == 0 || environment.options.z == 2 || environment.options.z == 11) {
@@ -91,7 +97,7 @@ float4 main(PSInput input) : SV_TARGET
         diffuseGI = map.Load(int3(uint2(input.position.xy), 0));
     }
     float3 radiance = EvaluatePBRLighting(surface, v, lightDirection,
-        lightColor.rgb * max(lightDirectionIntensity.w, 0), visibility, environment, ambientIrradiance.rgb, diffuseGI);
+        lightColor.rgb * max(lightDirectionIntensity.w, 0), visibility, environment, ambientIrradiance.rgb, diffuseGI, directRoughness);
     if(environment.options.z != 0) return float4(clamp(radiance, 0, 65504), albedo.a);
     // Preserve HDR values above 1 while avoiding half-float overflow in the scene target.
     return float4(clamp(ApplyDistanceFog(radiance, input.worldPosition), 0, 65504), albedo.a);

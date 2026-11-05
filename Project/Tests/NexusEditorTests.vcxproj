@@ -107,4 +107,10 @@
     <ClCompile Include="..\Runtime\Project\ProjectContext.cpp" />
     <ClCompile Include="..\Runtime\Project\ProjectService.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Editor\Services\PostProcessGraphDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\PostProcessGraphPanel.cpp" />
+    <ClCompile Include="..\ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemGroup>
+  <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
 </Project>

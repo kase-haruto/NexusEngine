@@ -1,6 +1,11 @@
 [
     {
         "Kind":  "COMPONENT",
+        "Type":  "AnimationPlayerComponent",
+        "Id":  "\"AnimationPlayer\""
+    },
+    {
+        "Kind":  "COMPONENT",
         "Type":  "CameraComponent",
         "Id":  "\"Camera\""
     },
@@ -18,6 +23,11 @@
         "Kind":  "VALUE",
         "Type":  "EntityId",
         "Id":  "\"EntityId\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "FogComponent",
+        "Id":  "\"Fog\""
     },
     {
         "Kind":  "COMPONENT",
@@ -53,6 +63,11 @@
         "Kind":  "VALUE",
         "Type":  "Quaternion",
         "Id":  "\"Quaternion\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "SkyRendererComponent",
+        "Id":  "\"SkyRenderer\""
     },
     {
         "Kind":  "COMPONENT",

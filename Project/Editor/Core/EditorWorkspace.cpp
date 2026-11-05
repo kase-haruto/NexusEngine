@@ -4,6 +4,7 @@
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
 #include "Editor/Gui/Panels/UtilityPanels.h"
+#include "Editor/Gui/Panels/PostProcessGraphPanel.h"
 #include "Editor/Services/EntityConsoleCommands.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -25,6 +26,7 @@ EditorWorkspace::~EditorWorkspace() noexcept {
 void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions,
                                  const std::filesystem::path& engineRoot, const ProjectContext* project) {
     settings_.Load(root, project); recent_ = settings_.user.recentLevels;
+    renderGraph_.Initialize(root,project ? project->Config() : root/"Config");
     documents_.SetProjectRoot(std::filesystem::absolute(root));
     // 旧Propertiesだけを開いていた利用者も、統合先のDetailsへ移行する。
     if(auto legacy = settings_.user.panels.find("Properties"); legacy != settings_.user.panels.end()) {
@@ -49,6 +51,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     panels_.RegisterFactory("Details", "panel.details", [this] { return std::make_unique<DetailsPanel>(categories_); });
     panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_, logs_); }, settings_.editor.viewport);
     panels_.RegisterFactory("OutputLog", "panel.log", [this] { return std::make_unique<OutputLogPanel>(logs_); });
+    panels_.RegisterFactory("PostProcessGraph", "panel.postProcessGraph", [this] { return std::make_unique<PostProcessGraphPanel>(renderGraph_); }, false);
     commands_.Register("viewport.openLog", {[this] { panels_.Open("OutputLog"); }, {}});
     panels_.RegisterFactory("Terminal", "panel.terminal", [this] { return std::make_unique<TerminalPanel>(console_); });
     panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
@@ -99,7 +102,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     for(unsigned char byte : projectPath) { projectKey ^= byte; projectKey *= 1099511628211ull; }
     layout_.Initialize(settings_.UserDirectory() / "Workspaces" / std::to_string(projectKey),settings_.user.workspace);
     initialized_ = true;
-    NEXUS_LOG_INFO("Editor", "Editor workspace initialized.");
+    NEXUS_LOG_SUCCESS("Editor", "Editor workspace initialized.");
 }
 void EditorWorkspace::Report(const Result<void>& result) {
     if(!result) { NEXUS_LOG_ERROR("Editor", result.error().GetMessageText()); notifications_.Push(result.error().GetMessageText(), true); }
@@ -188,6 +191,7 @@ void EditorWorkspace::RegisterCommands() {
     commands_.Register("scene.camera", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Camera")); }, editing});
     commands_.Register("scene.model", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Model")); }, editing});
     commands_.Register("scene.light", {[this, sceneResult] { sceneResult(sceneEdits_.Create("DirectionalLight")); }, editing});
+    commands_.Register("scene.sky", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Sky")); }, editing});
     const auto canChangeMode = [this] { return !session_.IsPlaying() && !commands_.IsChecked("project.runStandalone"); };
     EditorCommandRegistry::Command editorMode{[this] { playMode_ = PlayMode::Editor; },canChangeMode};
     editorMode.isChecked = [this] { return playMode_ == PlayMode::Editor; };
@@ -311,6 +315,7 @@ void EditorWorkspace::Draw() {
     layout_.Draw();
     const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_};
     viewport_.SetCameraPreviewVisible(false);
+    renderGraph_.capturesKeyboard = false;
     panels_.Draw(context, session_.IsPlaying());
     viewportTools_.CompleteInteraction();
     if(previousSelection_ != session_.GetSelection()) { properties_.Commit(); previousSelection_ = session_.GetSelection(); }
@@ -319,7 +324,9 @@ void EditorWorkspace::Draw() {
     DrawUnsavedDialog(); DrawFileDialog(); SynchronizeDocument(); ReportDocumentError();
     const auto& io = ImGui::GetIO();
     if(!io.WantTextInput && !ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating() && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
-        commands_.Dispatch(io.KeyCtrl, io.KeyShift, io.KeyAlt, [](int key) { return ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false); });
+        commands_.Dispatch(io.KeyCtrl, io.KeyShift, io.KeyAlt, [this](int key) {
+            return (!renderGraph_.capturesKeyboard || key==ImGuiKey_F5) && ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false);
+        });
     if(showAbout_) { ImGui::OpenPopup("###About"); showAbout_ = false; }
     if(ImGui::BeginPopupModal(text_.Label("help.about", "About").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(text_.Text("about.body").c_str());

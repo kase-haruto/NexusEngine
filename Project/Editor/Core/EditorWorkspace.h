@@ -14,6 +14,7 @@
 #include "Editor/Services/EditorSettings.h"
 #include "Editor/Services/NotificationService.h"
 #include "Editor/Services/PropertyEditService.h"
+#include "Editor/Services/PostProcessGraphDocument.h"
 #include "Editor/Services/SceneEditService.h"
 #include "EditorSession.h"
 #include "Foundation/Logging/BufferedLogSink.h"
@@ -52,6 +53,7 @@ namespace NexusEngine {
 		void							   ReleaseForReinstancing() noexcept;
 		void							   RestoreAfterReinstancing(const ReflectionValue& snapshot);
 		PanelRegistry&					   Panels() { return panels_; }
+        PostProcessGraphDocument& RenderGraph() noexcept { return renderGraph_; }
 		const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
 		MainMenuBar&					   Menu() { return menu_; }
 		EditorCommandRegistry&			   Commands() { return commands_; }
@@ -95,6 +97,7 @@ namespace NexusEngine {
 		EditorCommandRegistry			   commands_;					   //< Menuの操作窓口
 		EditorToolbarRegistry			   toolbar_;					   //< コマンドボタンと機能別UIの登録先
 		ConsoleService					   console_;					   //< 登録済みConsoleのみ
+        PostProcessGraphDocument renderGraph_;
 		PanelRegistry					   panels_;						   //< Panel所有
 		MainMenuBar						   menu_;						   //< メニュー描画
 		DockingLayout					   layout_;						   //< 配置永続化

@@ -253,21 +253,46 @@ namespace NexusEngine {
 	void DrawEditorNotifications(NotificationService& notifications) {
 		const auto& items = notifications.Items();
 		if(items.empty()) return;
-		const auto* viewport = ImGui::GetMainViewport();
-		const auto	padding	 = ImGui::GetStyle().WindowPadding;
-		ImGui::SetNextWindowPos({viewport->WorkPos.x + viewport->WorkSize.x - padding.x,
-								 viewport->WorkPos.y + viewport->WorkSize.y - padding.y},
-								ImGuiCond_Always, {1, 1});
-		ImGui::SetNextWindowBgAlpha(0.95f);
-		if(ImGui::Begin("###Notifications", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing)) {
-			for(const auto& item : items) {
-				ImGui::TextUnformatted(item.error ? "!" : "+");
-				ImGui::SameLine();
-				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28);
-				ImGui::TextUnformatted(item.text.c_str());
-				ImGui::PopTextWrapPos();
+		auto* viewport = ImGui::GetMainViewport();
+		const float em = ImGui::GetFontSize();
+		const float margin = em;
+		const float width = std::min(em * 24, viewport->WorkSize.x - margin * 2);
+		if(width < em * 6 || viewport->WorkSize.y < em * 6) return;
+		const float textWidth = width - em * 4;
+		float bottom = viewport->WorkPos.y + viewport->WorkSize.y - margin;
+		auto* draw = ImGui::GetForegroundDrawList(viewport);
+		const auto now = std::chrono::steady_clock::now();
+		draw->PushClipRect(viewport->WorkPos, {viewport->WorkPos.x + viewport->WorkSize.x, viewport->WorkPos.y + viewport->WorkSize.y});
+		// 新しい通知を右下に置き、各カードを独立してフェードする。入力は背後のUIへ渡す。
+		for(auto it = items.rbegin(); it != items.rend(); ++it) {
+			const float remaining = std::chrono::duration<float>(it->expires - now).count();
+			const float age = 6.0f - remaining;
+			const float opacity = std::clamp(std::min(age / .18f, remaining / .4f), 0.0f, 1.0f);
+			const auto color = [opacity](int r, int g, int b, int alpha = 255) {
+				return IM_COL32(r, g, b, static_cast<int>(static_cast<float>(alpha) * opacity));
+			};
+			const float textHeight = ImGui::CalcTextSize(it->text.c_str(), nullptr, false, textWidth).y;
+			const float height = std::min(std::max(em * 3.4f, textHeight + em * 1.5f), viewport->WorkSize.y * .21f);
+			const float left = viewport->WorkPos.x + viewport->WorkSize.x - margin - width + (1 - opacity) * em;
+			const ImVec2 min{left, bottom - height}, max{left + width, bottom};
+			draw->AddRectFilled({min.x + 2, min.y + 3}, {max.x + 2, max.y + 3}, color(0, 0, 0, 75), 3);
+			draw->AddRectFilled(min, max, color(43, 43, 43, 250), 3);
+			draw->AddRect(min, max, color(85, 85, 85), 3);
+			const ImU32 accent = it->error ? color(235, 83, 77) : color(111, 190, 106);
+			const ImVec2 center{min.x + em * 1.25f, min.y + height * .5f};
+			draw->AddCircle(center, em * .55f, accent, 24, 1.5f);
+			if(it->error) {
+				draw->AddLine({center.x - em * .2f, center.y - em * .2f}, {center.x + em * .2f, center.y + em * .2f}, accent, 2);
+				draw->AddLine({center.x + em * .2f, center.y - em * .2f}, {center.x - em * .2f, center.y + em * .2f}, accent, 2);
+			} else {
+				draw->AddLine({center.x - em * .3f, center.y}, {center.x - em * .06f, center.y + em * .22f}, accent, 2);
+				draw->AddLine({center.x - em * .06f, center.y + em * .22f}, {center.x + em * .3f, center.y - em * .23f}, accent, 2);
 			}
+			draw->PushClipRect({min.x + em * 2.5f, min.y + em * .6f}, {max.x - em, max.y - em * .6f}, true);
+			draw->AddText(nullptr, em, {min.x + em * 2.5f, min.y + std::max(em * .75f, (height - textHeight) * .5f)}, color(235, 235, 235), it->text.c_str(), nullptr, textWidth);
+			draw->PopClipRect();
+			bottom = min.y - em * .5f;
 		}
-		ImGui::End();
+		draw->PopClipRect();
 	}
 } // namespace NexusEngine

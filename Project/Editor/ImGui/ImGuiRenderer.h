@@ -44,6 +44,7 @@ namespace NexusEngine {
 		 * \brief ImGui描画コマンドをCommandListへ記録する
 		 */
 		void Record(GraphicsContext& context) override;
+        void AfterSubmit() override;
 		/**
 		 * \brief ImGui backendを終了する
 		 */
@@ -59,6 +60,8 @@ namespace NexusEngine {
 		[[nodiscard]] bool HandleWindowMessage(void* window, uint32_t message, uintptr_t wParam, intptr_t lParam) noexcept;
 
 	private:
+		void DrawTitleBar();
+		void* nativeWindow_ = nullptr;
 		std::filesystem::path fontDirectory_; //< GameのAsset Rootとは独立したUI資源
 		std::vector<std::vector<char>> fontData_; //< 動的Glyph生成が参照するためContext終了まで保持する
 		GraphicsSystem* graphicsSystem_ = nullptr; //< 画像解決先。資源を所有しない

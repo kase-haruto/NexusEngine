@@ -2,6 +2,8 @@
 
 // c++
 #include <filesystem>
+#include <span>
+#include "Graphics/PostProcess/ScreenEffect.h"
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -9,6 +11,7 @@
 namespace NexusEngine {
 	class GraphicsContext;
 	class GraphicsResourceFactory;
+    struct RenderScene;
 
 	/*-----------------------------------------------------------------------------------------
 	 * GraphicsRendererInitializationContext
@@ -32,5 +35,9 @@ namespace NexusEngine {
 		[[nodiscard]] virtual Result<void> Initialize(const GraphicsRendererInitializationContext& context) = 0;
 		virtual void Render(GraphicsContext& context) = 0;
 		virtual void Shutdown() noexcept = 0;
+        /** Optional CPU scene snapshot for independent scene passes, including the sky. */
+        virtual const RenderScene* GetRenderScene() const noexcept { return nullptr; }
+        /** CPU snapshot only. Appended after engine effects, prepared before command recording. */
+        virtual std::span<const ScreenEffect> GetScreenEffects() const noexcept { return {}; }
 	};
 } // namespace NexusEngine

@@ -202,7 +202,7 @@ namespace NexusEngine {
 		// Shader/Asset初期化に要した時間を最初のsimulation deltaへ混ぜない。
 		previousFrameTime_ = std::chrono::steady_clock::now();
 		state_ = FrameworkState::Running;
-		NEXUS_LOG_INFO("Framework", "NexusEngine initialization completed.");
+		NEXUS_LOG_SUCCESS("Framework", "NexusEngine initialization completed.");
 		return {};
 	}
 
@@ -229,7 +229,7 @@ namespace NexusEngine {
 
 		// 全所有物の解放後にStoppedへ遷移し、外部から終了完了を観測可能にする。
 		state_ = FrameworkState::Stopped;
-		NEXUS_LOG_INFO("Framework", "NexusEngine shutdown completed.");
+		NEXUS_LOG_SUCCESS("Framework", "NexusEngine shutdown completed.");
 	}
 
 	bool NexusFramework::IsRunning() const noexcept {

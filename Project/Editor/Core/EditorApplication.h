@@ -76,6 +76,7 @@ namespace NexusEngine {
 		 * @param context
 		 */
 		void Record(GraphicsContext& context) override;
+        void AfterSubmit() override;
 		/**
 		 * @brief 停止
 		 */

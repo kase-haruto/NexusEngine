@@ -27,6 +27,8 @@ namespace NexusEngine {
 		[[nodiscard]] Result<void> Play(uint32_t animationIndex, bool loop = true) noexcept;
 		/** \brief 再生時刻を進め、TRS補間後のnode階層行列を更新する */
 		void Update(float deltaTime) noexcept;
+		/** Evaluate an absolute clip time without advancing playback. Invalid input leaves the pose unchanged. */
+		[[nodiscard]] Result<void> Sample(uint32_t animationIndex, float time, bool loop = true) noexcept;
 
 		[[nodiscard]] const ModelAssetData* GetAsset() const noexcept;
 		[[nodiscard]] const std::vector<Matrix4x4>& GetNodeWorldTransforms() const noexcept;

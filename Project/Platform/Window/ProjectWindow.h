@@ -65,8 +65,12 @@ namespace NexusEngine {
 		void SetMessageHandler(MessageHandler handler, void* userData) noexcept;
 		/** \brief 初期描画が準備できたときなどに、所有Windowの表示を切り替える */
 		void SetVisible(bool visible) noexcept;
+		/** Client-drawn chrome; dimensions are physical pixels. Zero restores the native frame. */
+		static void ConfigureCustomTitleBar(HWND window, int height, int controlsWidth) noexcept;
 
 	private:
+		int titleBarHeight_ = 0;
+		int titleBarControlsWidth_ = 0;
 		static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
 		LRESULT					HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
 

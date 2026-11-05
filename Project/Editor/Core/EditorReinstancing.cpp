@@ -40,6 +40,6 @@ void EditorApplication::RestoreReinstancing(const ReflectionValue& snapshot) {
         if(!result) throw std::runtime_error(result.error().GetMessageText());
         workspace_->RestoreAfterReinstancing(found->second);
     }
-    NEXUS_LOG_INFO("Live++", "Editor workspace and reflected component storages reinstanced; entity IDs, selection and unsaved edits preserved.");
+    NEXUS_LOG_SUCCESS("Live++", "Editor workspace and reflected component storages reinstanced; entity IDs, selection and unsaved edits preserved.");
 }
 }

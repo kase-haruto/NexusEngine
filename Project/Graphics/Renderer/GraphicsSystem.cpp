@@ -19,6 +19,7 @@
 #include "GraphicsContext.h"
 #include "GraphicsRenderer.h"
 #include "PrimitiveRenderer.h"
+#include "Graphics/Sky/SkyRenderer.h"
 #include "GraphicsResourceFactory.h"
 #include "GraphicsRenderExtension.h"
 #include "Graphics/Backend/DirectX12/PostProcess/PostProcessBackend.h"
@@ -55,6 +56,8 @@ namespace NexusEngine {
 		bool cameraPreviewDescriptorsInitialized = false;
 		GraphicsResourceFactory resourceFactory;
 		PostProcessBackend postProcess;
+        SkyRenderer sky, cameraPreviewSky;
+        bool skyInitialized = false, cameraPreviewSkyInitialized = false;
 		ViewportTarget viewportTarget; //< GPU idle後にdescriptor allocatorより先に破棄する
 		ViewportTarget cameraPreviewTarget;
 		DepthStencilBuffer cameraPreviewDepth;
@@ -64,6 +67,7 @@ namespace NexusEngine {
 		bool viewportEnabled = false; //< ローカルEditorの専用出力経路
 		uint32_t viewportWidth = 0, viewportHeight = 0; //< 次frameへ集約するResize要求
 		PostProcessSettings postProcessSettings;
+        std::vector<ScreenEffect> engineEffects, activeEffects;
 		std::array<FrameContext, SwapChain::kBufferCount> frames;
 		std::array<float, 4> clearColor = {};
 		std::filesystem::path shaderDirectory;
@@ -185,6 +189,10 @@ namespace NexusEngine {
 		result = implementation->postProcess.Initialize(implementation->device.GetDevice(), desc.shaderDirectory, surface.width, surface.height);
 		if(!result) return std::unexpected(std::move(result.error()));
 		implementation->postProcessSettings = desc.postProcess;
+        auto effects = implementation->postProcess.PrepareEffects(implementation->device.GetDevice(), desc.shaderDirectory, desc.screenEffects);
+        if(!effects) return std::unexpected(std::move(effects.error()));
+        implementation->postProcess.CommitEffects(std::move(*effects));
+        implementation->engineEffects = implementation->activeEffects = desc.screenEffects;
 		// 全必須リソースが完成してから実行時設定とPImplを公開する。
 		implementation->clearColor = desc.clearColor;
 		implementation->shaderDirectory = desc.shaderDirectory;
@@ -192,7 +200,7 @@ namespace NexusEngine {
 		implementation->enableVSync = desc.enableVSync;
 		implementation->nativeWindow = surface.nativeHandle;
 		impl_ = std::move(implementation);
-		NEXUS_LOG_INFO("Graphics", "GraphicsSystem initialized with double-buffered frame contexts.");
+		NEXUS_LOG_SUCCESS("Graphics", "GraphicsSystem initialized with double-buffered frame contexts.");
 		return {};
 	}
 
@@ -221,6 +229,8 @@ namespace NexusEngine {
 			impl_->cameraPreviewRenderer->Shutdown(); impl_->cameraPreviewRenderer = nullptr;
 		}
 		impl_->cameraPreviewPost.Shutdown();
+        impl_->sky.Shutdown();
+        impl_->cameraPreviewSky.Shutdown();
 		impl_->cameraPreviewTarget.Shutdown();
 		impl_->cameraPreviewDepth.Shutdown();
 		// Command ListはAllocatorを参照して生成されるため、Listから先に解放する。
@@ -250,12 +260,33 @@ namespace NexusEngine {
 	// 現在のBackBufferをClearしてPresentする
 	/////////////////////////////////////////////////////////////////////////////////////////
 	Result<void> GraphicsSystem::RenderFrame() {
+        if(impl_) {
+            auto effects = SynchronizeScreenEffects(impl_->engineEffects);
+            if(!effects) return effects;
+        }
 		// 公開API境界で未初期化利用を検出し、nullptrアクセスを防止する。
 		if(!impl_) {
 			return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "GraphicsSystem is not initialized."));
 		}
 
 		// DXGIが示す現在のBackBuffer indexと同じFrameContextを選択する。
+        // Scene passes are peers of the mesh renderer. Prepare before command recording.
+        auto prepareSky = [&](IGraphicsRenderer* renderer, SkyRenderer& sky, bool& initialized) -> Result<void> {
+            const auto* scene = renderer ? renderer->GetRenderScene() : nullptr;
+            if(!scene || !scene->skyIntensity || !scene->camera) return {};
+            if(!initialized) {
+                auto result = sky.Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
+                if(!result) { sky.Shutdown(); return result; }
+                initialized = true;
+            }
+            return sky.Prepare(*scene);
+        };
+        auto skyStatus = prepareSky(impl_->renderer, impl_->sky, impl_->skyInitialized);
+        if(!skyStatus) return skyStatus;
+        if(impl_->cameraPreviewActive) {
+            skyStatus = prepareSky(impl_->cameraPreviewRenderer, impl_->cameraPreviewSky, impl_->cameraPreviewSkyInitialized);
+            if(!skyStatus) return skyStatus;
+        }
 		const uint32_t frameIndex = impl_->swapChain.GetCurrentFrameIndex();
 		auto& frame = impl_->frames[frameIndex];
 		// 完了Fenceへ到達したBindless slotだけを回収し、GPU参照中のindex再利用を防ぐ。
@@ -329,6 +360,10 @@ namespace NexusEngine {
 		graphicsContext.nativeRtv_ = impl_->postProcess.GetSceneRtv().ptr;
 		graphicsContext.nativeDsv_ = dsv.ptr;
 		if(impl_->renderer != nullptr) {
+            if(const auto* scene = impl_->renderer->GetRenderScene(); scene && impl_->skyInitialized) {
+                auto sky = impl_->sky.Render(graphicsContext, *scene);
+                if(!sky) return sky;
+            }
 			impl_->renderer->Render(graphicsContext);
 		}
 		if(impl_->viewportEnabled) impl_->viewportTarget.BeginWrite(frame.commandList.Get());
@@ -349,6 +384,10 @@ namespace NexusEngine {
 			frame.commandList->RSSetScissorRects(1, &previewScissor);
 			previewContext.nativeRtv_ = impl_->cameraPreviewPost.GetSceneRtv().ptr;
 			previewContext.nativeDsv_ = previewDsv.ptr;
+            if(const auto* scene = impl_->cameraPreviewRenderer->GetRenderScene(); scene && impl_->cameraPreviewSkyInitialized) {
+                auto sky = impl_->cameraPreviewSky.Render(previewContext, *scene);
+                if(!sky) return sky;
+            }
 			impl_->cameraPreviewRenderer->Render(previewContext);
 			impl_->cameraPreviewTarget.BeginWrite(frame.commandList.Get());
 			impl_->cameraPreviewPost.Resolve(frame.commandList.Get(), impl_->cameraPreviewTarget.Rtv(), impl_->postProcessSettings);
@@ -379,6 +418,9 @@ namespace NexusEngine {
 		impl_->commandQueue.Execute(frame.commandList.Get());
 		graphicsContext.CompleteRecording(true);
 		previewContext.CompleteRecording(true);
+        // Platform windows sample the scene images written by the submitted main list.
+        // Include their submissions in this frame's fence and resource lifetime.
+        if(impl_->renderExtension) impl_->renderExtension->AfterSubmit();
 		// Queue投入済みCommandの完了位置は、後続のPresent成否にかかわらず先に保存する。
 		auto signalResult = impl_->commandQueue.Signal();
 		if(!signalResult) {
@@ -489,6 +531,7 @@ namespace NexusEngine {
 			impl_->cameraPreviewPost.Shutdown();
 			result = impl_->cameraPreviewPost.Initialize(impl_->device.GetDevice(), impl_->shaderDirectory, width, height);
 			if(!result) return result;
+            impl_->cameraPreviewPost.CommitEffects(impl_->postProcess.GetEffects());
 		}
 		result = prepared ? Result<void>{} : renderer->Initialize({impl_->resourceFactory, impl_->shaderDirectory, impl_->assetDirectory});
 		if(!result) {
@@ -508,6 +551,8 @@ namespace NexusEngine {
 		impl_->cameraPreviewRenderer->Shutdown();
 		impl_->cameraPreviewRenderer = nullptr;
 		impl_->cameraPreviewPost.Shutdown();
+        impl_->cameraPreviewSky.Shutdown();
+        impl_->cameraPreviewSkyInitialized = false;
 		impl_->cameraPreviewTarget.Shutdown();
 		impl_->cameraPreviewDepth.Shutdown();
 		impl_->cameraPreviewDescriptors.Shutdown();
@@ -528,6 +573,69 @@ namespace NexusEngine {
 		}
 	}
 
+    Result<void> GraphicsSystem::SynchronizeScreenEffects(std::span<const ScreenEffect> engineEffects) {
+        std::vector<ScreenEffect> combined(engineEffects.begin(), engineEffects.end());
+        if(impl_->renderer) {
+            auto gameEffects = impl_->renderer->GetScreenEffects();
+            combined.insert(combined.end(), gameEffects.begin(), gameEffects.end());
+        }
+        if(combined == impl_->activeEffects) return {};
+        for(const auto& effect : combined) if(!effect.IsValid())
+            return std::unexpected(Error(ErrorCategory::Graphics, 91, "Invalid screen effect."));
+        bool sameShaders = combined.size() == impl_->activeEffects.size();
+        for(size_t i = 0; sameShaders && i < combined.size(); ++i)
+            sameShaders = combined[i].shaderPath == impl_->activeEffects[i].shaderPath && combined[i].entryPoint == impl_->activeEffects[i].entryPoint;
+        if(sameShaders) {
+            for(size_t i = 0; i < combined.size(); ++i) {
+                auto result = impl_->postProcess.UpdateEffect(i, combined[i].parameters, combined[i].enabled);
+                if(!result) return result;
+                if(impl_->cameraPreviewRenderer) {
+                    result = impl_->cameraPreviewPost.UpdateEffect(i, combined[i].parameters, combined[i].enabled);
+                    if(!result) return result;
+                }
+            }
+        } else {
+            auto prepared = impl_->postProcess.PrepareEffects(impl_->device.GetDevice(), impl_->shaderDirectory, combined);
+            if(!prepared) return std::unexpected(std::move(prepared.error()));
+            auto idle = impl_->commandQueue.WaitForIdle();
+            if(!idle) return idle;
+            if(impl_->cameraPreviewRenderer) impl_->cameraPreviewPost.CommitEffects(*prepared);
+            impl_->postProcess.CommitEffects(std::move(*prepared));
+        }
+        impl_->activeEffects = std::move(combined);
+        return {};
+    }
+    Result<void> GraphicsSystem::SetScreenEffects(std::span<const ScreenEffect> effects) {
+        if(!impl_) return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "GraphicsSystem is not initialized."));
+        auto result = SynchronizeScreenEffects(effects);
+        if(result) impl_->engineEffects.assign(effects.begin(), effects.end());
+        return result;
+    }
+    Result<void> GraphicsSystem::UpdateScreenEffect(size_t index, const std::array<float, 16>& parameters, bool enabled) {
+        if(!impl_ || index >= impl_->engineEffects.size())
+            return std::unexpected(Error(ErrorCategory::Graphics, 94, "Engine screen-effect index out of range."));
+        auto replacement = impl_->engineEffects;
+        replacement[index].parameters = parameters; replacement[index].enabled = enabled;
+        return SetScreenEffects(replacement);
+    }
+    Result<void> GraphicsSystem::ReloadScreenEffects() {
+        if(!impl_) return std::unexpected(Error(ErrorCategory::Graphics, kNotInitialized, "GraphicsSystem is not initialized."));
+        auto prepared = impl_->postProcess.PrepareEffects(impl_->device.GetDevice(), impl_->shaderDirectory, impl_->activeEffects);
+        if(!prepared) return std::unexpected(std::move(prepared.error()));
+        auto idle = impl_->commandQueue.WaitForIdle();
+        if(!idle) return idle;
+        if(impl_->cameraPreviewRenderer) impl_->cameraPreviewPost.CommitEffects(*prepared);
+        impl_->postProcess.CommitEffects(std::move(*prepared));
+        return {};
+    }
+    Result<void> GraphicsSystem::SetPostProcessGraph(const PostProcessGraph& graph) {
+        auto compiled = graph.Compile();
+        if(!compiled) return std::unexpected(std::move(compiled.error()));
+        auto applied = SetScreenEffects(compiled->effects);
+        if(!applied) return applied;
+        impl_->postProcessSettings = compiled->settings;
+        return {};
+    }
 	Result<void> GraphicsSystem::SetPostProcessSettings(const PostProcessSettings& settings) {
 		if(!impl_ || !settings.IsValid())
 			return std::unexpected(Error(ErrorCategory::Graphics, 88, "Invalid post-process settings or uninitialized graphics system."));

@@ -223,6 +223,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Renderer\GraphicsContext.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsResourceFactory.cpp" />
     <ClCompile Include="Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="Graphics\Grid\GridRenderer.cpp" />
+    <ClCompile Include="Graphics\Sky\SkyRenderer.cpp" />
     <ClCompile Include="Graphics\Meshlet\MeshletBuilder.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp" />
@@ -362,6 +364,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Runtime\Scene\Components\TransformComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\DirectionalLightComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\FogComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\PersistentIdComponent.h" />
     <ClInclude Include="Runtime\Scene\Entity.h" />
@@ -606,4 +609,10 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Platform\Process\Process.cpp" />
     <ClCompile Include="Platform\Window\StartupSplash.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Editor\Services\PostProcessGraphDocument.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\PostProcessGraphPanel.cpp" />
+    <ClCompile Include="ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemGroup>
+  <ItemGroup><ClCompile Include="Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
 </Project>

@@ -152,6 +152,7 @@ namespace NexusEngine {
 	}
 
 	void ModelInstance::Update(const float deltaTime) noexcept {
+		if(!std::isfinite(deltaTime)) return;
 		if(resource_ == nullptr || animationIndex_ >= resource_->animations.size()) return;
 		const AnimationClip& clip = resource_->animations[animationIndex_];
 		animationTime_ += (std::max)(deltaTime, 0.0f);
@@ -160,6 +161,17 @@ namespace NexusEngine {
 				: (std::min)(animationTime_, clip.duration);
 		}
 		EvaluatePose();
+	}
+
+	Result<void> ModelInstance::Sample(uint32_t animationIndex, float time, bool loop) noexcept {
+		if(!resource_ || animationIndex >= resource_->animations.size() || !std::isfinite(time) || time < 0)
+			return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid animation sample."));
+		animationIndex_ = animationIndex;
+		loop_ = loop;
+		const float duration = resource_->animations[animationIndex].duration;
+		animationTime_ = duration > 0 ? (loop ? std::fmod(time, duration) : (std::min)(time, duration)) : 0;
+		EvaluatePose();
+		return {};
 	}
 
 	const ModelAssetData* ModelInstance::GetAsset() const noexcept { return resource_; }

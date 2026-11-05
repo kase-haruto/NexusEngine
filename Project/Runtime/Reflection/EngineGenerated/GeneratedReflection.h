@@ -5,15 +5,29 @@
 #include "Foundation/Math/Vector3.h"
 #include "Graphics/Material/MaterialOverride.h"
 #include "Graphics/Shadow/ShadowTypes.h"
+#include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/NameComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/EntityId.h"
 namespace NexusEngine {
+template<> struct ReflectionTraits<AnimationPlayerComponent> {
+    static constexpr const char* Id = "AnimationPlayer";
+    static constexpr const char* Label = "component.animationPlayer";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("animationIndex", &AnimationPlayerComponent::animationIndex);
+        visitor("playbackSpeed", &AnimationPlayerComponent::playbackSpeed);
+        visitor("loop", &AnimationPlayerComponent::loop);
+        visitor("playing", &AnimationPlayerComponent::playing);
+        visitor("time", &AnimationPlayerComponent::time);
+    }
+};
 template<> struct ReflectionTraits<CameraComponent> {
     static constexpr const char* Id = "Camera";
     static constexpr const char* Label = "component.camera";
@@ -50,6 +64,16 @@ template<> struct ReflectionTraits<EntityId> {
     template<class Visitor> static void Visit(Visitor&& visitor) {
         visitor("index", &EntityId::index);
         visitor("generation", &EntityId::generation);
+    }
+};
+template<> struct ReflectionTraits<FogComponent> {
+    static constexpr const char* Id = "Fog";
+    static constexpr const char* Label = "component.fog";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &FogComponent::enabled);
+        visitor("startDistance", &FogComponent::startDistance);
+        visitor("endDistance", &FogComponent::endDistance);
+        visitor("color", &FogComponent::color);
     }
 };
 template<> struct ReflectionTraits<HierarchyComponent> {
@@ -117,6 +141,14 @@ template<> struct ReflectionTraits<Quaternion> {
         visitor("y", &Quaternion::y);
         visitor("z", &Quaternion::z);
         visitor("w", &Quaternion::w);
+    }
+};
+template<> struct ReflectionTraits<SkyRendererComponent> {
+    static constexpr const char* Id = "SkyRenderer";
+    static constexpr const char* Label = "component.sky";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &SkyRendererComponent::enabled);
+        visitor("intensity", &SkyRendererComponent::intensity);
     }
 };
 template<> struct ReflectionTraits<TransformComponent> {

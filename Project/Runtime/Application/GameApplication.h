@@ -39,6 +39,6 @@ private:
     RenderScene renderScene_; //< Rendererが参照する安定した値snapshot
     std::unique_ptr<ModelAssetLibrary> library_;
     std::shared_ptr<const ModelAssetData> asset_; //< poseとGPUアップロードより長く生存する
-    ModelInstance pose_; //< 統合モデルのCPU姿勢。個体別Animationは今後の拡張
+    ModelInstance pose_; //< 統合モデルのbind pose。個体別再生はAnimationPlayerComponentで指定する
 };
 }

@@ -36,7 +36,8 @@ void PanelRegistry::Draw(const EditorContext& context, bool disableEditing) {
         const auto title = context.text.Label(entry.TitleKey(), entry.Id());
         // 保存済み配置にない新規Panelも、Empty Stateの折返しで極小幅にならないようにする。
         // FirstUseEverなので既存のDock配置や利用者が変更したサイズは維持する。
-        ImGui::SetNextWindowSize({360, 480}, ImGuiCond_FirstUseEver);
+        const auto initial=entry.panel->InitialSize();
+        ImGui::SetNextWindowSize({initial[0],initial[1]}, ImGuiCond_FirstUseEver);
         // パネルが宣言したスクロール方針を、Windowを開く前にフラグへ反映する。
         // ホイールのパネルスクロールだけを止めるため、Viewport側のカメラ操作は継続できる。
         ImGuiWindowFlags flags = ImGuiWindowFlags_None;

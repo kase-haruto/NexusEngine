@@ -1,5 +1,6 @@
 #include "ModelAssetLibrary.h"
 #include "ModelLoader.h"
+#include "Graphics/Renderer/RenderScene.h"
 #include "PrimitiveMeshBuilder.h"
 #include "Graphics/Resource/WicImageDecoder.h"
 #include <fstream>
@@ -23,18 +24,26 @@ ModelAssetLibrary::ModelAssetLibrary(std::filesystem::path root, const ModelAsse
     : ModelAssetLibrary(std::make_shared<ModelAssetData>(initial), std::move(root)) {}
 ModelAssetLibrary::ModelAssetLibrary(std::shared_ptr<ModelAssetData> initial, std::filesystem::path root, ReloadStartup reloadStartup)
     : root_(std::filesystem::weakly_canonical(root)), aggregate_(std::move(initial)), reloadStartup_(std::move(reloadStartup)) {
-    models_.emplace(kStartupModelAssetReference, aggregate_);
-    ranges_[{kStartupModelAssetReference, ""}] = {0, static_cast<uint32_t>(aggregate_->nodes.size())};
+    if(!aggregate_->nodes.empty() || !reloadStartup_) {
+        std::promise<ModelResult> initialModel;
+        initialModel.set_value(aggregate_);
+        sources_->models.emplace(kStartupModelAssetReference, initialModel.get_future().share());
+    }
+    ranges_[{kStartupModelAssetReference, ""}] = {0, static_cast<uint32_t>(aggregate_->nodes.size()), 0, 0, static_cast<uint32_t>(aggregate_->animations.size())};
+}
+void ModelAssetLibrary::Range::ResolveAnimation(PrimitiveRenderItem& item) const {
+    if(!item.animation) return;
+    if(item.animation->index >= animationCount || item.shape != PrimitiveShape::Asset) item.animation.reset();
+    else item.animation->index += animationBegin;
 }
 void ModelAssetLibrary::Retain(std::span<const Request> requests) {
     std::set<std::pair<std::string, std::string>> active;
-    std::set<std::string> meshes, textures;
+    std::set<std::string> textures;
     for(const auto& request : requests) {
         if(!IsValidPrimitiveShape(request.shape)) continue;
         auto mesh = MeshKey(request.shape, request.mesh);
         if(mesh.empty()) continue;
         active.emplace(mesh, request.texture);
-        meshes.insert(std::move(mesh));
         if(!request.texture.empty()) textures.insert(request.texture);
     }
     if(std::ranges::any_of(ranges_, [&](const auto& entry) { return !active.contains(entry.first); })) {
@@ -43,10 +52,7 @@ void ModelAssetLibrary::Retain(std::span<const Request> requests) {
         ranges_.clear();
         ++revision_;
     }
-    // Synthetic sources without a reload callback must remain available for legacy references.
-    std::erase_if(models_, [&](const auto& entry) {
-        return (entry.first != kStartupModelAssetReference || reloadStartup_) && !meshes.contains(entry.first);
-    });
+    // Only upload variants are compacted. Immutable sources survive detach/reattach.
     std::erase_if(textures_, [&](const auto& entry) { return !textures.contains(entry.first); });
     std::erase_if(textureIds_, [&](const auto& entry) { return !textures.contains(entry.first); });
 }
@@ -72,27 +78,67 @@ bool ModelAssetLibrary::MatchesRequests(std::span<const Request> requests) const
 }
 Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& reference) {
     if(reference.empty()) return std::unexpected(Invalid("No mesh is assigned."));
-    if(auto found = models_.find(reference); found != models_.end()) return found->second.get();
-    if(reference == kStartupModelAssetReference && reloadStartup_) {
-        auto loaded = reloadStartup_();
+    return CachedModel(reference, [&]() -> Result<ModelAssetData> {
+        if(reference == kStartupModelAssetReference && reloadStartup_) return reloadStartup_();
+        auto canonical = Reference(Path(reference));
+        if(!canonical) return std::unexpected(canonical.error());
+        auto extension = Utf8(Path(*canonical).extension());
+        std::ranges::transform(extension, extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if(extension != ".gltf" && extension != ".glb" && extension != ".obj") return std::unexpected(Invalid("Supported meshes: glTF, GLB, OBJ."));
+        auto loaded = extension == ".obj" ? ModelLoader{}.LoadObj(root_ / Path(*canonical)) : ModelLoader{}.LoadGltf(root_ / Path(*canonical));
         if(!loaded) return std::unexpected(loaded.error());
-        return models_.emplace(reference, std::make_shared<ModelAssetData>(std::move(*loaded))).first->second.get();
+        if(loaded->nodes.empty() || loaded->meshes.empty()) return std::unexpected(Invalid("Model contains no meshes."));
+        // OBJのように材質を持たないSourceにも、Variantを適用できる既定slotを用意する。
+        if(loaded->materials.empty()) loaded->materials.emplace_back();
+        return std::move(*loaded);
+    });
+}
+Result<const ModelAssetData*> ModelAssetLibrary::CachedModel(const std::string& key, const ReloadStartup& load) {
+    std::promise<ModelResult> promise;
+    std::shared_future<ModelResult> future;
+    bool producer = false;
+    {
+        std::lock_guard lock(sources_->mutex);
+        auto [entry, inserted] = sources_->models.try_emplace(key);
+        if(inserted) entry->second = promise.get_future().share();
+        future = entry->second;
+        producer = inserted;
     }
-    auto canonical = Reference(Path(reference));
-    if(!canonical) return std::unexpected(canonical.error());
-    auto extension = Utf8(Path(*canonical).extension());
-    std::ranges::transform(extension, extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if(extension != ".gltf" && extension != ".glb" && extension != ".obj") return std::unexpected(Invalid("Supported meshes: glTF, GLB, OBJ."));
-    auto loaded = extension == ".obj" ? ModelLoader{}.LoadObj(root_ / Path(*canonical)) : ModelLoader{}.LoadGltf(root_ / Path(*canonical));
-    if(!loaded) return std::unexpected(loaded.error());
-    if(loaded->nodes.empty() || loaded->meshes.empty()) return std::unexpected(Invalid("Model contains no meshes."));
-    // OBJのように材質を持たないSourceにも、Variantを適用できる既定slotを用意する。
-    if(loaded->materials.empty()) loaded->materials.emplace_back();
-    return models_.emplace(reference, std::make_shared<ModelAssetData>(std::move(*loaded))).first->second.get();
+    if(producer) {
+        // No cache lock during file I/O, parsing or a wait on another worker.
+        ModelResult result;
+        try {
+            auto loaded = load();
+            if(loaded) result = std::make_shared<ModelAssetData>(std::move(*loaded));
+            else result = std::unexpected(std::move(loaded.error()));
+        } catch(const std::exception& exception) {
+            result = std::unexpected(Error(ErrorCategory::Resource, 131, exception.what()));
+        } catch(...) {
+            result = std::unexpected(Invalid("Model loading failed with an unknown exception."));
+        }
+        const bool success = result.has_value();
+        promise.set_value(std::move(result));
+        if(!success) {
+            // Existing waiters see the failure; a later request can retry.
+            std::lock_guard lock(sources_->mutex);
+            sources_->models.erase(key);
+        }
+    }
+    const auto& result = future.get();
+    if(!result) return std::unexpected(result.error());
+    return result->get();
 }
 const ModelAssetData* ModelAssetLibrary::FindModel(const std::string& reference) const {
-    auto found = models_.find(reference);
-    return found == models_.end() ? nullptr : found->second.get();
+    std::shared_future<ModelResult> future;
+    {
+        std::lock_guard lock(sources_->mutex);
+        auto found = sources_->models.find(reference);
+        if(found == sources_->models.end()) return nullptr;
+        future = found->second;
+    }
+    if(future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return nullptr;
+    const auto& result = future.get();
+    return result ? result->get() : nullptr;
 }
 std::optional<ModelAssetLibrary::Range> ModelAssetLibrary::FindRange(PrimitiveShape shape, const std::string& mesh, const std::string& texture) const {
     if(!IsValidPrimitiveShape(shape)) return std::nullopt;
@@ -155,7 +201,8 @@ Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const std::string& m
     next.skins.reserve(next.skins.size() + addition.skins.size());
     next.materials.reserve(next.materials.size() + addition.materials.size());
     next.animations.reserve(next.animations.size() + addition.animations.size());
-    Range range{nodeOffset, nodeOffset + static_cast<uint32_t>(addition.nodes.size()), materialOffset};
+    Range range{nodeOffset, nodeOffset + static_cast<uint32_t>(addition.nodes.size()), materialOffset,
+        static_cast<uint32_t>(next.animations.size()), static_cast<uint32_t>(addition.animations.size())};
     ranges_.emplace(key, range);
     const auto append = [](auto& target, auto& values) {
         static_assert(std::is_nothrow_move_constructible_v<typename std::decay_t<decltype(target)>::value_type>);
@@ -170,11 +217,8 @@ Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(PrimitiveShape shape
     if(!IsValidPrimitiveShape(shape)) return std::unexpected(Invalid("Invalid primitive shape."));
     if(shape == PrimitiveShape::Asset) return Resolve(mesh, texture);
     const auto key = MeshKey(shape, mesh);
-    if(!models_.contains(key)) {
-        auto generated = PrimitiveMeshBuilder::Build(shape);
-        if(!generated) return std::unexpected(generated.error());
-        models_.emplace(key, std::make_shared<ModelAssetData>(std::move(*generated)));
-    }
+    auto generated = CachedModel(key, [shape]() { return PrimitiveMeshBuilder::Build(shape); });
+    if(!generated) return std::unexpected(generated.error());
     return Resolve(key, texture);
 }
 }

@@ -7,6 +7,7 @@
 #include <optional>
 #include "Graphics/Lighting/DDGISettings.h"
 #include "Graphics/Environment/EnvironmentLightingData.h"
+#include "Graphics/PostProcess/ScreenEffect.h"
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -81,11 +82,15 @@ namespace NexusEngine {
 		void SetName(const std::string& name) noexcept { name_ = name; }
 		std::optional<LevelLightingSettings>& Lighting() noexcept { return lighting_; }
 		const std::optional<LevelLightingSettings>& Lighting() const noexcept { return lighting_; }
+        /** Runtime-only effects, set from GameLevelSetup. Not serialized. */
+        std::vector<ScreenEffect>& ScreenEffects() noexcept { return screenEffects_; }
+        const std::vector<ScreenEffect>& ScreenEffects() const noexcept { return screenEffects_; }
 
 	private:
 		friend class LevelSerializer;
 		ReflectionRegistration reflection_; //< ホスト側の登録関数。Levelより長く生存するコードを参照する
 		std::optional<LevelLightingSettings> lighting_;
+        std::vector<ScreenEffect> screenEffects_;
 
 		std::string			   name_;						  //< Editorと診断に使うLevel名
 		std::unique_ptr<Scene> scene_;						  //< EntityとComponentを所有するECS World

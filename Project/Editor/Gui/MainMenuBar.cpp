@@ -32,7 +32,7 @@ void MainMenuBar::Draw(const LocalizationService& text, const EditorCommandRegis
     }
     if(ImGui::BeginMenu(text.Label("menu.edit", "Edit").c_str())) {
         item("edit.undo", "edit.undo"); item("edit.redo", "edit.redo");
-        ImGui::Separator(); item("edit.create", "scene.entity"); item("scene.model", "scene.model"); item("scene.camera", "scene.camera"); item("scene.light", "scene.light");
+        ImGui::Separator(); item("edit.create", "scene.entity"); item("scene.model", "scene.model"); item("scene.camera", "scene.camera"); item("scene.light", "scene.light"); item("scene.sky", "scene.sky");
         ImGui::Separator(); item("edit.cut", "edit.cut"); item("edit.copy", "edit.copy"); item("edit.paste", "edit.paste");
         item("edit.duplicate", "edit.duplicate"); item("edit.delete", "edit.delete");
         ImGui::Separator(); item("edit.preferences", "edit.preferences"); ImGui::EndMenu();
