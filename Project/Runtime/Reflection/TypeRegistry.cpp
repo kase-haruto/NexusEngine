@@ -2,6 +2,9 @@
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/FogComponent.h"
+#include "Graphics/Color/ColorSpace.h"
 #include <cmath>
 
 namespace NexusEngine {
@@ -190,5 +193,78 @@ void RegisterSceneTypes(TypeRegistry& registry) {
             if(conflict) return false; c->enabled = *v; return true;
         }, {}});
     registry.Register(std::move(light));
+    auto sky = Type<SkyRendererComponent>("SkyRenderer", "component.sky");
+    sky.add = [](Entity entity) {
+        auto* value = entity.AddComponent<SkyRendererComponent>();
+        if(!value) return false;
+        entity.GetScene()->ForEach<SkyRendererComponent>([&](Entity other, const auto& existing) {
+            if(other.GetId() != entity.GetId() && existing.enabled) value->enabled = false;
+        });
+        return true;
+    };
+    sky.properties.push_back(Property<SkyRendererComponent, float>("intensity", "property.intensity", PropertyKind::Float,
+        [](const auto& c) { return c.intensity; }, [](auto& c, float v) {
+            if(!std::isfinite(v) || v < 0) return false; c.intensity = v; return true;
+        }));
+    sky.properties.push_back({"enabled", "property.enabled", PropertyKind::Bool,
+        [](Entity entity) -> std::optional<PropertyValue> {
+            if(auto* c = entity.GetComponent<SkyRendererComponent>()) return c->enabled;
+            return std::nullopt;
+        }, [](Entity entity, const PropertyValue& value) {
+            auto* c = entity.GetComponent<SkyRendererComponent>(); const auto* v = std::get_if<bool>(&value);
+            if(!c || !v) return false;
+            bool conflict = false;
+            if(*v) entity.GetScene()->ForEach<SkyRendererComponent>([&](Entity other, const auto& existing) {
+                if(other.GetId() != entity.GetId() && existing.enabled) conflict = true;
+            });
+            if(conflict) return false; c->enabled = *v; return true;
+        }, {}});
+    registry.Register(std::move(sky));
+    auto fog = Type<FogComponent>("Fog", "component.fog");
+    fog.add = [](Entity entity) {
+        auto* value = entity.AddComponent<FogComponent>();
+        if(!value) return false;
+        entity.GetScene()->ForEach<FogComponent>([&](Entity other, const auto& existing) {
+            if(other.GetId() != entity.GetId() && existing.enabled) value->enabled = false;
+        });
+        return true;
+    };
+    fog.properties.push_back({"enabled", "property.enabled", PropertyKind::Bool,
+        [](Entity entity) -> std::optional<PropertyValue> {
+            if(auto* c = entity.GetComponent<FogComponent>()) return c->enabled;
+            return std::nullopt;
+        }, [](Entity entity, const PropertyValue& value) {
+            auto* c = entity.GetComponent<FogComponent>(); const auto* v = std::get_if<bool>(&value);
+            if(!c || !v) return false;
+            bool conflict = false;
+            if(*v) entity.GetScene()->ForEach<FogComponent>([&](Entity other, const auto& existing) {
+                if(other.GetId() != entity.GetId() && existing.enabled) conflict = true;
+            });
+            if(conflict || (*v && !c->IsValid())) return false;
+            c->enabled = *v; return true;
+        }, {}});
+    for(bool start : {true, false}) {
+        fog.properties.push_back(Property<FogComponent, float>(start ? "startDistance" : "endDistance",
+            start ? "fog.startDistance" : "fog.endDistance", PropertyKind::Float,
+            [start](const auto& c) { return start ? c.startDistance : c.endDistance; },
+            [start](auto& c, float v) {
+                auto next = c;
+                if(start) next.startDistance = v; else next.endDistance = v;
+                if(!next.IsValid()) return false;
+                c = next; return true;
+            }));
+    }
+    fog.properties.push_back(Property<FogComponent, std::array<float, 4>>("color", "fog.color", PropertyKind::Color,
+        [](const auto& c) {
+            auto rgb = ColorSpace::LinearToSrgb(c.color);
+            return std::array<float, 4>{rgb[0], rgb[1], rgb[2], 1};
+        }, [](auto& c, const auto& v) {
+            if(!std::ranges::all_of(v, [](float f) { return std::isfinite(f) && f >= 0 && f <= 1; })) return false;
+            auto next = c;
+            next.color = ColorSpace::SrgbToLinear(std::array<float, 3>{v[0], v[1], v[2]});
+            if(!next.IsValid()) return false;
+            c = next; return true;
+        }));
+    registry.Register(std::move(fog));
 }
 }

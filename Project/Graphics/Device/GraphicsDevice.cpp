@@ -129,7 +129,7 @@ namespace NexusEngine {
 			NEXUS_LOG_INFO("Graphics", "GPU Ray Tracing Support: unsupported; Raytracing Tier: Unsupported."); break;
 		}
 		GraphicsDebugConfigurator::ConfigureInfoQueue(device_.Get());
-		NEXUS_LOG_INFO("Graphics", "D3D12 Device initialized.");
+		NEXUS_LOG_SUCCESS("Graphics", "D3D12 Device initialized.");
 		return {};
 	}
 

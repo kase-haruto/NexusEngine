@@ -16,6 +16,7 @@ namespace NexusEngine {
 		uint32_t	 clientWidth  = 1280;
 		uint32_t	 clientHeight = 720;
 		bool		 resizable	  = true;
+		bool         visible     = true; //< 自動検証ではウィンドウを表示せず描画する
 	};
 
 } // namespace NexusEngine

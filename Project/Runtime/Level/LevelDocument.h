@@ -13,6 +13,8 @@ namespace NexusEngine {
  *---------------------------------------------------------------------------------------*/
 class LevelDocument final {
 public:
+    /** \brief ホストが選択した登録方針を、作成・読込するLevelへ引き継ぐ */
+    explicit LevelDocument(ReflectionRegistration reflection = {}) : reflection_(reflection) {}
     /** \brief 空Levelを作成する。成功時だけ現在のWorldを置換する */
     Result<void> Create(std::optional<std::string> name = std::nullopt);
     /** \brief 保存Levelを開く。失敗時は現在のdocumentを保持する */
@@ -25,6 +27,7 @@ public:
     const Level* GetLevel() const noexcept { return level_.get(); }
     std::optional<std::filesystem::path> GetFilePath() const { return filePath_; }
 private:
+    ReflectionRegistration reflection_; //< Documentと再生Worldで共用する型登録方針
     std::unique_ptr<Level> level_; //< documentが所有するWorld
     std::optional<std::filesystem::path> filePath_; //< 保存成功時だけ更新する
 };

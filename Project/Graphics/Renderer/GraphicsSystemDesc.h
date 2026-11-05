@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <filesystem>
 #include "Graphics/PostProcess/PostProcessSettings.h"
+#include "Graphics/PostProcess/ScreenEffect.h"
+#include <vector>
 
 namespace NexusEngine {
 
@@ -31,6 +33,7 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	struct GraphicsSystemDesc {
 		PostProcessSettings postProcess;
+        std::vector<ScreenEffect> screenEffects;
 		bool enableDebugLayer = kDefaultGraphicsDiagnosticsEnabled;
 		bool enableGpuBasedValidation = false;
 		bool enableDred = kDefaultGraphicsDiagnosticsEnabled;

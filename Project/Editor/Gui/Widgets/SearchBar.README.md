@@ -1,7 +1,7 @@
 # SearchBar
 
 > Editor統合追記: Outliner / Output Log / Content BrowserがこのWidgetを使用する。
-> 共通Styleは`Editor/ImGui/ImGuiStyle.cpp`へ移動し、元の配色と寸法を維持する。
+> 共通Styleは`Tools/UI/ImGuiStyle.h`に置き、Editor/Launcherで元の配色と寸法を共有する。
 > 寸法補正はWindow DPI × FontScaleMain（User UI Scale）に対応する。
 > 下記の過去のテスト実行記録とは別に、今回の変更はビルド・実行せず静的確認のみ実施した。
 

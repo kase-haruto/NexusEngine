@@ -83,7 +83,8 @@ namespace NexusEngine {
         for(const auto& directory : {"Foundation", "Core", "Platform", "Graphics", "Runtime", "Editor/ImGui", "Editor/Gui/Core"}) {
             for(const auto& entry : std::filesystem::recursive_directory_iterator(project / directory)) {
                 const auto relative = entry.path().lexically_relative(project).generic_string();
-                if(relative.starts_with("Runtime/Scene/Components/") || relative.starts_with("Runtime/Reflection/Generated/")) continue;
+                if(relative.starts_with("Runtime/Scene/Components/") || relative.starts_with("Runtime/Reflection/Generated/") ||
+                   relative.starts_with("Runtime/Reflection/EngineGenerated/")) continue;
                 if(entry.is_regular_file() && entry.path().extension() == ".h") reinstancing.ProtectFile(entry.path());
             }
         }
@@ -128,7 +129,7 @@ namespace NexusEngine {
             NEXUS_LOG_INFO("Live++", "Snapshot prepared; applying synchronized reload.");
             impl_->agent.Reload(lpp::LPP_RELOAD_BEHAVIOUR_WAIT_UNTIL_CHANGES_ARE_APPLIED);
             reinstancing.FinishAttempt();
-            if(reinstancing.Generation() != generation) NEXUS_LOG_INFO("Live++", "Reload completed; reflected instances are ready.");
+            if(reinstancing.Generation() != generation) NEXUS_LOG_SUCCESS("Live++", "Reload completed; reflected instances are ready.");
             else NEXUS_LOG_INFO("Live++", "No patch was applied; existing reflected instances retained.");
         }
 #endif

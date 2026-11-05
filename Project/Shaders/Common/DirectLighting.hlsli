@@ -2,7 +2,8 @@
 #define NEXUS_DIRECT_LIGHTING
 #include "SurfaceData.hlsli"
 #include "BRDF.hlsli"
-float3 EvaluateDirectLighting(SurfaceData s, float3 v, float3 l, float3 radiance, float visibility, bool legacy) {
+float3 EvaluateDirectLighting(SurfaceData s, float3 v, float3 l, float3 radiance, float visibility, bool legacy,
+                              float specularRoughness = -1) {
     float nl = saturate(dot(s.normal, l)), nv = saturate(dot(s.normal, v));
     if(nv <= 0) return 0;
     float3 h = SafeNormalize(v + l, s.normal);
@@ -10,7 +11,8 @@ float3 EvaluateDirectLighting(SurfaceData s, float3 v, float3 l, float3 radiance
     float dw = legacy ? pow(saturate(dot(s.normal, l) * 0.5 + 0.5), 2) : nl;
     float3 diffuse = (1 - f) * (1 - s.metallic) * LambertDiffuse(s.baseColor) * dw;
     if(!legacy) diffuse *= BurleyDiffuseFactor(nl,nv,saturate(dot(l,h)),s.roughness);
-    float3 specular = SpecularBRDF(saturate(dot(s.normal, h)), nv, nl, s.roughness, f) * nl;
+    float3 specular = SpecularBRDF(saturate(dot(s.normal, h)), nv, nl,
+        specularRoughness < 0 ? s.roughness : specularRoughness, f) * nl;
     return (diffuse + specular) * radiance * saturate(visibility);
 }
 #endif

@@ -32,6 +32,9 @@ namespace NexusEngine {
 		[[nodiscard]] virtual Result<void> Initialize(const GraphicsRenderExtensionContext& context) = 0;
 		virtual void BeginFrame() = 0;
 		virtual void Record(GraphicsContext& context) = 0;
+        /** Main commands are submitted. Additional windows may now read this frame's images.
+         * Submit on the shared direct queue; the frame fence is signaled after this callback. */
+        virtual void AfterSubmit() {}
 		virtual void Shutdown() noexcept = 0;
 	};
 } // namespace NexusEngine

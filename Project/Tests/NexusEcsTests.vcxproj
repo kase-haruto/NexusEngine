@@ -16,7 +16,7 @@
     <ClCompile Include="EcsTests.cpp" />
     <ClCompile Include="..\Foundation\Reflection\ReflectionTextArchive.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
-    <ClCompile Include="..\Runtime\Reflection\Generated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
@@ -30,4 +30,5 @@
   </ItemGroup>
   <Import Project="..\Reflection.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup><ClCompile Include="..\Game\Generated\GeneratedGameReflection.cpp" /></ItemGroup>
 </Project>

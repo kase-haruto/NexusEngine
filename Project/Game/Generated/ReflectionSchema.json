@@ -1,0 +1,7 @@
+[
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "NexusGame::MoveComponent",
+        "Id":  "\"Game.Move\""
+    }
+]

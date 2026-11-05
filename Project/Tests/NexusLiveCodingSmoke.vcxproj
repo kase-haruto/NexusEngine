@@ -27,7 +27,7 @@
     <ClCompile Include="..\Foundation\Reflection\ReflectionArchive.cpp" />
     <ClCompile Include="..\Foundation\Reflection\ReinstancingService.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
-    <ClCompile Include="..\Runtime\Reflection\Generated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
     <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
     <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
@@ -38,4 +38,5 @@
   <Import Project="..\LivePP.props" />
   <Import Project="..\Reflection.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup><ClCompile Include="..\Game\Generated\GeneratedGameReflection.cpp" /></ItemGroup>
 </Project>

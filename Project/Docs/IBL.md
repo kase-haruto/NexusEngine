@@ -71,7 +71,7 @@ stage制約が異なるため、この基底生成まで無理に同一関数へ
 BRDF.hlsliのGGX D、Smith visibility、Schlick F、Lambert、SpecularBRDFはいずれも光量や遮蔽を含まない。
 DirectLightingだけがNdotL、incident radiance、visibilityを掛ける。影は0～1の値でありRT/Shadow Mapの実装を知らない。
 Lambert標準への変更で旧sceneの側面は暗くなる。`legacyHalfLambert`を有効にすれば旧拡散の角度依存を比較できる。
-metallicによる拡散抑制、非金属F0=.04、roughnessの下限.05は維持する。
+metallicによる拡散抑制、非金属F0=.04を維持する。材質roughnessは0〜1を保持し、0ではprefilterのMip 0を参照する。直接光のGGX計算内だけalphaの下限.0025（知覚的roughness .05相当）を使い、ゼロ除算を避ける。Rasterの直接光には法線の画面微分によるspecular AAも適用する。これらの補正値でIBL・RT反射・roughness診断表示の入力を上書きしない。
 
 Emissive画像はsRGB、factorは線形。`KHR_materials_emissive_strength`もfactorに反映し、1を超える放射をHDR targetへ加算する。
 Occlusion画像はLinearのRを使い、`lerp(1, R, strength)`を間接光だけに適用する。
@@ -79,6 +79,19 @@ Specular AOは` saturate(pow(NdotV + AO, exp2(-16*roughness-1)) - 1 + AO) `と�
 これは幾何的な遮蔽の厳密解ではない。GI/Probeからの遮蔽を導入する場合はIndirectLighting内で置き換えられる。
 
 ## IBL生成と評価
+
+### カメラ移動時の安定性と白色金属
+
+Rasterの直接光のspecular AAは法線Nとhalf vector Hの差の画面微分を使う。
+視線方向の変化も含めることで、法線が一定の平面上でも画素より細いハイライトを緩和する。
+材質のroughness、IBLのMip選択、RT反射にはこの直接光用の補正値を渡さない。
+Shadow Mapはlight空間XYの中心をworld単位のtexel幅へ丸め、カメラ移動による格子のずれを抑える。
+Resolveは3×3 PCFの比較結果をbilinear補間し、texel境界での段階的な切替えを緩和する。
+RT soft shadowの有限sampleによるノイズや、鏡面IBLのaliasingを解消する時間方向の蓄積は含まない。
+
+metallic=1では拡散反射が0になり、baseColorは鏡面反射の色になる。
+白色・roughness=0は白い拡散面ではなく白色の鏡として扱うため、暗い環境を映す方向が暗くなること自体は正しい。
+環境強度やGIの鏡面可視率も結果に影響する。環境が一様な場合に白色金属が環境のradianceを保持することをGPUテストで確認する。
 
 | 生成物 | 寸法 / format | 内容 |
 |---|---|---|

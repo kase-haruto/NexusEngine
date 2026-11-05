@@ -10,7 +10,7 @@ namespace NexusEngine {
 
 		constexpr std::string_view ToString(const LogLevel level) noexcept {
 			constexpr std::array names = {
-				"Trace", "Debug", "Info", "Warning", "Error", "Critical"
+				"Trace", "Debug", "Info", "Success", "Warning", "Error", "Critical"
 			};
 			return names.at(static_cast<size_t>(level));
 		}

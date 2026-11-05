@@ -20,6 +20,9 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class EditorSession final {
 	public:
+		/** \brief 編集・再生Worldが使う型登録を起動ホストから受け取る */
+		explicit EditorSession(ReflectionRegistration reflection = {}) : reflection_(reflection) {}
+		[[nodiscard]] ReflectionRegistration GetReflectionRegistration() const noexcept { return reflection_; }
 		/** \brief 既存選択を解除して編集用Worldを生成する */
 		[[nodiscard]] Result<void> Create();
 		/** Open an existing level document; preserve the current session on failure. */
@@ -68,6 +71,7 @@ namespace NexusEngine {
 		[[nodiscard]] bool SetStaticLighting(PersistentId id, bool enabled);
 
 	private:
+		ReflectionRegistration reflection_; //< 編集・Play・復元で同じ登録関数を使う
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
 		GameRuntime playRuntime_; //< Game単体起動と共通の実行基盤
 		std::optional<Error> playError_; //< Play開始失敗をEditor UIへ伝える

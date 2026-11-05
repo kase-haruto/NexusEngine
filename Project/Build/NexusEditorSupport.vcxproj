@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Develop|x64"><Configuration>Develop</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{5418C00A-C795-4B81-A1D4-C712FF027C8F}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'!='Release'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="Nexus.Common.props" />
+  <ItemGroup>
+    <ClCompile Include="..\Editor\Services\StandaloneSession.cpp" />
+    <ClCompile Include="..\Editor\Services\StandaloneCommands.cpp" />
+    <ClCompile Include="..\Editor\Core\EditorApplication.cpp" />
+    <ClCompile Include="..\Editor\Core\EditorReinstancing.cpp" />
+    <ClCompile Include="..\Editor\Core\EditorSession.cpp" />
+    <ClCompile Include="..\Editor\Core\EditorWorkspace.cpp" />
+    <ClCompile Include="..\Editor\Core\EditorWorkspaceReinstancing.cpp" />
+    <ClCompile Include="..\Editor\Gui\Core\GuiContext.cpp" />
+    <ClCompile Include="..\Editor\Gui\DockingLayout.cpp" />
+    <ClCompile Include="..\Editor\Gui\EditorChrome.cpp" />
+    <ClCompile Include="..\Editor\Gui\MainMenuBar.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\DetailsPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\OutlinerPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\PanelRegistry.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\UtilityPanels.cpp" />
+    <ClCompile Include="..\Editor\Gui\Properties\MaterialPage.cpp" />
+    <ClCompile Include="..\Editor\Gui\Properties\PropertyCategoryRegistry.cpp" />
+    <ClCompile Include="..\Editor\Gui\Properties\PropertyCategoryView.cpp" />
+    <ClCompile Include="..\Editor\Gui\Properties\PropertyPages.cpp" />
+    <ClCompile Include="..\Editor\Gui\PropertyDrawerRegistry.cpp" />
+    <ClCompile Include="..\Editor\Gui\ReflectedPropertyEditor.cpp" />
+    <ClCompile Include="..\Editor\Gui\ViewportTools.cpp" />
+    <ClCompile Include="..\Editor\Gui\Widgets\AssetPropertyWidget.cpp" />
+    <ClCompile Include="..\Editor\Gui\Widgets\PropertyWidgets.cpp" />
+    <ClCompile Include="..\Editor\Gui\Widgets\SearchBar.cpp" />
+    <ClCompile Include="..\Editor\ImGui\ImGuiRenderer.cpp" />
+    <ClCompile Include="..\Editor\ImGui\ImGuiStyle.cpp" />
+    <ClCompile Include="..\Editor\Runtime\ViewportSession.cpp" />
+    <ClCompile Include="..\Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="..\Editor\Services\EditorDocumentService.cpp" />
+    <ClCompile Include="..\Editor\Services\EditorSettings.cpp" />
+    <ClCompile Include="..\Editor\Services\LocalizationService.cpp" />
+    <ClCompile Include="..\Editor\Services\PropertyEditService.cpp" />
+    <ClCompile Include="..\Editor\Services\SceneEditService.cpp" />
+    <ClCompile Include="..\Editor\Services\TransformGizmoTransaction.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_dx12.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_win32.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_demo.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_draw.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_tables.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_widgets.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\ImGuizmo\ImGuizmo.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="NexusRuntime.vcxproj" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <ClCompile Include="..\Tools\Project\ProjectRegistry.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Tools\Engine\EngineRegistry.cpp" /><ClCompile Include="..\Tools\Project\ProjectBuild.cpp" /><ClCompile Include="..\Tools\Project\SourceCodeEditor.cpp" /></ItemGroup>  <ItemGroup>
+    <ClCompile Include="..\Editor\Services\PostProcessGraphDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\PostProcessGraphPanel.cpp" />
+    <ClCompile Include="..\ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemGroup>
+</Project>

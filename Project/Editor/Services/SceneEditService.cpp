@@ -3,6 +3,7 @@
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include <algorithm>
 
@@ -56,7 +57,7 @@ bool SceneEditService::Execute(std::string label, const std::function<bool(Level
     }
 }
 bool SceneEditService::Create(std::string_view kind, std::string_view name) {
-    if(kind != "Entity" && kind != "Camera" && kind != "DirectionalLight" && kind != "Model") return false;
+    if(kind != "Entity" && kind != "Camera" && kind != "DirectionalLight" && kind != "Model" && kind != "Sky") return false;
     if(name.size() > 1024 || name.find('\0') != name.npos) return false;
     return Execute("edit.create", [this, kind, name](Level& level) {
         auto entity = level.CreateEntity(std::string(name.empty() ? kind : name));
@@ -72,6 +73,13 @@ bool SceneEditService::Create(std::string_view kind, std::string_view name) {
             entity.GetComponent<TransformComponent>()->translation = {0, 2, -10};
         }
         if(kind == "Model" && !entity.AddComponent<PrimitiveRenderComponent>()) return false;
+        if(kind == "Sky") {
+            auto* sky = entity.AddComponent<SkyRendererComponent>();
+            if(!sky) return false;
+            level.GetScene()->ForEach<SkyRendererComponent>([&](Entity other, const auto& existing) {
+                if(other.GetId() != entity.GetId() && existing.enabled) sky->enabled = false;
+            });
+        }
         if(kind == "DirectionalLight") {
             auto* light = entity.AddComponent<DirectionalLightComponent>();
             if(!light) return false;

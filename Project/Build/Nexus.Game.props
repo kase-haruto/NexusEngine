@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Game側のlocal propsまたは環境変数からEngine Rootを選択する。Gameには絶対パスを保存しない。 -->
+  <PropertyGroup>
+    <NexusEngineAssociation Condition="'$(NexusEngineAssociation)'==''">development</NexusEngineAssociation>
+    <NexusWithEditor Condition="'$(NexusWithEditor)'==''">false</NexusWithEditor>
+  </PropertyGroup>
+  <Import Project="$(NexusEngineRoot)\Build\Nexus.Common.props" />
+  <ItemGroup Condition="'$(NexusEngineAssociation)'=='development'">
+    <ProjectReference Include="$(NexusEngineRoot)\Build\NexusRuntime.vcxproj" />
+    <ProjectReference Include="$(NexusEngineRoot)\Build\NexusEditorSupport.vcxproj" Condition="'$(NexusWithEditor)'=='true'" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(NexusEngineAssociation)'=='installed'">
+    <Link>
+      <AdditionalLibraryDirectories>$(NexusEngineRoot)\Lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>NexusRuntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(NexusWithEditor)'=='true'">NexusEditorSupport.lib;NexusRuntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateNexusAssociation" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(NexusEngineAssociation)'!='development' and '$(NexusEngineAssociation)'!='installed'" Text="Unknown NexusEngineAssociation. Explicitly select development or installed." />
+    <Error Condition="'$(NexusEngineAssociation)'=='installed' and !Exists('$(NexusEngineRoot)\Lib\$(Platform)\$(Configuration)\NexusRuntime.lib')" Text="The selected installed engine does not contain this platform/configuration. No fallback will be used." />
+  </Target>
+</Project>

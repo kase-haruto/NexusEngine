@@ -79,7 +79,7 @@ namespace NexusEngine {
 		using Microsoft::WRL::ComPtr;
 		// Renderer replacement and camera previews reuse the same device-independent DXIL.
 		// Failed compiles are never cached; source/include edits invalidate successful ones.
-		using CacheKey = std::tuple<std::filesystem::path, std::wstring, std::wstring, bool>;
+        using CacheKey = std::tuple<std::filesystem::path, std::wstring, std::wstring, bool, std::vector<std::filesystem::path>>;
 		static std::mutex cacheMutex;
 		static std::map<CacheKey, CachedShader> cache;
 		static size_t cachedBytes = 0;
@@ -87,7 +87,14 @@ namespace NexusEngine {
 		std::unique_lock lock(cacheMutex);
 		SourceStamp sourceStamp;
 		const bool cacheable = Stamp(desc.sourcePath, sourceStamp);
-		const CacheKey key{cacheable ? sourceStamp.path : desc.sourcePath, desc.entryPoint, desc.targetProfile, desc.optimize};
+        std::vector<std::filesystem::path> includes;
+        for(const auto& directory : desc.includeDirectories) {
+            std::error_code error;
+            auto absolute = std::filesystem::absolute(directory, error);
+            if(error) return std::unexpected(Error(ErrorCategory::Graphics, kSourceLoadFailed, "Invalid shader include directory."));
+            includes.push_back(absolute.lexically_normal());
+        }
+        const CacheKey key{cacheable ? sourceStamp.path : desc.sourcePath, desc.entryPoint, desc.targetProfile, desc.optimize, includes};
 		if(auto found = cache.find(key); found != cache.end()) {
 			if(found->second.IsCurrent()) return found->second.bytecode;
 			cachedBytes -= found->second.bytecode.size();
@@ -129,6 +136,9 @@ namespace NexusEngine {
 		arguments.push_back(L"-Qembed_debug");
 #endif
 		arguments.push_back(desc.optimize ? L"-O3" : L"-Od");
+        for(const auto& directory : includes) {
+            arguments.push_back(L"-I"); arguments.push_back(directory.c_str());
+        }
 
 		// 標準Include HandlerによりShaderファイルからの相対#includeをDXCへ解決させる。
 		ComPtr<IDxcIncludeHandler> includeHandler;

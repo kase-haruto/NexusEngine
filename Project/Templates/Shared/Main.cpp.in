@@ -1,0 +1,4 @@
+#include "Game/GameModule.h"
+#define NEXUS_PROJECT_REFLECTION Game::Reflection()
+#define NEXUS_PROJECT_SETUP Game::Setup
+#include "Core/Hosting/ProjectHost.inl"

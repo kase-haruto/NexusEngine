@@ -15,14 +15,23 @@
 
 namespace NexusEngine {
 	namespace {
+		ImVec4 LogColor(LogLevel level) {
+			switch(level) {
+			case LogLevel::Success: return {0, 1, 0, 1};
+			case LogLevel::Warning: return {1, 1, 0, 1};
+			case LogLevel::Error:
+			case LogLevel::Critical: return {1, 0, 0, 1};
+			default: return {1, 1, 1, 1};
+			}
+		}
 		std::string LogLine(const OwnedLogRecord& record, const LocalizationService& text) {
 			auto	time = std::chrono::system_clock::to_time_t(record.timestamp);
 			std::tm local{};
 			localtime_s(&local, &time);
-			static constexpr const char* keys[] = {"log.trace", "log.debug", "log.info", "log.warning", "log.error", "log.critical"};
+			static constexpr const char* keys[] = {"log.trace", "log.debug", "log.info", "log.success", "log.warning", "log.error", "log.critical"};
 			auto						 level	= static_cast<size_t>(record.level);
 			std::ostringstream			 out;
-			out << std::put_time(&local, "%H:%M:%S") << " [" << text.Text(keys[level < 6 ? level : 5]) << "] ["
+			out << std::put_time(&local, "%H:%M:%S") << " [" << text.Text(keys[level < std::size(keys) ? level : std::size(keys) - 1]) << "] ["
 				<< record.category << "] " << record.message << " (" << record.source << ')';
 			return out.str();
 		}
@@ -34,7 +43,7 @@ namespace NexusEngine {
 		ImGui::SameLine();
 		ImGui::Checkbox(context.text.Label("log.autoscroll", "auto").c_str(), &autoScroll_);
 		UI::SearchBar("OutputLogSearch", search_, context.text.Text("search").c_str());
-		static constexpr const char* keys[] = {"log.trace", "log.debug", "log.info", "log.warning", "log.error", "log.critical"};
+		static constexpr const char* keys[] = {"log.trace", "log.debug", "log.info", "log.success", "log.warning", "log.error", "log.critical"};
 		for(size_t i = 0; i < levels_.size(); ++i) {
 			if(i) ImGui::SameLine();
 			ImGui::Checkbox(context.text.Label(keys[i], keys[i]).c_str(), &levels_[i]);
@@ -56,7 +65,7 @@ namespace NexusEngine {
 				do {
 					auto end  = line.find('\n', start);
 					auto part = line.substr(start, end == line.npos ? line.npos : end - start);
-					if(search_.empty() || part.find(search_) != part.npos) lines_.push_back(std::move(part));
+					if(search_.empty() || part.find(search_) != part.npos) lines_.push_back({std::move(part), record.level});
 					if(end == line.npos) break;
 					start = end + 1;
 				} while(start <= line.size());
@@ -68,11 +77,15 @@ namespace NexusEngine {
 		ImGuiListClipper clipper;
 		clipper.Begin(static_cast<int>(lines_.size()));
 		while(clipper.Step())
-			for(int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) ImGui::TextUnformatted(lines_[row].c_str());
+			for(int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+				ImGui::PushStyleColor(ImGuiCol_Text, LogColor(lines_[row].level));
+				ImGui::TextUnformatted(lines_[row].text.c_str());
+				ImGui::PopStyleColor();
+			}
 		if(autoScroll_ && atBottom) ImGui::SetScrollHereY(1);
 		ImGui::EndChild();
 		if(copy) {
-			for(const auto& line : lines_) clipboard += line + '\n';
+			for(const auto& line : lines_) clipboard += line.text + '\n';
 			ImGui::SetClipboardText(clipboard.c_str());
 		}
 	}
@@ -290,6 +303,7 @@ namespace NexusEngine {
 			changed |= ImGui::Checkbox(context.text.Label("settings.layout", "layout").c_str(), &settings_.user.autoSaveLayout);
 		} else if(category_ == 1) {
 			changed |= ImGui::Checkbox(context.text.Label("settings.gizmo", "gizmo").c_str(), &settings_.editor.gizmo);
+            changed |= ImGui::Checkbox(context.text.Label("settings.grid", "grid").c_str(), &settings_.editor.grid);
 			changed |= ImGui::Checkbox(context.text.Label("settings.viewportStartup", "viewportStartup").c_str(), &settings_.editor.viewport);
 		} else {
 			const char* modes[] = {"Off", "DDGI", "RTGI", "Baked"};
@@ -371,16 +385,21 @@ namespace NexusEngine {
 				const auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings;
 				if(showMessages) {
 					ImGui::SetCursorScreenPos(diagnosticOrigin);
-					ImGui::BeginChild("ViewportDiagnostics", diagnosticSize, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding, flags);
+					ImGui::BeginChild("ViewportDiagnostics", diagnosticSize, ImGuiChildFlags_AlwaysUseWindowPadding, flags | ImGuiWindowFlags_NoBackground);
 					for(size_t i = 0; i < shown; ++i) {
 						auto message = messages[i].text;
 						std::replace(message.begin(), message.end(), '\n', ' ');
 						std::replace(message.begin(), message.end(), '\r', ' ');
+						const auto label = context.text.Text(messages[i].error ? "log.error" : "log.warning") + " " + message;
+						const auto position = ImGui::GetCursorScreenPos();
+						ImGui::GetWindowDrawList()->AddText({position.x + 1, position.y + 1}, IM_COL32(0, 0, 0, 210), label.c_str());
 						ImGui::TextColored(messages[i].error ? ImVec4(1, .32f, .3f, 1) : ImVec4(1, .78f, .25f, 1),
-										   "%s %s", context.text.Text(messages[i].error ? "log.error" : "log.warning").c_str(), message.c_str());
+										   "%s", label.c_str());
 						if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s", messages[i].text.c_str());
 					}
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 					if(ImGui::SmallButton(context.text.Text("viewport.openLog").c_str())) context.commands.Execute("viewport.openLog");
+					ImGui::PopStyleColor();
 					if(messages.size() > shown) {
 						ImGui::SameLine();
 						ImGui::TextDisabled("+%zu", messages.size() - shown);

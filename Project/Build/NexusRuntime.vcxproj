@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Develop|x64"><Configuration>Develop</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{4D30A9D0-9442-4A0E-AA0D-61CCE130CBF0}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'!='Release'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="Nexus.Common.props" />
+  <ItemGroup>
+    <ClCompile Include="..\Core\Framework\NexusFramework.cpp" />
+    <ClCompile Include="..\Foundation\Error\Error.cpp" />
+    <ClCompile Include="..\Foundation\IPC\RuntimeProtocol.cpp" />
+    <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\DebugOutputLogSink.cpp" />
+    <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
+    <ClCompile Include="..\Foundation\Logging\LogTextFormatter.cpp" />
+    <ClCompile Include="..\Foundation\Reflection\ReflectionArchive.cpp" />
+    <ClCompile Include="..\Foundation\Reflection\ReflectionTextArchive.cpp" />
+    <ClCompile Include="..\Foundation\Reflection\ReinstancingService.cpp" />
+    <ClCompile Include="..\Foundation\Utility\String\ConvertString.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Lighting\DDGIProcessor.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshShaderPipeline.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\RayTracing\OpticalBackend.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\RayTracing\RayTracingScene.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Selection\SelectionOutline.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\RayTracedShadowTechnique.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\ShadowBackend.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\ShadowMapTechnique.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Viewport\ViewportTarget.cpp" />
+    <ClCompile Include="..\Graphics\Core\CommandQueue.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\BindlessDescriptorTable.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\DescriptorAllocator.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\DescriptorManager.cpp" />
+    <ClCompile Include="..\Graphics\Descriptor\TransientDescriptorArena.cpp" />
+    <ClCompile Include="..\Graphics\Device\GraphicsAdapterSelector.cpp" />
+    <ClCompile Include="..\Graphics\Device\GraphicsDebugConfigurator.cpp" />
+    <ClCompile Include="..\Graphics\Device\GraphicsDevice.cpp" />
+    <ClCompile Include="..\Graphics\Environment\EnvironmentLighting.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\BakedLighting.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\BakedLightingAsset.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\LightBaker.cpp" />
+    <ClCompile Include="..\Graphics\Lighting\LightmapGeometry.cpp" />
+    <ClCompile Include="..\Graphics\Meshlet\MeshletBuilder.cpp" />
+    <ClCompile Include="..\Graphics\Model\GltfModelLoader.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelAssetLibrary.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelLoader.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelResource.cpp" />
+    <ClCompile Include="..\Graphics\Model\ModelThumbnail.cpp" />
+    <ClCompile Include="..\Graphics\Model\PrimitiveMeshBuilder.cpp" />
+    <ClCompile Include="..\Graphics\Pipeline\GraphicsPipeline.cpp" />
+    <ClCompile Include="..\Graphics\Pipeline\PipelineLayout.cpp" />
+    <ClCompile Include="..\Graphics\Pipeline\RootSignature.cpp" />
+    <ClCompile Include="..\Graphics\Presentation\SwapChain.cpp" />
+    <ClCompile Include="..\Graphics\RayTracing\OpticalSystem.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\GraphicsContext.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\GraphicsResourceFactory.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\GraphicsSystem.cpp" />
+    <ClCompile Include="..\Graphics\Renderer\PrimitiveRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Grid\GridRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Sky\SkyRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\ConstantBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\HdrImage.cpp" />
+    <ClCompile Include="..\Graphics\Resource\ImmediateUploadContext.cpp" />
+    <ClCompile Include="..\Graphics\Resource\IndexBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\IndexBufferUploader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\MeshResource.cpp" />
+    <ClCompile Include="..\Graphics\Resource\TextureResource.cpp" />
+    <ClCompile Include="..\Graphics\Resource\TextureUploader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\VertexBuffer.cpp" />
+    <ClCompile Include="..\Graphics\Resource\VertexBufferUploader.cpp" />
+    <ClCompile Include="..\Graphics\Resource\WicImageDecoder.cpp" />
+    <ClCompile Include="..\Graphics\Shader\Shader.cpp" />
+    <ClCompile Include="..\Graphics\Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="..\Graphics\Shader\ShaderReflector.cpp" />
+    <ClCompile Include="..\Graphics\Shadow\ShadowSystem.cpp" />
+    <ClCompile Include="..\Platform\Development\LiveCodingAgent.cpp" />
+    <ClCompile Include="..\Platform\Window\ProjectWindow.cpp" />
+    <ClCompile Include="..\Platform\Window\StartupSplash.cpp" />
+    <ClCompile Include="..\Runtime\Application\GameApplication.cpp" />
+    <ClCompile Include="..\Runtime\Application\GameRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Level\Level.cpp" />
+    <ClCompile Include="..\Runtime\Level\LevelDocument.cpp" />
+    <ClCompile Include="..\Runtime\Level\LevelSerializer.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="..\Runtime\Rendering\RenderSceneExtractor.cpp" />
+    <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="..\Runtime\Scene\SystemScheduler.cpp" />
+    <ClCompile Include="..\Runtime\Scene\TransformSystem.cpp" />
+    <ClCompile Include="..\Runtime\Scene\TransformUpdateSystem.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+
+  </ItemGroup>
+<Target Name="GenerateEngineTypes" BeforeTargets="ClCompile"><Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusEngineRoot)\Tools\Reflection\Generate-Reflection.ps1&quot; -ProjectRoot &quot;$(NexusEngineRoot)\.&quot; -Module Engine" /></Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectJson.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectSerializer.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectContext.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectService.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Platform\Process\Process.cpp" /></ItemGroup>  <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
+</Project>

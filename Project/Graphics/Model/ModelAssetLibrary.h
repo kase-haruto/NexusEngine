@@ -9,8 +9,11 @@
 #include <span>
 #include <functional>
 #include <optional>
+#include <future>
+#include <mutex>
 
 namespace NexusEngine {
+struct PrimitiveRenderItem;
 /*-----------------------------------------------------------------------------------------
  * ModelAssetLibrary
  * - 相対Asset参照をCPUモデルへ解決し、材質Variantを一つのUpload snapshotへ統合する
@@ -18,26 +21,28 @@ namespace NexusEngine {
  *---------------------------------------------------------------------------------------*/
 class ModelAssetLibrary final {
 public:
-    struct Range { uint32_t begin = 0, end = 0, materialBegin = 0; };
+    struct Range { uint32_t begin = 0, end = 0, materialBegin = 0, animationBegin = 0, animationCount = 0;
+        void ResolveAnimation(PrimitiveRenderItem& item) const;
+    };
     struct Request { PrimitiveShape shape; std::string mesh, texture; bool operator==(const Request&) const = default; };
     ModelAssetLibrary(std::filesystem::path root, const ModelAssetData& initial);
     using ReloadStartup = std::function<Result<ModelAssetData>()>;
     ModelAssetLibrary(std::shared_ptr<ModelAssetData> initial, std::filesystem::path root, ReloadStartup reloadStartup = {});
     /** \brief Root内の既存ファイルへ正規化する。外部やsymlink脱出を拒否する */
     Result<std::string> Reference(const std::filesystem::path& path) const;
-    /** \brief 対応形式を検証しCPU cacheへロードする */
+    /** \brief 対応形式を検証し共有CPU cacheへロードする。未完了なら待つためWorkerから呼ぶ。 */
     Result<const ModelAssetData*> Model(const std::string& reference);
-    /** 読み込みを発生させず、公開済みCPUキャッシュだけを参照する。 */
+    /** 読み込みや完了待ちを発生させず、共有CPUキャッシュだけを参照する。 */
     const ModelAssetData* FindModel(const std::string& reference) const;
     /** 描画済みsnapshotに存在する範囲だけを返す。未準備のアセットはnullopt。 */
     std::optional<Range> FindRange(PrimitiveShape shape, const std::string& mesh, const std::string& texture) const;
     Result<const std::vector<uint8_t>*> Texture(const std::string& reference);
     /** \brief MeshとBase Color画像の組から統合Node範囲を返す */
     Result<Range> Resolve(const std::string& mesh, const std::string& texture);
-    /** Active built-in shapes share the normal material/upload path and are regenerated after eviction. */
+    /** Built-in shapes share the normal material/upload path and source cache. */
     Result<Range> Resolve(PrimitiveShape shape, const std::string& mesh, const std::string& texture);
-    /** Call before resolving any frame ranges. Unused variants and source caches are released.
-     * Previously returned source pointers are invalidated; shared upload snapshots stay valid. */
+    /** Call before resolving any frame ranges. Unused upload variants are released.
+     * Source models stay cached until the last library copy is destroyed. */
     void Retain(std::span<const Request> requests);
     /** 空の描画Entityを除いた要求集合が、現在のGPUアセット集合と同じか確認する。 */
     bool MatchesRequests(std::span<const Request> requests) const;
@@ -48,7 +53,14 @@ public:
 private:
     std::filesystem::path root_; //< 正規化Assetルート
     std::shared_ptr<ModelAssetData> aggregate_; //< Published snapshots share storage; changes use copy-on-write
-    std::map<std::string, std::shared_ptr<const ModelAssetData>> models_; //< Immutable source models
+    using ModelResult = Result<std::shared_ptr<const ModelAssetData>>;
+    struct SourceCache {
+        std::mutex mutex;
+        std::map<std::string, std::shared_future<ModelResult>> models;
+    };
+    // Main view, thumbnails and cancelled preparations share completed and in-flight loads.
+    std::shared_ptr<SourceCache> sources_ = std::make_shared<SourceCache>();
+    Result<const ModelAssetData*> CachedModel(const std::string& key, const ReloadStartup& load);
     std::map<std::string, std::vector<uint8_t>> textures_; //< Decode検証済み画像
     std::map<std::string, uint64_t> textureIds_; //< 同じ画像を複数材質へ割り当てる際の共有識別子
     std::map<std::pair<std::string, std::string>, Range> ranges_; //< 永続参照から実行時範囲への対応

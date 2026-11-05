@@ -32,10 +32,20 @@ void MainMenuBar::Draw(const LocalizationService& text, const EditorCommandRegis
     }
     if(ImGui::BeginMenu(text.Label("menu.edit", "Edit").c_str())) {
         item("edit.undo", "edit.undo"); item("edit.redo", "edit.redo");
-        ImGui::Separator(); item("edit.create", "scene.entity"); item("scene.model", "scene.model"); item("scene.camera", "scene.camera"); item("scene.light", "scene.light");
+        ImGui::Separator(); item("edit.create", "scene.entity"); item("scene.model", "scene.model"); item("scene.camera", "scene.camera"); item("scene.light", "scene.light"); item("scene.sky", "scene.sky");
         ImGui::Separator(); item("edit.cut", "edit.cut"); item("edit.copy", "edit.copy"); item("edit.paste", "edit.paste");
         item("edit.duplicate", "edit.duplicate"); item("edit.delete", "edit.delete");
         ImGui::Separator(); item("edit.preferences", "edit.preferences"); ImGui::EndMenu();
+    }
+    if(ImGui::BeginMenu(text.Label("menu.play", "Play").c_str())) {
+        if(ImGui::BeginMenu(text.Label("play.mode", "PlayMode").c_str())) {
+            for(const auto* id : {"play.mode.editor","play.mode.window"})
+                if(ImGui::MenuItem(text.Label(id,id).c_str(),nullptr,commands.IsChecked(id),commands.CanExecute(id))) commands.Execute(id);
+            ImGui::EndMenu();
+        }
+        ImGui::Separator(); item("play.start","play.start");
+        item(commands.IsChecked("play.pause") ? "play.resume" : "play.pause","play.pause"); item("play.stop","play.stop");
+        ImGui::EndMenu();
     }
     if(ImGui::BeginMenu(text.Label("menu.window", "Window").c_str())) {
         for(auto& entry : panels.Entries()) ImGui::MenuItem(text.Label(entry.TitleKey(), entry.Id()).c_str(), nullptr, &entry.isOpen);

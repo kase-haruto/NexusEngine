@@ -1,6 +1,6 @@
 # ライティングとPBR
 
-EditorでGIをOffにした場合は、遮蔽のない環境光を通常の5%に抑える。
+Editor内実行・別ウィンドウのRuntime実行とも、GIをOffにした場合は、遮蔽のない環境光を通常の5%に抑える。
 GI用に設定した強い空の光が、壁や天井を無視して室内全体を明るくすることを防ぐための近似。
 HDR環境とHDR未指定時の空の両方に適用し、直接光・発光には掛けない。
 `RenderScene::fallbackEnvironmentIntensity` で倍率を指定する。DDGI・RTGI・ベイクGIの選択中は適用しない。
@@ -122,5 +122,7 @@ Metallic/Roughnessと法線画像にはそれぞれ独立したSamplerを使用�
 `RenderScene::ambientIrradiance` は簡易な一定環境拡散光で、RasterとRTで共有します。Sponzaデモの既定値は `{1.5, 1.8, 2.4}` です。EditorのShadowsパネルにある **Fallback Sky Intensity** で環境光の強さを調整できます（既定3、範囲0～10）。環境光を強めると影の中の拡散反射が明るくなります。この調整値は実行中のみ保持し、Levelには保存しません。HDR環境を指定した場合は、この一定環境光をDiffuse/Specular IBLで置き換えます。Editorデモは[DDGI](DDGI.md)を選択し、DXRでプローブを動的に更新します。ベイクGIとpixel RTGIは比較用に選択できます。DDGIの収束には数フレームが必要です。GIの設定・検証・制約は[拡散GI設計](GlobalIllumination.md)を参照してください。通常材質の粗さ付き環境反射とOpticalMaterial/DXRによる鏡映りの合成規則は[PBR / IBL設計](IBL.md)を参照してください。
 
 参照: [Khronos glTF PBR](https://www.khronos.org/gltf/pbr)、[glTF 2.0仕様](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)。
+
+ラフネス0は材質評価と環境反射でそのまま保持します。直接光のGGXでは数値安定用のalpha下限を局所的に適用し、Rasterでは法線の画面微分から分散を推定して直接光の鏡面ローブを広げます。曲面や法線マップ上の極端に細いハイライトのちらつきを抑えつつ、IBLの鏡面反射をぼかさない構成です。手法の参考: [Filamentのspecular anti-aliasing](https://google.github.io/filament/Filament.html)。回帰テスト: `Generated/Outputs/GraphicsTests/Debug/NexusGraphicsTests.exe --polished`。
 
 検証: Debug/x64ビルド、ECSテスト、DXCコンパイル、GPU Validation付き描画テスト。GPU読み戻しで粗さ・金属度・法線マップの応答、フラット法線の維持、Metallic/Roughnessチャンネル、接線あり/なしの一致、VS/Mesh Shaderの一致を確認しています。影のRT/Shadow Map切替、鏡・ガラスの反射/屈折/吸収、Sponzaのマップ読み込み、ResizeとDescriptor解放も確認しています。

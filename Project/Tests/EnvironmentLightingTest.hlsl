@@ -49,4 +49,11 @@ void main(uint id : SV_DispatchThreadID) {
             results[id] = float4(indirect.specular,0);
         }
     }
+    // A white perfect metal in a uniform environment reflects that environment;
+    // it must not lose its energy merely because diffuse reflection is zero.
+    if(id == 36) {
+        SurfaceData s = MakeSurface(1,1,0,float3(0,0,1),1,0);
+        IndirectLighting indirect = EvaluateIndirectLighting(s,float3(0,0,1),environment,0);
+        results[id] = float4(indirect.specular,indirect.diffuse.r);
+    }
 }

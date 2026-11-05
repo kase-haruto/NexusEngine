@@ -17,6 +17,8 @@
 #include "Graphics/Lighting/BakedLightingData.h"
 #include "Graphics/Lighting/DDGISettings.h"
 #include "Graphics/Environment/EnvironmentLightingData.h"
+#include "Graphics/PostProcess/ScreenEffect.h"
+#include "Graphics/Grid/GridSettings.h"
 
 namespace NexusEngine {
 
@@ -63,6 +65,8 @@ namespace NexusEngine {
         MaterialOverride material; //< 描画Instanceの材質値
         uint32_t materialBegin = 0; //< Source Slotから統合Slotへのoffset
         PrimitiveShape shape = PrimitiveShape::Asset;
+        struct AnimationSample { uint32_t index = 0; float time = 0; bool loop = true; };
+        std::optional<AnimationSample> animation;
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -71,9 +75,12 @@ namespace NexusEngine {
 	 * - Scene、Entity、Component Storageの型とLifetimeには依存しない
 	 *---------------------------------------------------------------------------------------*/
 	struct RenderScene {
+        std::vector<ScreenEffect> screenEffects;
+        GridSettings grid;
+        std::optional<float> skyIntensity; //< Present only when an enabled SkyRenderer component was extracted.
 		DirectionalLightData directionalLight; //< API非依存Lightingと影の共通入力
 		std::array<float, 3> ambientIrradiance {0.03f, 0.03f, 0.03f};
-		float fallbackEnvironmentIntensity = 1; //< GI未選択時の未遮蔽環境光倍率。GI用の空の強度とは分離する
+		float fallbackEnvironmentIntensity = .05f; //< Editor・Runtime共通。GI未選択時の未遮蔽環境光倍率
 		FogSettings fog;
 		BakedLightingSettings bakedLighting; //< 保存済みのライトマップ・プローブ設定
 		DDGISettings ddgi; //< 動的な照度フィールド。GPU参照は保持しない

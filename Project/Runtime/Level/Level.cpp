@@ -8,6 +8,7 @@
 #include "LevelSerializer.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/TransformUpdateSystem.h"
+#include "Runtime/Scene/AnimationUpdateSystem.h"
 
 namespace NexusEngine {
 	namespace {
@@ -15,12 +16,14 @@ namespace NexusEngine {
 		constexpr int32_t kInvalidDeltaTime = 31;
 	}
 
-	Level::Level(std::string name) : name_(std::move(name)) {
+	Level::Level(std::string name, ReflectionRegistration reflection) : reflection_(reflection), name_(std::move(name)) {
 		// 組み込みSystemはLevelごとに所有し、複数World（Editor/PIE）の状態を分離する。
 		scheduler_.AddSystem<TransformUpdateSystem>();
+		scheduler_.AddSystem<AnimationUpdateSystem>();
 	}
 
 	Result<void> Level::LoadEmpty() {
+        screenEffects_.clear();
 		lighting_.reset();
 		scene_ = std::make_unique<Scene>();
 		state_ = LevelState::Loaded;
@@ -39,6 +42,7 @@ namespace NexusEngine {
 	}
 
 	void Level::Unload() noexcept {
+        screenEffects_.clear();
 		lighting_.reset();
 		// World単位でStorageを解放すると、Entityごとの仮想Remove走査を避けてLevel破棄を線形解放にできる。
 		scene_.reset();

@@ -85,6 +85,12 @@ void RegisterPropertyPages(PropertyCategoryRegistry& registry) {
     registry.Register({"Light", "properties.light", 500,
         [](const auto& context) { return HasType(context, "DirectionalLight"); },
         [](const auto& context) { DrawType(context, "DirectionalLight"); }, LightIcon, {"DirectionalLight"}});
+    registry.Register({"Sky", "component.sky", 550,
+        [](const auto& context) { return HasType(context, "SkyRenderer"); },
+        [](const auto& context) { DrawType(context, "SkyRenderer"); }, LightIcon, {"SkyRenderer"}});
+    registry.Register({"Fog", "component.fog", 560,
+        [](const auto& context) { return HasType(context, "Fog"); },
+        [](const auto& context) { DrawType(context, "Fog"); }, RenderingIcon, {"Fog"}});
     registry.Register({"Other", "properties.other", 10000,
         [&registry](const auto& context) {
             return std::ranges::any_of(context.types.Types(), [&](const auto& item) { return IsOtherType(context, registry, item.first, item.second); });

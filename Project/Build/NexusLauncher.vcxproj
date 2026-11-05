@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Develop|x64"><Configuration>Develop</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{170F4854-C548-4E77-94F8-49F195F418C8}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'!='Release'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="Nexus.Common.props" />
+  <ItemDefinitionGroup><ResourceCompile><AdditionalIncludeDirectories>$(NexusEngineRoot)\Launcher;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ResourceCompile></ItemDefinitionGroup>
+  <ItemGroup><ResourceCompile Include="..\Launcher\NexusLauncher.rc" /></ItemGroup>
+  <ItemDefinitionGroup><Manifest><AdditionalManifestFiles>$(ProjectDir)..\Launcher\NexusLauncher.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles></Manifest></ItemDefinitionGroup>
+  <ItemDefinitionGroup><Link><SubSystem>Windows</SubSystem><EntryPointSymbol>wmainCRTStartup</EntryPointSymbol><AdditionalDependencies>d3d11.lib;d3dcompiler.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Launcher\main.cpp" />
+    <ClCompile Include="..\Launcher\LauncherWindow.cpp" />
+    <ClCompile Include="..\Launcher\LauncherApplication.cpp" />
+    <ClCompile Include="..\Launcher\LauncherMigrationPanel.cpp" />
+    <ClCompile Include="..\Platform\Window\FileDialog.cpp" />
+    <ClCompile Include="..\Tools\Project\ProjectRegistry.cpp" />
+    <ClCompile Include="..\Tools\Project\ProjectTemplates.cpp" />
+    <ClCompile Include="..\Tools\Project\ProjectBuild.cpp" />
+    <ClCompile Include="..\Tools\Project\ProjectMigration.cpp" />
+    <ClCompile Include="..\Tools\Engine\EngineRegistry.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_draw.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_tables.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_widgets.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_win32.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_dx11.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+    <ProjectReference Include="NexusRuntime.vcxproj" />
+  </ItemGroup>
+  <Target Name="CopyShaderCompiler" AfterTargets="Build"><Copy SourceFiles="$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll;$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" /></Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

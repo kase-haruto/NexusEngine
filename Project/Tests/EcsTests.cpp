@@ -1,18 +1,25 @@
 // c++
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <cstdlib>
+#include <crtdbg.h>
 
 // engine
 #include "Runtime/Level/Level.h"
+#include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Model/ModelAssetReference.h"
 #include "Graphics/Model/ModelInstance.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
 
@@ -40,6 +47,111 @@ namespace NexusEngine::Tests {
 	 * \note 専用Test runner導入後に自動実行へ接続する。Runtime本体からは呼び出さない
 	 */
 	void RunEcsTests() {
+        {
+            Level level("Animation players"); assert(level.LoadEmpty());
+            auto first = level.CreateEntity("First");
+            auto second = level.CreateEntity("Second");
+            assert(first.AddComponent<PrimitiveRenderComponent>());
+            assert(second.AddComponent<PrimitiveRenderComponent>());
+            assert(first.AddComponent<AnimationPlayerComponent>());
+            assert(second.AddComponent<AnimationPlayerComponent>());
+            // Fetch after additions: packed component storage may have reallocated.
+            auto* a = first.GetComponent<AnimationPlayerComponent>();
+            auto* b = second.GetComponent<AnimationPlayerComponent>();
+            b->playbackSpeed = 2;
+            assert(level.Update(.25f));
+            assert(a->time == .25f && b->time == .5f);
+            a->Pause(); assert(level.Update(.25f));
+            assert(a->time == .25f && b->time == 1);
+            a->Resume(); assert(level.Update(.25f)); assert(a->time == .5f);
+            b->Stop(); assert(b->time == 0 && !b->playing);
+            b->Play(2); assert(b->time == 0 && b->animationIndex == 2 && b->playing);
+            RenderScene frame; RenderSceneExtractor extractor;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(frame.primitives.size() == 2 && frame.primitives[0].animation);
+            assert(frame.primitives[0].animation->time == .5f && !frame.primitives[0].staticLighting);
+            const auto id = first.GetComponent<PersistentIdComponent>()->value;
+            const auto path = std::filesystem::path("Generated/AnimationPlayer.level");
+            std::filesystem::create_directories(path.parent_path());
+            a->loop = false; assert(level.Save(path));
+            Level restored; assert(restored.Load(path));
+            auto* saved = restored.FindEntity(id).GetComponent<AnimationPlayerComponent>();
+            assert(saved && saved->time == .5f && saved->playing && !saved->loop);
+            auto clone = level.GetScene()->Clone(); assert(clone);
+            assert(extractor.ExtractInto(*clone, 1, frame));
+            assert(frame.primitives[0].animation->time == .5f);
+            assert(level.Update(.25f));
+            assert(extractor.ExtractInto(*clone, 1, frame));
+            assert(frame.primitives[0].animation->time == .5f); // PIE world isolation.
+            saved->playbackSpeed = -1; assert(!restored.Save(path));
+            assert(first.RemoveComponent<AnimationPlayerComponent>());
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(!frame.primitives[0].animation && frame.primitives[0].staticLighting);
+        }
+        {
+            Level level("Fog scene"); assert(level.LoadEmpty());
+            RenderScene frame; RenderSceneExtractor extractor;
+            frame.fog.enabled = true;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame) && !frame.fog.enabled);
+            auto entity = level.CreateEntity("Fog");
+            auto id = entity.GetComponent<PersistentIdComponent>()->value;
+            auto* fog = entity.AddComponent<FogComponent>();
+            fog->startDistance = 3; fog->endDistance = 25; fog->color = {.1f, .3f, .5f};
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(frame.fog.enabled && frame.fog.startDistance == 3 && frame.fog.endDistance == 25);
+            const auto path = std::filesystem::path("Generated/FogComponent.level");
+            std::filesystem::create_directories(path.parent_path()); assert(level.Save(path));
+            Level restored; assert(restored.Load(path));
+            auto* saved = restored.FindEntity(id).GetComponent<FogComponent>();
+            assert(saved && saved->color == frame.fog.color && saved->startDistance == 3 && saved->endDistance == 25);
+            saved->endDistance = saved->startDistance;
+            assert(!extractor.ExtractInto(*restored.GetScene(), 1, frame));
+            saved->endDistance = 25; saved->enabled = false;
+            assert(extractor.ExtractInto(*restored.GetScene(), 1, frame) && !frame.fog.enabled);
+            saved->enabled = true;
+            auto second = restored.CreateEntity("Second Fog"); assert(second.AddComponent<FogComponent>());
+            assert(!extractor.ExtractInto(*restored.GetScene(), 1, frame));
+            assert(restored.DestroyEntity(second));
+            assert(restored.FindEntity(id).RemoveComponent<FogComponent>());
+            assert(extractor.ExtractInto(*restored.GetScene(), 1, frame) && !frame.fog.enabled);
+        }
+        {
+            Level level("Sky scene"); assert(level.LoadEmpty());
+            RenderScene frame; RenderSceneExtractor extractor;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(!frame.skyIntensity);
+            auto entity = level.CreateEntity("Sky");
+            auto id = entity.GetComponent<PersistentIdComponent>()->value;
+            entity.AddComponent<SkyRendererComponent>()->intensity = 0.75f;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(frame.skyIntensity == 0.75f);
+            const auto path = std::filesystem::path("Generated/SkyComponent.level");
+            std::filesystem::create_directories(path.parent_path());
+            assert(level.Save(path));
+            Level restored; assert(restored.Load(path));
+            auto* sky = restored.FindEntity(id).GetComponent<SkyRendererComponent>();
+            assert(sky && sky->enabled && sky->intensity == 0.75f);
+            auto clone = restored.GetScene()->Clone();
+            assert(clone && extractor.ExtractInto(*clone, 1, frame));
+            assert(frame.skyIntensity == 0.75f);
+            sky->enabled = false;
+            assert(extractor.ExtractInto(*restored.GetScene(), 1, frame) && !frame.skyIntensity);
+            sky->enabled = true; sky->intensity = -1;
+            assert(!extractor.ExtractInto(*restored.GetScene(), 1, frame));
+            assert(!restored.Save(path));
+            sky->intensity = 1;
+            auto second = restored.CreateEntity("Second Sky");
+            assert(second.AddComponent<SkyRendererComponent>());
+            assert(!extractor.ExtractInto(*restored.GetScene(), 1, frame));
+            assert(restored.DestroyEntity(second));
+            assert(restored.FindEntity(id).RemoveComponent<SkyRendererComponent>());
+            assert(extractor.ExtractInto(*restored.GetScene(), 1, frame) && !frame.skyIntensity);
+            for(const auto* pathName : {"Project/Templates/Blank/Startup.level", "Project/Templates/Basic3D/Startup.level"}) {
+                Level defaults; assert(defaults.Load(pathName)); assert(defaults.Update(0));
+                assert(extractor.ExtractInto(*defaults.GetScene(), 1, frame));
+                assert(frame.skyIntensity == 1 && frame.camera);
+            }
+        }
 		// SceneのCPU姿勢更新にGPU Resourceが不要なことを検証する。
 		ModelAssetData asset;
 		asset.nodes.emplace_back();
@@ -60,6 +172,15 @@ namespace NexusEngine::Tests {
 		assert(pose.Play(0, false).has_value());
 		pose.Update(2.0f);
 		assert(pose.GetNodeWorldTransforms()[0].At(3, 0) == 2.0f);
+        assert(pose.Sample(0, 2.25f, true));
+        assert(std::abs(pose.GetNodeWorldTransforms()[0].At(3, 0) - .5f) < .0001f);
+        assert(pose.Sample(0, 20, false));
+        assert(pose.GetNodeWorldTransforms()[0].At(3, 0) == 2);
+        ModelInstance independentPose; assert(independentPose.Initialize(asset));
+        assert(independentPose.Sample(0, .75f));
+        assert(independentPose.GetNodeWorldTransforms()[0].At(3, 0) == 1.5f);
+        assert(pose.GetNodeWorldTransforms()[0].At(3, 0) == 2);
+        assert(!pose.Sample(1, 0)); assert(!pose.Sample(0, -1));
 		pose.Shutdown();
 		asset.nodes[0].parentIndex = 0;
 		assert(!pose.Initialize(asset).has_value()); // 不正な階層をGPU生成前に拒否する。
@@ -102,7 +223,8 @@ namespace NexusEngine::Tests {
 		assert(parent.IsAlive() && child.IsAlive());
 		assert(child.AddComponent<HierarchyComponent>(HierarchyComponent { parent.GetId() }) != nullptr);
 		const PersistentId savedParentId = parent.GetComponent<PersistentIdComponent>()->value;
-		const std::filesystem::path path = std::filesystem::temp_directory_path() / "nexus_ecs_test.level";
+		const auto path = std::filesystem::temp_directory_path() /
+			("nexus_ecs_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".level");
 		assert(source.Save(path).has_value());
 
 		Level restored;
@@ -219,9 +341,20 @@ namespace NexusEngine::Tests {
 		assert(!extractor.ExtractInto(*lighting.GetScene(), 1, litScene).has_value());
 		std::filesystem::remove(path);
 
-		// Startup content is authored in the existing DemoLevel file.
+		// 制作中のDemoLevelの内容ではなく、テスト専用の起動Worldを保存・復元する。
+		const auto buildFixture = [](Level& level, uint32_t first, uint32_t count) {
+			assert(level.LoadEmpty());
+			assert(level.CreateEntity("Camera").AddComponent<CameraComponent>());
+			assert(level.CreateEntity("Light").AddComponent<DirectionalLightComponent>());
+			for(uint32_t node = first; node < first + count; ++node) {
+				auto* primitive = level.CreateEntity("Mesh").AddComponent<PrimitiveRenderComponent>();
+				assert(primitive); primitive->nodeIndex = node; primitive->meshAsset = kStartupModelAssetReference;
+			}
+		};
+		Level startup("DemoLevel"); buildFixture(startup, 0, 3);
+		assert(startup.Save(path));
 		Level demo;
-		assert(demo.Load("Project/Resources/Assets/Levels/DemoLevel.json").has_value());
+		assert(demo.Load(path).has_value());
 		assert(demo.GetName() == "DemoLevel");
 		assert(demo.Update(0).has_value());
 		RenderScene demoSnapshot;
@@ -234,8 +367,12 @@ namespace NexusEngine::Tests {
 			demoNodes[primitive.nodeIndex] = true;
 		}
 		assert(demoNodes[0] && demoNodes[1] && demoNodes[2]);
+		Level pbrFixture("PBRTestLevel"); buildFixture(pbrFixture, 3, 13);
+		pbrFixture.Lighting().emplace();
+		pbrFixture.Lighting()->environment.imagePath = "Resources/Assets/Environments/PBRStudio.hdr";
+		assert(pbrFixture.Save(path));
 		Level pbr;
-		assert(pbr.Load("Project/Resources/Assets/Levels/PBRTestLevel.json").has_value());
+		assert(pbr.Load(path).has_value());
 		assert(pbr.Update(0).has_value());
 		RenderScene pbrSnapshot;
 		assert(extractor.ExtractInto(*pbr.GetScene(),16.f/9.f,pbrSnapshot).has_value());
@@ -247,8 +384,14 @@ namespace NexusEngine::Tests {
 		assert(pbrRestored.GetName()=="PBRTestLevel");
 		assert(pbr.Lighting() && pbr.Lighting()->environment.imagePath=="Resources/Assets/Environments/PBRStudio.hdr");
 		assert(pbrRestored.Lighting()->environment.imagePath==pbr.Lighting()->environment.imagePath);
+		Level sponzaFixture("SponzaLevel"); buildFixture(sponzaFixture, 0, 3);
+		sponzaFixture.Lighting().emplace();
+		sponzaFixture.Lighting()->skyIrradiance = {4, 4.8f, 6.4f};
+		sponzaFixture.Lighting()->probes.counts = {16, 6, 8};
+		sponzaFixture.Lighting()->probes.raysPerProbe = 64;
+		assert(sponzaFixture.Save(path));
 		Level sponzaLevel;
-		assert(sponzaLevel.Load("Project/Resources/Assets/Levels/SponzaLevel.json").has_value());
+		assert(sponzaLevel.Load(path).has_value());
 		assert(sponzaLevel.Lighting() && sponzaLevel.Lighting()->IsValid());
 		assert(sponzaLevel.Lighting()->skyIrradiance[0]==4 && sponzaLevel.Lighting()->probes.counts[0]==16);
 		assert(sponzaLevel.Lighting()->probes.raysPerProbe==64);
@@ -271,6 +414,9 @@ namespace NexusEngine::Tests {
 
 #if defined(NEXUS_ECS_TEST_MAIN)
 int main() {
+	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 	NexusEngine::Tests::RunEcsTests();
 	return 0;
 }

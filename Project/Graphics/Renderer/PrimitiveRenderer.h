@@ -27,6 +27,7 @@
 #include "Graphics/Meshlet/MeshShaderPipeline.h"
 #include "Graphics/Meshlet/MeshletResource.h"
 #include "Graphics/Selection/SelectionOutline.h"
+#include "Graphics/Grid/GridRenderer.h"
 
 namespace NexusEngine {
 	enum class TextureColorSpace : uint8_t;
@@ -74,8 +75,12 @@ namespace NexusEngine {
 		 * \param context 現在Frameに描画命令を記録するBackend非依存Context
 		 */
 		void Render(GraphicsContext& context) override;
+        std::span<const ScreenEffect> GetScreenEffects() const noexcept override {
+            return renderScene_ ? std::span<const ScreenEffect>(renderScene_->screenEffects) : std::span<const ScreenEffect>{};
+        }
 		/** \brief Application所有の値snapshotを接続する。Rendererより長く生存すること */
 		void SetRenderScene(const RenderScene* scene) noexcept { renderScene_ = scene; }
+        const RenderScene* GetRenderScene() const noexcept override { return renderScene_; }
 		/** \brief Editorは設定/統計だけを利用する。ImGuiをRuntimeへ持ち込まない */
 		[[nodiscard]] ShadowSystem& GetShadows() noexcept { return shadows_; }
 		[[nodiscard]] OpticalSystem& GetOptics() noexcept { return optics_; }
@@ -95,6 +100,7 @@ namespace NexusEngine {
 
 		/** \brief Scene所有のCPUモデルと更新済み姿勢を接続する。初期化前に設定し、Shutdownまで保持すること */
 		void SetModelInput(const ModelAssetData* asset, const ModelInstance* pose) noexcept {
+			if(modelAsset_ != asset) animationPoses_.clear();
 			modelAsset_ = asset;
 			modelPose_ = pose;
 		}
@@ -135,6 +141,7 @@ namespace NexusEngine {
 
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
+        GridRenderer grid_;
         SelectionOutline selectionOutline_; //< 独立Maskから深度なしで外周を合成
         std::vector<SelectionOutlineDraw> selectionDraws_; //< 通常Drawの確定済みCBをFrame内だけ借用する
 		MeshShaderPipeline meshPipeline_; //< 独立 AS/MS/PS 経路
@@ -153,6 +160,7 @@ namespace NexusEngine {
 		ModelResource model_; //< Scene指定モデルのGPU Resource
 		const ModelAssetData* modelAsset_ = nullptr; //< Sceneが選択・ロードしたCPU Asset（非所有）
 		const ModelInstance* modelPose_ = nullptr; //< Sceneが更新するCPU姿勢（非所有）
+        std::vector<ModelInstance> animationPoses_; //< Per draw object, reused between frames.
 		std::vector<MaterialGpuResource> materialResources_; //< Material slot別Texture/Sampler所有
         std::vector<std::unique_ptr<ConstantBuffer>> drawBuffers_; //< Nodeを共有するMeshもDrawごとに独立したFrame安全な転送領域
 		PrimitiveDrawData drawData_; //< 抽出済み行列とMaterial parameterのCPU側転送値

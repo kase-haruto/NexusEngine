@@ -1,0 +1,7 @@
+#pragma once
+#include "Foundation/Reflection/ReflectionMarkers.h"
+namespace Game {
+/** Game固有Componentの登録・Details・保存の最小例。 */
+struct HealthComponent { int health = 100; bool IsValid() const noexcept { return health >= 0; } };
+}
+NEXUS_REFLECT_COMPONENT(Game::HealthComponent, "Game.Health", "Health", health)

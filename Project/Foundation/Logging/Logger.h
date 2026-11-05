@@ -73,6 +73,8 @@ namespace NexusEngine {
 	::NexusEngine::Logger::Get().Log(::NexusEngine::LogLevel::Debug, category, message, std::source_location::current())
 #define NEXUS_LOG_INFO(category, message) \
 	::NexusEngine::Logger::Get().Log(::NexusEngine::LogLevel::Info, category, message, std::source_location::current())
+#define NEXUS_LOG_SUCCESS(category, message) \
+	::NexusEngine::Logger::Get().Log(::NexusEngine::LogLevel::Success, category, message, std::source_location::current())
 #define NEXUS_LOG_WARNING(category, message) \
 	::NexusEngine::Logger::Get().Log(::NexusEngine::LogLevel::Warning, category, message, std::source_location::current())
 #define NEXUS_LOG_ERROR(category, message) \

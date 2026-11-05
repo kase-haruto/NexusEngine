@@ -1,4 +1,4 @@
-#include "Runtime/Reflection/Generated/GeneratedReflection.h"
+#include "Game/GameReflection.h"
 #include "Runtime/Reflection/ComponentReflection.h"
 #include "Runtime/Reflection/ReflectedInspector.h"
 #include "Foundation/Reflection/ReflectionArchive.h"
@@ -48,13 +48,13 @@ void ComponentLayoutMigration() {
     child.AddComponent<HierarchyComponent>()->parent = parent.GetId();
     child.AddComponent<PersistentIdComponent>()->value = {UINT64_MAX, UINT64_MAX - 1};
     child.AddComponent<OldComponent>()->amount = 123.5f;
-    ComponentReflection oldRegistry; RegisterGeneratedComponents(oldRegistry); oldRegistry.Register<OldComponent>();
+    ComponentReflection oldRegistry; NexusGame::RegisterComponents(oldRegistry); oldRegistry.Register<OldComponent>();
     auto snapshot = oldRegistry.Capture(scene);
     assert(Throws([&] { scene.ForEach<OldComponent>([&](Entity, OldComponent&) { scene.ReleaseComponentStorages(); }); }));
     assert(child.GetComponent<OldComponent>()->amount == 123.5f);
     scene.ReleaseComponentStorages();
     assert(child.IsAlive() && !scene.GetEntity(oldId).IsAlive());
-    ComponentReflection nextRegistry; RegisterGeneratedComponents(nextRegistry); nextRegistry.Register<NewComponent>();
+    ComponentReflection nextRegistry; NexusGame::RegisterComponents(nextRegistry); nextRegistry.Register<NewComponent>();
     nextRegistry.Restore(scene, snapshot);
     assert(child.GetComponent<NewComponent>()->amount == 123.5f && child.GetComponent<NewComponent>()->added);
     assert(child.GetComponent<HierarchyComponent>()->parent == parent.GetId());
@@ -166,7 +166,7 @@ void WorkspaceLifecycle() {
     // 配置は描画コールバックの寿命と分離し、再生成後の同じセクションIDへ引き継ぐ。
     assert(workspace->Toolbar().SetOffset("viewport.tools", {32, 16}));
     auto workspaceState = workspace->CaptureForReinstancing();
-    ComponentReflection registry; RegisterGeneratedComponents(registry);
+    ComponentReflection registry; NexusGame::RegisterComponents(registry);
     const auto edit = registry.Capture(*editScene), play = registry.Capture(*playScene);
     workspace->ReleaseForReinstancing(); workspace.reset();
     editScene->ReleaseComponentStorages(); playScene->ReleaseComponentStorages();

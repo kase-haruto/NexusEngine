@@ -14,6 +14,7 @@
 #include "Editor/Services/EditorSettings.h"
 #include "Editor/Services/NotificationService.h"
 #include "Editor/Services/PropertyEditService.h"
+#include "Editor/Services/PostProcessGraphDocument.h"
 #include "Editor/Services/SceneEditService.h"
 #include "EditorSession.h"
 #include "Foundation/Logging/BufferedLogSink.h"
@@ -30,7 +31,8 @@ namespace NexusEngine {
 		explicit EditorWorkspace(EditorSession& session);
 		~EditorWorkspace() noexcept;
 		/** \brief ImGui初期化後にPanelとサービスを接続する */
-		void Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions = {});
+		void Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions = {},
+		                const std::filesystem::path& engineRoot = {}, const ProjectContext* project = nullptr);
 		/** \brief OSとメニューから同じ未保存確認を要求する */
 		void RequestExit();
 		/** \brief OSのDPI変更を次frameのStyleへ反映する */
@@ -51,9 +53,12 @@ namespace NexusEngine {
 		void							   ReleaseForReinstancing() noexcept;
 		void							   RestoreAfterReinstancing(const ReflectionValue& snapshot);
 		PanelRegistry&					   Panels() { return panels_; }
+        PostProcessGraphDocument& RenderGraph() noexcept { return renderGraph_; }
 		const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
 		MainMenuBar&					   Menu() { return menu_; }
 		EditorCommandRegistry&			   Commands() { return commands_; }
+		/** \brief 拡張commandの失敗も既存のログと通知へ表示する */
+		void Report(const Result<void>& result);
 		/** 機能の初期化時に、共通ツールバーへボタンや専用UIを登録するための窓口。 */
 		EditorToolbarRegistry& Toolbar() {
 			return toolbar_;
@@ -65,6 +70,9 @@ namespace NexusEngine {
 		PropertyCategoryRegistry& PropertyCategories() { return categories_; }
 
 	private:
+		enum class PlayMode { Editor, SeparateWindow };
+		PlayMode playMode_ = PlayMode::Editor; //< 実行中は変更しないEditorセッション内の選択
+		std::unique_ptr<AssetCatalog> levels_; //< Asset Rootと独立したLevel保存先の一覧
 		void							   RegisterCommands();
 		void							   RegisterToolbar();
 		void							   DrawFileDialog();
@@ -72,7 +80,6 @@ namespace NexusEngine {
 		void							   ReportDocumentError();
 		void							   OpenLevel(const std::filesystem::path& path);
 		void							   RememberLevel(const std::filesystem::path& path);
-		void							   Report(const Result<void>& result);
 		void							   ApplyUserSettings();
 		void							   SynchronizeDocument();
 		EditorSession&					   session_;					   //< Application所有
@@ -90,6 +97,7 @@ namespace NexusEngine {
 		EditorCommandRegistry			   commands_;					   //< Menuの操作窓口
 		EditorToolbarRegistry			   toolbar_;					   //< コマンドボタンと機能別UIの登録先
 		ConsoleService					   console_;					   //< 登録済みConsoleのみ
+        PostProcessGraphDocument renderGraph_;
 		PanelRegistry					   panels_;						   //< Panel所有
 		MainMenuBar						   menu_;						   //< メニュー描画
 		DockingLayout					   layout_;						   //< 配置永続化

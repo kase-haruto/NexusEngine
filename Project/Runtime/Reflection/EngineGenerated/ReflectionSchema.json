@@ -1,0 +1,82 @@
+[
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "AnimationPlayerComponent",
+        "Id":  "\"AnimationPlayer\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "CameraComponent",
+        "Id":  "\"Camera\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "DirectionalLightComponent",
+        "Id":  "\"DirectionalLight\""
+    },
+    {
+        "Kind":  "VALUE",
+        "Type":  "DirectionalLightData",
+        "Id":  "\"DirectionalLightData\""
+    },
+    {
+        "Kind":  "VALUE",
+        "Type":  "EntityId",
+        "Id":  "\"EntityId\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "FogComponent",
+        "Id":  "\"Fog\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "HierarchyComponent",
+        "Id":  "\"Hierarchy\""
+    },
+    {
+        "Kind":  "VALUE",
+        "Type":  "MaterialOverride",
+        "Id":  "\"MaterialOverride\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "NameComponent",
+        "Id":  "\"Name\""
+    },
+    {
+        "Kind":  "VALUE",
+        "Type":  "PersistentId",
+        "Id":  "\"PersistentId\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "PersistentIdComponent",
+        "Id":  "\"PersistentIdComponent\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "PrimitiveRenderComponent",
+        "Id":  "\"PrimitiveRender\""
+    },
+    {
+        "Kind":  "VALUE",
+        "Type":  "Quaternion",
+        "Id":  "\"Quaternion\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "SkyRendererComponent",
+        "Id":  "\"SkyRenderer\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "TransformComponent",
+        "Id":  "\"Transform\""
+    },
+    {
+        "Kind":  "VALUE",
+        "Type":  "Vector3",
+        "Id":  "\"Vector3\""
+    }
+]

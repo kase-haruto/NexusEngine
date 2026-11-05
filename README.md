@@ -104,9 +104,51 @@ chore: ビルド設定を更新
 
 ## ビルド方法
 
-ビルド手順は、開発環境が整い次第追記します。
+Windows x64、C++23/v145を含むVisual Studio、Windows SDK（DXC）、PowerShell 7を使用します。リポジトリRootから、必要なターゲットだけを順にビルドできます。
+
+```powershell
+foreach($target in @('NexusProjectTool','NexusEditor','NexusRuntimeHost','NexusLauncher')) {
+    & ./Project/Tests/Invoke-GraphicsBuild.ps1 -Project "Project/Build/$target.vcxproj" -Configuration Debug
+    if($LASTEXITCODE -ne 0) { throw "Build failed: $target" }
+}
+& ./Generated/Modules/x64/Debug/NexusLauncher/NexusLauncher.exe
+```
+
+初回はLauncherのEngine library → Add an engineでDevelopment repositoryとしてこのリポジトリを登録するか、Installed SDKのmanifestを登録します。Create projectでEngineとテンプレートを明示選択し、作成後にProjectsからOpenします。SDK同梱の`Bin/NexusLauncher.exe`も利用できます。
+
+作成後のC++開発はGame側の`Game.slnx`をVisual Studioで開き、`GameEditor`をスタートアップにしてF5実行できます。単体ゲームのデバッグは`GameRuntime`を選びます。毎回Launcherから開く必要はありません。Engine登録は共有ID/バージョンをPC内のSource/SDK配置へ結び付けるローカル情報で、オンライン認証ではありません。
+
+標準の入口をデスクトップ → Project Browser → Editorにする場合は`Project/Tools/Project/Create-LauncherShortcut.ps1`でshortcutを作成できます。Editorの`Tools → Open game in Visual Studio`から、現在のGameのSolutionをIDEで開けます。具体的な操作と別プロセスRuntime通信の現在の範囲は[開発フロー](Project/Docs/DevelopmentWorkflow.md)を参照してください。
+
+Editorの`実行 → 実行モード`で`エディタ内`または`別ウィンドウ`を選び、共通の`実行 / 停止`ボタン（F5 / Shift+F5）を使います。別ウィンドウではGameRuntimeだけを非同期に増分ビルド・検証して保存済み起動Levelを実行します。停止ボタンはビルド取消にも対応し、一時停止はエディタ内の再生だけが対象です。
+
+VSで`Project/Build/NexusEngineModules.slnx`を開く場合は、NexusLauncherをスタートアップProjectに指定します。既存サンプル用のSampleGameEditor/Runtimeも保持しています。通常のGameは生成されたGameEditor/GameRuntimeで起動し、特定Gameの型を汎用ホストへ暗黙に混在させません。
+
+ここに示す手順は個別ターゲットのビルドです。この作業中は指示どおりSolution全体のビルドや既存成果物のCleanを実行していません。
 
 ## ドキュメント
+
+Project System導入に向けた現状調査と、Engine / Game分離の変更対象・ビルド方式・移行順序は、
+[Project System：現状調査とPhase 1設計](Project/Docs/ProjectSystemSurvey.md)を参照してください（実装前の調査・設計記録）。
+
+Phase 1の実装構成、個別ビルド、独立Gameの参照方法と制限は、
+[Engine / Game分離](Project/Docs/EngineGameSeparation.md)を参照してください。
+
+`.nxproject`、Project作成CLI、最近使ったProject、Editor / Runtimeへの接続は、
+[Project System（Phase 2）](Project/Docs/ProjectSystem.md)を参照してください。
+
+テンプレート生成、Engine登録、Game固有ホストの個別ビルドと起動は
+[Project Workflow](Project/Docs/ProjectWorkflow.md)、Project Browserの操作と検証は
+[Launcher](Project/Docs/Launcher.md)を参照してください。
+安定版SDKの発行とDevelopment / Installedの参照方法は
+[Installed Engine](Project/Docs/InstalledEngine.md)を参照してください。
+Engine変更前のレビュー、明示適用、バックアップと旧版復旧は
+[Project Migration](Project/Docs/ProjectMigration.md)を参照してください。
+GPU起動、構成別の実行結果、別プロセスRuntimeの通常終了は
+[Project GPU / standalone検証](Project/Docs/ProjectGpuValidation.md)を参照してください。
+独立Git管理、SDK/Gameの移動、clone後の再バインドは
+[Project Git Workflow](Project/Docs/ProjectGitWorkflow.md)を参照してください。
+実装・検証済みの範囲と未完了の作業は[Project System進捗](Project/Docs/ProjectSystemWorkStatus.md)に記録しています。
 
 EditorのPlayとゲーム単体起動で共通のSystemを動かす方法は、[ゲーム実行基盤](Project/Docs/GameRuntime.md)を参照してください。
 

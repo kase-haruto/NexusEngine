@@ -3,6 +3,7 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <filesystem>
 #include "ThirdParty/imgui/imgui.h"
 #include "Graphics/Resource/WicImageDecoder.h"
 
@@ -21,6 +22,8 @@ namespace NexusEngine {
 	class ImGuiRenderer final :
 		public IGraphicsRenderExtension, public UI::ITextureProvider {
 	public:
+		/** \brief Engine内蔵フォントの絶対パスを初期化前に指定する */
+		void SetFontDirectory(std::filesystem::path directory) { fontDirectory_ = std::move(directory); }
 		static constexpr UI::TextureHandle SceneViewportTexture{1}; //< backend内だけで解決する安定token
 		static constexpr UI::TextureHandle CameraPreviewTexture{2}; //< カメラプレビュー専用の安定token
 		/** \brief Graphics所有のViewport画像をImGuiの不透明画像参照へ変換する */
@@ -41,6 +44,7 @@ namespace NexusEngine {
 		 * \brief ImGui描画コマンドをCommandListへ記録する
 		 */
 		void Record(GraphicsContext& context) override;
+        void AfterSubmit() override;
 		/**
 		 * \brief ImGui backendを終了する
 		 */
@@ -56,6 +60,10 @@ namespace NexusEngine {
 		[[nodiscard]] bool HandleWindowMessage(void* window, uint32_t message, uintptr_t wParam, intptr_t lParam) noexcept;
 
 	private:
+		void DrawTitleBar();
+		void* nativeWindow_ = nullptr;
+		std::filesystem::path fontDirectory_; //< GameのAsset Rootとは独立したUI資源
+		std::vector<std::vector<char>> fontData_; //< 動的Glyph生成が参照するためContext終了まで保持する
 		GraphicsSystem* graphicsSystem_ = nullptr; //< 画像解決先。資源を所有しない
         std::map<std::string, std::unique_ptr<ImTextureData>> previews_; //< Backend停止まで安定した参照を保持
 		DescriptorAllocator*		  descriptors_ = nullptr; //< GraphicsSystem所有の共有Resource allocator

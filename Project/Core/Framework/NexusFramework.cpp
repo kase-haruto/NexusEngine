@@ -55,6 +55,7 @@ namespace NexusEngine {
 
 			// Runはフレームの順序だけを定義し、個別機能の詳細は各段階へ委譲する。
 			// 将来EditorとGameで処理が分岐しても、このライフサイクル自体は維持する。
+			bool firstFrame = true;
 			while(IsRunning()) {
 				// Editor・UI・更新処理から戻ったフレーム境界でのみパッチを適用する。
 				// 将来ワーカーを追加する場合は、移行対象を破棄する前にそちらも停止する。
@@ -95,6 +96,11 @@ namespace NexusEngine {
 					state_ = FrameworkState::Failed;
 					Shutdown();
 					return kRuntimeFailureExitCode;
+				}
+				if(firstFrame) {
+					firstFrame = false;
+					if(desc.deferWindowUntilReady && desc.window.visible) window_.SetVisible(true);
+					if(desc.startupProgress) desc.startupProgress(FrameworkStartupStage::FirstFrame);
 				}
 				EndFrame();
 			}
@@ -141,7 +147,10 @@ namespace NexusEngine {
 		}
 
 		// Windowはイベントループと終了要求の起点なので、Graphicsより先に確立する。
-		auto windowResult = window_.Initialize(desc.window);
+		if(desc.startupProgress) desc.startupProgress(FrameworkStartupStage::Window);
+		auto initialWindow = desc.window;
+		if(desc.deferWindowUntilReady) initialWindow.visible = false;
+		auto windowResult = window_.Initialize(initialWindow);
 		if(!windowResult) {
 			// Window自身が内部ロールバックを完了しているため、原因を保ったまま上位へ返す。
 			state_ = FrameworkState::Failed;
@@ -154,6 +163,7 @@ namespace NexusEngine {
 			.width = window_.GetClientWidth(),
 			.height = window_.GetClientHeight()
 		};
+		if(desc.startupProgress) desc.startupProgress(FrameworkStartupStage::Graphics);
 		auto graphicsResult = graphicsSystem_.Initialize(surface, desc.graphics);
 		if(!graphicsResult) {
 			// 初期化済みのWindowだけを逆順で戻し、部分初期化状態を残さない。
@@ -165,6 +175,7 @@ namespace NexusEngine {
 		// Scene/Primitiveなど通常描画はBackend非依存Renderer境界へ接続する。
 		// Applicationが所有権を保持し、FrameworkはGraphicsSystemとの寿命順だけを調整する。
 		if(desc.renderer != nullptr) {
+			if(desc.startupProgress) desc.startupProgress(FrameworkStartupStage::Renderer);
 			auto rendererResult = graphicsSystem_.AttachRenderer(desc.renderer);
 			if(!rendererResult) {
 				graphicsSystem_.Shutdown();
@@ -176,6 +187,7 @@ namespace NexusEngine {
 
 		// Editor UIなどの具象拡張はApplicationが所有し、Frameworkは任意拡張として接続する。
 		if(desc.renderExtension != nullptr) {
+			if(desc.startupProgress) desc.startupProgress(FrameworkStartupStage::Extension);
 			auto extensionResult = graphicsSystem_.AttachRenderExtension(desc.renderExtension);
 			if(!extensionResult) {
 				graphicsSystem_.Shutdown();
@@ -190,7 +202,7 @@ namespace NexusEngine {
 		// Shader/Asset初期化に要した時間を最初のsimulation deltaへ混ぜない。
 		previousFrameTime_ = std::chrono::steady_clock::now();
 		state_ = FrameworkState::Running;
-		NEXUS_LOG_INFO("Framework", "NexusEngine initialization completed.");
+		NEXUS_LOG_SUCCESS("Framework", "NexusEngine initialization completed.");
 		return {};
 	}
 
@@ -217,7 +229,7 @@ namespace NexusEngine {
 
 		// 全所有物の解放後にStoppedへ遷移し、外部から終了完了を観測可能にする。
 		state_ = FrameworkState::Stopped;
-		NEXUS_LOG_INFO("Framework", "NexusEngine shutdown completed.");
+		NEXUS_LOG_SUCCESS("Framework", "NexusEngine shutdown completed.");
 	}
 
 	bool NexusFramework::IsRunning() const noexcept {

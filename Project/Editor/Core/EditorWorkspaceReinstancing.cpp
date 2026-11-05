@@ -17,7 +17,10 @@ ReflectionValue EditorWorkspace::CaptureForReinstancing() {
         toolbarOffsets.emplace(id, CaptureReflection(offset));
     }
     return ReflectionValue(ReflectionValue::Object{
+        {"renderGraph", CaptureReflection(renderGraph_.Serialize())},
+        {"graphAutoApply", CaptureReflection(renderGraph_.autoApply)},
         {"toolbarOffsets", ReflectionValue(std::move(toolbarOffsets))},
+        {"playInSeparateWindow", CaptureReflection(playMode_ == PlayMode::SeparateWindow)},
         {"dirty", CaptureReflection(documents_.IsDirty())}, {"panels", ReflectionValue(std::move(panels))},
         {"viewport", std::move(viewport)}, {"dpi", CaptureReflection(dpiScale_)},
         {"layout", CaptureReflection(std::string(ini, iniSize))},
@@ -40,6 +43,15 @@ void EditorWorkspace::ReleaseForReinstancing() noexcept {
 void EditorWorkspace::RestoreAfterReinstancing(const ReflectionValue& snapshot) {
     // 古いコードで取得したスナップショットには配置情報がないため、存在する場合だけ復元する。
     const auto& fields = std::get<ReflectionValue::Object>(snapshot.data);
+    if(auto found=fields.find("renderGraph"); found!=fields.end()) {
+        std::string graph; RestoreReflection(found->second,graph);
+        auto restored=renderGraph_.Deserialize(graph); renderGraph_.Applied(restored);
+    }
+    if(auto found=fields.find("graphAutoApply"); found!=fields.end()) RestoreReflection(found->second,renderGraph_.autoApply);
+    if(auto found = fields.find("playInSeparateWindow"); found != fields.end()) {
+        bool separate = false; RestoreReflection(found->second,separate);
+        playMode_ = separate ? PlayMode::SeparateWindow : PlayMode::Editor;
+    }
     if(auto found = fields.find("toolbarOffsets"); found != fields.end()) {
         ToolbarOffsets offsets;
         const auto& values = std::get<ReflectionValue::Object>(found->second.data);

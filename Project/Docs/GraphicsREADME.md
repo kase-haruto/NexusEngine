@@ -1,5 +1,7 @@
 # NexusEngine Graphics Architecture
 
+シェーダーの追加、ゲーム・エンジンの画面エフェクト、Gridの利用は[シェーダー拡張](ShaderExtensions.md)を参照してください。
+
 既定の動的照明は[DDGI](DDGI.md)、選択可能な事前計算GIは[ベイクGI＋ライトプローブ](BakedLighting.md)、比較用の拡散RTGIは[Global Illumination](GlobalIllumination.md)を参照してください。PBRの責務分離・HDR環境・Compute IBL・Lifetime・使用方法は[PBR / IBL設計](IBL.md)を参照してください。
 
 Directional Shadowの追加構造・設定・寿命管理は[Ray Tracing System](RayTracing.md)、要件別の変更・検証結果は[実装報告](RayTracingReport.md)を参照してください。

@@ -1,5 +1,6 @@
 #pragma once
 #include <string_view>
+#include <array>
 
 namespace NexusEngine {
 class EditorSession;
@@ -36,6 +37,7 @@ public:
     virtual bool IsScrollable() const noexcept {
         return true;
     }
+    virtual std::array<float,2> InitialSize() const noexcept { return {360,480}; }
     /** \brief Panelの内容を描画する \param context 非所有Editorサービス */
     virtual void Draw(const EditorContext& context) = 0;
 };

@@ -1,4 +1,6 @@
 #include "EditorSettings.h"
+#include "Runtime/Project/ProjectSerializer.h"
+#include "Platform/FileSystem/AtomicFile.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -45,15 +47,17 @@ void String(const Values& values, const char* key, std::string& output) {
     if(auto it = values.find(key); it != values.end()) output = it->second;
 }
 }
-void EditorSettingsStore::Load(const std::filesystem::path& root) {
+void EditorSettingsStore::Load(const std::filesystem::path& root, const ProjectContext* context) {
     user = User{}; editor = Editor{}; project = Project{};
-    projectDirectory_ = root / "Config";
+    projectDirectory_ = context ? context->Config() : root / "Config";
+    descriptorFile_ = context ? context->File() : std::filesystem::path{};
+    projectId_ = context ? context->Descriptor().projectId : std::string{};
     wchar_t* local = nullptr; size_t count = 0;
     _wdupenv_s(&local, &count, L"LOCALAPPDATA");
     userDirectory_ = (local ? std::filesystem::path(local) : std::filesystem::temp_directory_path()) / L"NexusEngine/Editor";
     std::free(local);
-    const auto p = Read(projectDirectory_ / "Project.settings");
-    String(p, "name", project.name); String(p, "startupLevel", project.startupLevel); String(p, "assetPath", project.assetPath);
+    // 起動時とEditor表示で同じ共有設定Readerを使う。未作成のEditorテスト用Rootでは既定値を維持する。
+    if(auto shared = LoadProjectSettings(root, context)) project = std::move(*shared);
     const auto e = Read(projectDirectory_ / "Editor.settings");
     String(e, "giMode", editor.giMode);
     if(editor.giMode != "DDGI" && editor.giMode != "RTGI" && editor.giMode != "Baked") editor.giMode = "Off";
@@ -118,6 +122,18 @@ bool EditorSettingsStore::SaveUser() const {
     return Write(userDirectory_ / "User.settings", values);
 }
 bool EditorSettingsStore::SaveProject() const {
+    if(!descriptorFile_.empty()) {
+        // 再読込してから編集項目だけを書き換え、Engine要求等の外部変更を保持する。
+        return WithFileLock(descriptorFile_, [&]() -> Result<void> {
+            auto descriptor = ProjectSerializer::Load(descriptorFile_);
+            if(!descriptor) return std::unexpected(descriptor.error());
+            if(descriptor->projectId != projectId_) return std::unexpected(Error(ErrorCategory::FileSystem, 161, "Project identity changed."));
+            descriptor->name = project.name; descriptor->paths.assets = project.assetPath; descriptor->startupLevel = project.startupLevel;
+            auto resolved = ProjectContext::Resolve(descriptorFile_, *descriptor);
+            if(!resolved) return std::unexpected(resolved.error());
+            return ProjectSerializer::Save(descriptorFile_, *descriptor);
+        }).has_value();
+    }
     return Write(projectDirectory_ / "Project.settings", {{"name", project.name}, {"startupLevel", project.startupLevel}, {"assetPath", project.assetPath}});
 }
 bool EditorSettingsStore::SaveEditor() const {

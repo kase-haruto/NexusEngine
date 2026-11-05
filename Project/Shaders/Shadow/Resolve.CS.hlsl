@@ -19,16 +19,22 @@ void main(uint3 thread : SV_DispatchThreadID)
         {
             uint width, height;
             lightDepth.GetDimensions(width, height);
-            const int2 texel = int2(uv * float2(width, height));
+            const float2 texelPosition = uv * float2(width, height) - 0.5f;
+            const int2 texel = int2(floor(texelPosition));
+            const float2 fraction = frac(texelPosition);
             visibility = 0.0f;
-            // Small fixed PCF footprint avoids an additional comparison sampler allocation.
+            // Bilinear comparison filtering makes the PCF footprint continuous as
+            // receivers move between texels, without a comparison sampler allocation.
             // Out-of-volume samples are lit, matching the map's limited orthographic coverage.
-            for (int y = -1; y <= 1; ++y)
-            for (int x = -1; x <= 1; ++x)
+            // Merge overlapping bilinear taps of the 3x3 kernel into 4x4 loads.
+            for (int y = -1; y <= 2; ++y)
+            for (int x = -1; x <= 2; ++x)
             {
                 const int2 tap = texel + int2(x, y);
-                visibility += any(tap < 0) || any(tap >= int2(width, height)) ? 1.0f :
-                    (ndc.z - shadowBiases.w <= lightDepth.Load(int3(tap, 0)) ? 1.0f : 0.0f);
+                const float weight = (x == -1 ? 1 - fraction.x : (x == 2 ? fraction.x : 1)) *
+                                     (y == -1 ? 1 - fraction.y : (y == 2 ? fraction.y : 1));
+                visibility += weight * (any(tap < 0) || any(tap >= int2(width, height)) ? 1.0f :
+                    (ndc.z - shadowBiases.w <= lightDepth.Load(int3(tap, 0)) ? 1.0f : 0.0f));
             }
             visibility /= 9.0f;
         }

@@ -10,7 +10,7 @@
   <PropertyGroup><OutDir>$(ProjectDir)..\..\Generated\Outputs\EditorTests\</OutDir><IntDir>$(ProjectDir)..\..\Generated\obj\EditorTests\</IntDir></PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><LanguageStandard>stdcpp23</LanguageStandard><PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir)..;$(ProjectDir)..\ThirdParty\imgui</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
-    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>imm32.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>bcrypt.lib;imm32.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EditorServicesTests.cpp" />
@@ -37,7 +37,7 @@
     <ClCompile Include="..\Foundation\Reflection\ReflectionArchive.cpp" />
     <ClCompile Include="..\Foundation\Reflection\ReinstancingService.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
-    <ClCompile Include="..\Runtime\Reflection\Generated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Editor\Core\EditorWorkspaceReinstancing.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
@@ -99,4 +99,18 @@
     <ClCompile Include="..\Editor\Gui\Properties\MaterialPage.cpp" />
     <ClCompile Include="..\Editor\Gui\Properties\PropertyCategoryView.cpp" />
 </ItemGroup>
+  <ItemGroup><ClCompile Include="..\Game\Generated\GeneratedGameReflection.cpp" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectJson.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectSerializer.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectContext.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectService.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Editor\Services\PostProcessGraphDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\PostProcessGraphPanel.cpp" />
+    <ClCompile Include="..\ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemGroup>
+  <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
 </Project>

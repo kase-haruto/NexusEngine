@@ -5,10 +5,12 @@
 #include <cstdint>
 #include <memory>
 #include <stop_token>
+#include <span>
 
 // engine
 #include "Foundation/Error/Result.h"
 #include "GraphicsSystemDesc.h"
+#include "Graphics/PostProcess/PostProcessGraph.h"
 #include "Graphics/Device/GraphicsCapabilities.h"
 #include "Graphics/Viewport/ViewportImage.h"
 
@@ -63,6 +65,14 @@ namespace NexusEngine {
 		/** Scene-linear grading, EV exposure and HDR bloom; applies on the next frame. */
 		[[nodiscard]] Result<void> SetPostProcessSettings(const PostProcessSettings& settings);
 		[[nodiscard]] PostProcessSettings GetPostProcessSettings() const noexcept;
+        /** Frame boundary only. Atomically replace engine effects; failed compiles preserve the old chain. */
+        [[nodiscard]] Result<void> SetScreenEffects(std::span<const ScreenEffect> effects);
+        /** Update values/enabled state without compiling or waiting for the GPU. */
+        [[nodiscard]] Result<void> UpdateScreenEffect(size_t index, const std::array<float, 16>& parameters, bool enabled = true);
+        /** Explicit source reload. Rebuild pipelines atomically at a GPU-idle frame boundary. */
+        [[nodiscard]] Result<void> ReloadScreenEffects();
+        /** Compile connections and atomically apply HDR settings and display passes. */
+        [[nodiscard]] Result<void> SetPostProcessGraph(const PostProcessGraph& graph);
 		/**
 		 * \brief Backend非依存Rendererを初期化してFrame記録経路へ接続する
 		 * \param renderer Applicationが所有し、GraphicsSystemより長く生存するRenderer
@@ -98,6 +108,7 @@ namespace NexusEngine {
 		[[nodiscard]] ViewportImage GetCameraPreviewImage() const noexcept;
 
 	private:
+        Result<void> SynchronizeScreenEffects(std::span<const ScreenEffect> engineEffects);
 		Result<void> SetCameraPreviewRenderer(IGraphicsRenderer* renderer, bool prepared);
 		class Impl;
 		std::unique_ptr<Impl> impl_; //< DirectX 12具体実装の唯一の所有者

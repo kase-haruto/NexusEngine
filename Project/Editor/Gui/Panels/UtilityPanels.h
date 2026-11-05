@@ -22,12 +22,16 @@ public:
     void Draw(const EditorContext& context) override;
 private:
     std::shared_ptr<BufferedLogBuffer> buffer_; //< Loggerと共有する値バッファ
-    std::array<bool, 6> levels_{true, true, true, true, true, true}; //< レベルfilter
+    std::array<bool, 7> levels_{true, true, true, true, true, true, true}; //< レベルfilter
     std::string search_; //< 共通SearchBarのUTF-8検索入力
     bool autoScroll_ = true; //< 最下部に追従する
     uint64_t logRevision_ = 0; //< 最後に取り込んだログ番号
     std::vector<OwnedLogRecord> records_; //< 変更時だけ取得するsnapshot
-    std::vector<std::string> lines_; //< filter適用済みの整形行
+    struct Line {
+        std::string text;
+        LogLevel level;
+    };
+    std::vector<Line> lines_; //< filter適用済みの整形行と重要度
     std::string filterKey_; //< 検索・level・言語のcache識別子
 };
 /*-----------------------------------------------------------------------------------------

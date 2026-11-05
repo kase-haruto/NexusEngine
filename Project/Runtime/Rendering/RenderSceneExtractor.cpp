@@ -7,7 +7,10 @@
 
 // engine
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
@@ -41,6 +44,24 @@ namespace NexusEngine {
 		// clearはcapacityを保持するので、安定したEntity数なら毎frameの再確保は発生しない。
 		result.primitives.clear();
 		result.camera.reset();
+        result.fog = {};
+        bool invalidFog = false;
+        scene.ForEach<FogComponent>([&](Entity, const FogComponent& fog) {
+            if(!fog.enabled) return;
+            if(!fog.IsValid() || result.fog.enabled) { invalidFog = true; return; }
+            result.fog = fog.GetSettings();
+        });
+        if(invalidFog) return std::unexpected(Error(ErrorCategory::Scene, 17,
+            "Expected at most one enabled, valid distance fog component."));
+        result.skyIntensity.reset();
+        bool invalidSky = false;
+        scene.ForEach<SkyRendererComponent>([&](Entity, const SkyRendererComponent& sky) {
+            if(!sky.enabled) return;
+            if(!sky.IsValid() || result.skyIntensity.has_value()) { invalidSky = true; return; }
+            result.skyIntensity = sky.intensity;
+        });
+        if(invalidSky) return std::unexpected(Error(ErrorCategory::Scene, 16,
+            "Expected at most one enabled, valid sky renderer."));
 		result.directionalLight = {};
 		result.directionalLight.intensity = 0;
 		bool lightFound = false;
@@ -71,6 +92,10 @@ namespace NexusEngine {
 					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint, primitive.nodeIndex });
 					auto& item = result.primitives.back();
 					item.staticLighting = primitive.staticLighting;
+                    if(const auto* player = entity.GetComponent<AnimationPlayerComponent>(); player && player->IsValid()) {
+                        item.animation = PrimitiveRenderItem::AnimationSample{player->animationIndex, player->time, player->loop};
+                        item.staticLighting = false;
+                    }
                     item.meshAsset = primitive.meshAsset;
                     item.shape = primitive.shape;
                     if(primitive.shape == PrimitiveShape::Asset && primitive.meshAsset.empty()) item.nodeEnd = 0;

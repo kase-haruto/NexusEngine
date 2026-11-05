@@ -1,5 +1,5 @@
 #include "../Common/ColorSpace.hlsli"
-Texture2D<float4> images[7] : register(t0);
+Texture2D<float4> images[8] : register(t0);
 SamplerState linearClamp : register(s0);
 cbuffer Settings : register(b0) {
     uint sourceIndex; float exposure; float intensity; float threshold;
@@ -85,13 +85,13 @@ float4 Composite(Vertex v) : SV_TARGET {
 
 // FXAA in display space: filter along local edges, preserving low-contrast areas.
 float4 AntiAliasing(Vertex v) : SV_TARGET {
-    uint w, h; images[6].GetDimensions(w, h);
+    uint w, h; images[sourceIndex].GetDimensions(w, h);
     float2 texel = 1.0 / float2(w, h);
-    float3 center = images[6].SampleLevel(linearClamp, v.uv, 0).rgb;
-    float3 nw = images[6].SampleLevel(linearClamp, v.uv + float2(-1, -1) * texel, 0).rgb;
-    float3 ne = images[6].SampleLevel(linearClamp, v.uv + float2(1, -1) * texel, 0).rgb;
-    float3 sw = images[6].SampleLevel(linearClamp, v.uv + float2(-1, 1) * texel, 0).rgb;
-    float3 se = images[6].SampleLevel(linearClamp, v.uv + float2(1, 1) * texel, 0).rgb;
+    float3 center = images[sourceIndex].SampleLevel(linearClamp, v.uv, 0).rgb;
+    float3 nw = images[sourceIndex].SampleLevel(linearClamp, v.uv + float2(-1, -1) * texel, 0).rgb;
+    float3 ne = images[sourceIndex].SampleLevel(linearClamp, v.uv + float2(1, -1) * texel, 0).rgb;
+    float3 sw = images[sourceIndex].SampleLevel(linearClamp, v.uv + float2(-1, 1) * texel, 0).rgb;
+    float3 se = images[sourceIndex].SampleLevel(linearClamp, v.uv + float2(1, 1) * texel, 0).rgb;
     const float3 weights = float3(0.299, 0.587, 0.114);
     float m = dot(center, weights), a = dot(nw, weights), b = dot(ne, weights);
     float c = dot(sw, weights), d = dot(se, weights);
@@ -102,11 +102,11 @@ float4 AntiAliasing(Vertex v) : SV_TARGET {
     float reduction = max((a + b + c + d) * (0.25 * 0.125), 1.0 / 128.0);
     direction = clamp(direction / (min(abs(direction.x), abs(direction.y)) + reduction), -8.0, 8.0) * texel;
     float3 inner = 0.5 * (
-        images[6].SampleLevel(linearClamp, v.uv - direction / 6.0, 0).rgb +
-        images[6].SampleLevel(linearClamp, v.uv + direction / 6.0, 0).rgb);
+        images[sourceIndex].SampleLevel(linearClamp, v.uv - direction / 6.0, 0).rgb +
+        images[sourceIndex].SampleLevel(linearClamp, v.uv + direction / 6.0, 0).rgb);
     float3 outer = inner * 0.5 + 0.25 * (
-        images[6].SampleLevel(linearClamp, v.uv - direction * 0.5, 0).rgb +
-        images[6].SampleLevel(linearClamp, v.uv + direction * 0.5, 0).rgb);
+        images[sourceIndex].SampleLevel(linearClamp, v.uv - direction * 0.5, 0).rgb +
+        images[sourceIndex].SampleLevel(linearClamp, v.uv + direction * 0.5, 0).rgb);
     float filteredLuma = dot(outer, weights);
     return float4(filteredLuma < lo || filteredLuma > hi ? inner : outer, 1);
 }

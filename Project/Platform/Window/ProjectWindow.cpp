@@ -3,6 +3,7 @@
 // c++
 #include <limits>
 #include <string>
+#include <windowsx.h>
 
 // engine
 #include "Foundation/Logging/Logger.h"
@@ -29,6 +30,21 @@ namespace NexusEngine {
 
 	ProjectWindow::~ProjectWindow() noexcept {
 		Shutdown();
+	}
+	void ProjectWindow::SetVisible(bool visible) noexcept {
+		if(window_) ShowWindow(window_,visible ? SW_SHOW : SW_HIDE);
+	}
+
+	void ProjectWindow::ConfigureCustomTitleBar(HWND window, int height, int controlsWidth) noexcept {
+		if(!window) return;
+		if(GetClassLongPtrW(window, GCLP_WNDPROC) != reinterpret_cast<ULONG_PTR>(&ProjectWindow::WindowProcedure)) return;
+		auto* self = reinterpret_cast<ProjectWindow*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+		if(!self) return;
+		const bool changed = (self->titleBarHeight_ > 0) != (height > 0);
+		self->titleBarHeight_ = height;
+		self->titleBarControlsWidth_ = controlsWidth;
+		if(changed) SetWindowPos(window, nullptr, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -63,6 +79,8 @@ namespace NexusEngine {
 		windowClass.lpfnWndProc	  = &ProjectWindow::WindowProcedure;
 		windowClass.hInstance	  = instance_;
 		windowClass.hCursor		  = LoadCursorW(nullptr, IDC_ARROW);
+		windowClass.hIcon = LoadIconW(instance_,MAKEINTRESOURCEW(101));
+		windowClass.hIconSm = windowClass.hIcon;
 		windowClass.lpszClassName  = className_.c_str();
 
 		if(RegisterClassExW(&windowClass) == 0) {
@@ -116,9 +134,9 @@ namespace NexusEngine {
 		clientWidth_ = detail.clientWidth;
 		clientHeight_ = detail.clientHeight;
 		running_ = true;
-		ShowWindow(window_, SW_SHOW);
+		ShowWindow(window_, detail.visible ? SW_SHOW : SW_HIDE);
 		UpdateWindow(window_);
-		NEXUS_LOG_INFO("Window", "Project window initialized.");
+		NEXUS_LOG_SUCCESS("Window", "Project window initialized.");
 		return {};
 	}
 
@@ -143,6 +161,7 @@ namespace NexusEngine {
 		}
 
 		className_.clear();
+		titleBarHeight_ = titleBarControlsWidth_ = 0;
 		instance_ = nullptr;
 		clientWidth_ = 0;
 		clientHeight_ = 0;
@@ -224,8 +243,37 @@ namespace NexusEngine {
 		const WPARAM wParam,
 		const LPARAM lParam) noexcept {
 		// Windowは購読側の型を知らず、ImGuiなど任意の上位層へ入力メッセージを転送する。
+		if(titleBarHeight_ > 0) {
+			if(message == WM_NCCALCSIZE && wParam) {
+				// Keep the maximized client inside the work area, above the taskbar.
+				auto& rect = reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam)->rgrc[0];
+				if(IsZoomed(window)) {
+					MONITORINFO monitor{sizeof(MONITORINFO)};
+					if(GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor)) rect = monitor.rcWork;
+				}
+				return 0;
+			}
+			if(message == WM_NCHITTEST) {
+				POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+				ScreenToClient(window, &point);
+				RECT client{}; GetClientRect(window, &client);
+				const UINT dpi = GetDpiForWindow(window);
+				const int border = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+				if(!IsZoomed(window) && (GetWindowLongPtrW(window, GWL_STYLE) & WS_THICKFRAME)) {
+					const bool left = point.x < border, right = point.x >= client.right - border;
+					const bool top = point.y < border, bottom = point.y >= client.bottom - border;
+					if(top) return left ? HTTOPLEFT : right ? HTTOPRIGHT : HTTOP;
+					if(bottom) return left ? HTBOTTOMLEFT : right ? HTBOTTOMRIGHT : HTBOTTOM;
+					if(left) return HTLEFT;
+					if(right) return HTRIGHT;
+				}
+				if(point.y >= 0 && point.y < titleBarHeight_ && point.x < client.right - titleBarControlsWidth_) return HTCAPTION;
+				return HTCLIENT;
+			}
+		}
 		if(messageHandler_ != nullptr && messageHandler_(messageHandlerUserData_, window, message, wParam, lParam)) {
-			return 1;
+			// サイズ制約は購読側がMINMAXINFOへ書き込み、Win32の規約どおり0を返す。
+			return message == WM_GETMINMAXINFO ? 0 : 1;
 		}
 		switch(message) {
 		case WM_DPICHANGED: {

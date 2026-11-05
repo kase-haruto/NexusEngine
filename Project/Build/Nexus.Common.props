@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildThisFileDirectory)Nexus.EngineIdentity.props" />
+  <PropertyGroup>
+    <!-- CLIから渡すRootと末尾区切りを揃え、同じEngineのinclude設定が揺れないようにする。 -->
+    <NexusEngineRoot Condition="'$(NexusEngineRoot)'==''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</NexusEngineRoot>
+    <NexusBuildRoot Condition="'$(NexusBuildRoot)'==''">$(NexusEngineRoot)\..\Generated\Modules\</NexusBuildRoot>
+    <OutDir>$(NexusBuildRoot)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <IntDir>$(NexusBuildRoot)obj\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp23</LanguageStandard><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError>
+      <ConformanceMode>true</ConformanceMode><MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>$(NexusEngineRoot);$(NexusEngineRoot)\ThirdParty\imgui;$(NexusEngineRoot)\ThirdParty\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary Condition="'$(Configuration)'!='Release'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+      <PreprocessorDefinitions Condition="'$(Configuration)'!='Release'">_DEBUG;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Develop'">NEXUS_DEVELOP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Release'">NDEBUG;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link><SubSystem>Console</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;imm32.lib;dwmapi.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

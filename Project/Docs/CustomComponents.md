@@ -1,5 +1,10 @@
 # ゲーム固有Componentの追加と保存
 
+Engine / Gameの分離後は、ホストから`NexusGame::SampleReflection()`相当の登録方針を
+Level / GameApplication / EditorApplicationへロード前に渡す。既定の登録方針はEngine型のみ。
+Gameの生成先は`Game/Generated/GeneratedGameReflection.h/.cpp`。
+外部Gameの構成は[Engine / Game分離](EngineGameSeparation.md)を参照する。
+
 `Project/Game`以下のヘッダーにReflection宣言を付けると、ビルド時に次の登録を生成する。
 
 - Detailsの「Component追加」一覧

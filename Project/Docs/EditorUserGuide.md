@@ -31,11 +31,16 @@ Pop-Location
 | 削除 | Delete / context menu。選択Entityだけ削除し、残る子はrootへ戻す |
 | 親子変更 | Outliner行へdrag/drop。root行へdropすると親を解除。Local Transformを保持 |
 | 詳細編集 | Details。全選択に共通するpropertyを一括編集し、異なる値はその旨を表示 |
-| 再生 / 停止 | F5 / Shift+F5、Toolbar。一時停止・再開もToolbarから実行 |
+| 実行モード | 実行 → 実行モード → エディタ内 / 別ウィンドウ。実行中は切替不可 |
+| 実行 / 停止 | Toolbarまたは実行メニューの実行 / 停止、F5 / Shift+F5。選択モードに振り分ける |
+| 一時停止 / 再開 | エディタ内モードの再生だけが対象。別ウィンドウでは無効 |
+| 別ウィンドウの準備 | 実行時にRuntimeだけを非同期で個別ビルド・検証。停止でビルド取消または通常終了を要求 |
 | Panelの開閉 | Window menu |
 | 名前付き配置 | Window → Workspace layouts → General / Lighting / Animation |
 | 配置の初期化 | Window menuのReset |
 | 言語・テーマ・倍率 | Edit → Preferences。英日、Dark/Light、font、手動UI倍率 |
+
+別プロセスのRuntimeはDescriptorが指定した保存済み起動Levelを使います。編集内容を保存してから実行してください。ToolbarのRuntime状態にカーソルを合わせるとPID・ビルドログ・実行ログを確認できます。失敗は通知とOutput Logにも表示します。C++で新しいGame型を追加してEditorにも反映する場合はGameEditorの再ビルド・再起動が必要です。[実行フローの詳細](DevelopmentWorkflow.md)も参照してください。
 
 文字入力中、activeな操作中、popup表示中はglobal Shortcutを抑止します。
 失敗は通知とLogで確認できます。File切替と終了には保存/破棄/取消の確認があります。
