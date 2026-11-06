@@ -1,0 +1,12 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Opt-in distribution build. Native NexusLauncher remains the development/migration browser. -->
+  <PropertyGroup>
+    <DistributionScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Tools\Project\Build-Distribution.ps1'))</DistributionScript>
+    <DistributionArguments Condition="'$(CatalogUrl)' != ''">-CatalogUrl &quot;$(CatalogUrl)&quot;</DistributionArguments>
+    <DistributionArguments Condition="'$(CatalogFile)' != ''">$(DistributionArguments) -CatalogFile &quot;$(CatalogFile)&quot;</DistributionArguments>
+    <DistributionArguments Condition="'$(DistributionOutput)' != ''">$(DistributionArguments) -OutputDirectory &quot;$(DistributionOutput)&quot;</DistributionArguments>
+  </PropertyGroup>
+  <Target Name="Build">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(DistributionScript)&quot; $(DistributionArguments)" />
+  </Target>
+</Project>

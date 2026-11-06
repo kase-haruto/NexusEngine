@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>launcherSetup</AssemblyName>
+    <Configurations>Debug;Develop;Release</Configurations>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Develop'">
+    <DebugSymbols>true</DebugSymbols><DebugType>portable</DebugType><Optimize>false</Optimize>
+    <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(PayloadZip)' != ''"><EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Standalone/LauncherTheme.cs" Link="LauncherTheme.cs" />
+    <Compile Include="../Standalone/Distribution.cs" Link="Distribution.cs" />
+    <Compile Include="../Standalone/OwnedInstallation.cs" Link="OwnedInstallation.cs" />
+    <Compile Include="../Standalone/LauncherInstallation.cs" Link="LauncherInstallation.cs" />
+  </ItemGroup>
+</Project>

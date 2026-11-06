@@ -106,6 +106,8 @@ chore: ビルド設定を更新
 
 Windows x64、C++23/v145を含むVisual Studio、Windows SDK（DXC）、PowerShell 7を使用します。リポジトリRootから、必要なターゲットだけを順にビルドできます。
 
+ランチャーとエンジンを一緒に開発するときは、リポジトリ直下の **[NexusEngine.slnx](NexusEngine.slnx)** をVisual Studioで開きます。.NET 10のWindowsデスクトップ開発環境も必要です。`Launcher/Launcher`が新しいC#ランチャー、`Engine`がC++エンジン・エディタ、`Legacy Launcher/NexusLauncher`が既存C++ランチャーです。スタートアップ切り替えと構成別のビルド方法は[Visual Studio共通ソリューション](Project/Docs/VisualStudioDevelopment.md)にまとめています。
+
 ```powershell
 foreach($target in @('NexusProjectTool','NexusEditor','NexusRuntimeHost','NexusLauncher')) {
     & ./Project/Tests/Invoke-GraphicsBuild.ps1 -Project "Project/Build/$target.vcxproj" -Configuration Debug
@@ -140,6 +142,10 @@ Phase 1の実装構成、個別ビルド、独立Gameの参照方法と制限は
 テンプレート生成、Engine登録、Game固有ホストの個別ビルドと起動は
 [Project Workflow](Project/Docs/ProjectWorkflow.md)、Project Browserの操作と検証は
 [Launcher](Project/Docs/Launcher.md)を参照してください。
+
+配布用の独立ランチャーは`Project/Launcher/Standalone`、セットアップは`Project/Launcher/Setup`にあります。`Project/Tools/Project/Build-Distribution.ps1`または`Project/Build/NexusDistribution.proj`でReleaseのCLIと.NETランタイムを含む`launcherSetup.exe`を生成できます。既存C++ランチャーは開発・エンジン移行用として保持しています。Cloudflare R2での版別配布、ビルド・起動方法、検証状況は[ランチャー配布手順](Project/Docs/LauncherDistribution.md)を参照してください。
+
+普段の起動、エンジン・ランチャーの更新、旧版への復旧、配布時の手順は[ランチャー運用ガイド](Project/Docs/LauncherOperations.md)にまとめています。
 安定版SDKの発行とDevelopment / Installedの参照方法は
 [Installed Engine](Project/Docs/InstalledEngine.md)を参照してください。
 Engine変更前のレビュー、明示適用、バックアップと旧版復旧は

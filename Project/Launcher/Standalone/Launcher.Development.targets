@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <NexusRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\'))</NexusRepositoryRoot>
+    <NexusNativeToolDirectory>$(NexusRepositoryRoot)Generated\Modules\x64\$(Configuration)\NexusProjectTool\</NexusNativeToolDirectory>
+    <NexusDevelopmentBuild Condition="'$(NexusDevelopmentBuild)' == '' and ('$(BuildingInsideVisualStudio)' == 'true' or ('$(SolutionPath)' != '' and '$(SolutionPath)' != '*Undefined*'))">true</NexusDevelopmentBuild>
+    <!-- C#に変更がなくても、ネイティブツールの更新時にはMSBuildの増分コピーを実行する。 -->
+    <DisableFastUpToDateCheck Condition="'$(NexusDevelopmentBuild)' == 'true'">true</DisableFastUpToDateCheck>
+    <NexusLocalCatalog>$(NexusRepositoryRoot)Generated\EngineReleases\v1.0.0\Packages\releases.local.json</NexusLocalCatalog>
+  </PropertyGroup>
+  <!-- ネイティブ側のビルド依存はソリューションで管理し、通常の配布ビルドとは分離する。 -->
+  <Target Name="PrepareNexusLauncherDevelopment" AfterTargets="Build"
+          Condition="'$(NexusDevelopmentBuild)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('$(NexusNativeToolDirectory)NexusProjectTool.exe')"
+           Text="Build NexusProjectTool ($(Configuration)|x64) before starting Launcher. Open the repository-root NexusEngine.slnx to build both together." />
+    <ItemGroup>
+      <NexusDevelopmentTools Include="$(NexusNativeToolDirectory)NexusProjectTool.exe;$(NexusNativeToolDirectory)*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NexusDevelopmentTools)" DestinationFolder="$(TargetDir)Tools" SkipUnchangedFiles="true" />
+    <PropertyGroup>
+      <NexusDevelopmentCatalog Condition="Exists('$(NexusLocalCatalog)')">$([System.String]::Copy('$(NexusLocalCatalog)').Replace('\', '/'))</NexusDevelopmentCatalog>
+      <NexusDevelopmentSettings>{&quot;catalogUrl&quot;:&quot;&quot;,&quot;projectTool&quot;:&quot;Tools/NexusProjectTool.exe&quot;,&quot;catalogFile&quot;:&quot;$(NexusDevelopmentCatalog)&quot;}</NexusDevelopmentSettings>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(TargetDir)launcher.json" Lines="$(NexusDevelopmentSettings)" Overwrite="true" Encoding="UTF-8" WriteOnlyWhenDifferent="true" />
+  </Target>
+</Project>

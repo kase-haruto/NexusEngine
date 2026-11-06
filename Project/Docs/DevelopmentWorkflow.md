@@ -1,5 +1,7 @@
 # Engineを入口にする開発フロー
 
+ランチャー・エンジン本体の開発は、リポジトリ直下の`NexusEngine.slnx`を共通の入口とします。起動対象とビルド構成は[Visual Studioでの共通開発](VisualStudioDevelopment.md)を参照してください。以下のGame用`Game.slnx`は、ユーザーのGameコードを開発するための別のソリューションです。
+
 ## 標準の入口
 
 NexusEngineの通常の入口はProject Browserとする。デスクトップから起動し、Projectを選び、選択したEngineとGame固有型を持つEditorを開く。Visual Studio直接起動はデバッグ用の選択肢として残す。

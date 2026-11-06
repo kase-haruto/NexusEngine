@@ -1,0 +1,44 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Develop" />
+    <BuildType Name="Release" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Launcher/">
+    <Project Path="Project/Launcher/Standalone/Launcher.csproj">
+      <Platform Solution="*|x64" Project="Any CPU" />
+      <BuildDependency Project="Project/Build/NexusProjectTool.vcxproj" />
+    </Project>
+    <Project Path="Project/Launcher/Setup/LauncherSetup.csproj">
+      <Platform Solution="*|x64" Project="Any CPU" />
+    </Project>
+  </Folder>
+  <Folder Name="/Engine/">
+    <Project Path="Project/Build/NexusRuntime.vcxproj" />
+    <Project Path="Project/Build/NexusEditorSupport.vcxproj" />
+    <Project Path="Project/Build/NexusEditor.vcxproj" />
+    <Project Path="Project/Build/NexusRuntimeHost.vcxproj" />
+    <Project Path="Project/Build/NexusProjectTool.vcxproj" />
+  </Folder>
+  <Folder Name="/Samples/">
+    <Project Path="Project/Build/SampleGame.vcxproj" />
+    <Project Path="Project/Build/SampleGameEditor.vcxproj" />
+    <Project Path="Project/Build/SampleGameRuntime.vcxproj" />
+  </Folder>
+  <Folder Name="/Legacy Launcher/">
+    <Project Path="Project/Build/NexusLauncher.vcxproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Project/Tests/LauncherDistribution/DistributionTests.csproj">
+      <Platform Solution="*|x64" Project="Any CPU" />
+    </Project>
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+    <File Path="Project/Docs/VisualStudioDevelopment.md" />
+    <File Path="Project/Docs/LauncherOperations.md" />
+    <File Path="Project/Tools/Project/Build-Distribution.ps1" />
+    <File Path="Project/Build/NexusDistribution.proj" />
+  </Folder>
+</Solution>

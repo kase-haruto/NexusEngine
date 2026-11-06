@@ -9,7 +9,15 @@ if(-not $Launcher) {
     $Launcher = Join-Path $repository "Generated/Modules/x64/$Configuration/NexusLauncher/NexusLauncher.exe"
 }
 $Launcher = [IO.Path]::GetFullPath($Launcher)
-if(-not [IO.File]::Exists($Launcher)) { throw "Launcher executable does not exist: $Launcher" }
+if(-not [IO.File]::Exists($Launcher)) {
+    $buildProject = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../Build/NexusLauncher.vcxproj'))
+    throw @"
+Launcher executable does not exist: $Launcher
+Build NexusLauncher first from a Visual Studio Developer PowerShell:
+  msbuild "$buildProject" /m /t:Build /p:Configuration=$Configuration /p:Platform=x64
+For an installed Launcher, specify -Launcher "C:/path/to/Bin/NexusLauncher.exe".
+"@
+}
 if(-not $Destination) {
     $desktop = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
     if(-not $desktop) { throw 'Windows Desktop directory is unavailable. Specify -Destination.' }
@@ -17,7 +25,7 @@ if(-not $Destination) {
 }
 $Destination = [IO.Path]::GetFullPath($Destination)
 if([IO.Path]::GetExtension($Destination) -ine '.lnk') { throw 'Shortcut destination must end in .lnk.' }
-if([IO.File]::Exists($Destination) -or [IO.Directory]::Exists($Destination)) { throw "Shortcut destination already exists: $Destination" }
+if([IO.Directory]::Exists($Destination)) { throw "Shortcut destination is a directory: $Destination" }
 $parent = [IO.Path]::GetDirectoryName($Destination)
 if(-not [IO.Directory]::Exists($parent)) { throw "Shortcut parent directory does not exist: $parent" }
 $temporary = Join-Path $parent ('.nexus-shortcut-' + [guid]::NewGuid().ToString() + '.lnk')
@@ -25,6 +33,16 @@ $shell = $null; $shortcut = $null
 try {
     # 引数なしのLauncherを入口にし、特定GameやEngine版の選択をshortcutへ埋め込まない。
     $shell = New-Object -ComObject WScript.Shell
+    if([IO.File]::Exists($Destination)) {
+        $shortcut = $shell.CreateShortcut($Destination)
+        if($shortcut.TargetPath -ieq $Launcher -and
+           $shortcut.WorkingDirectory -ieq [IO.Path]::GetDirectoryName($Launcher) -and
+           [string]::IsNullOrEmpty($shortcut.Arguments)) {
+            Write-Output "NexusEngine Project Browser shortcut is already configured: $Destination"
+            return
+        }
+        throw "A different shortcut already exists: $Destination (target: $($shortcut.TargetPath)). Specify another -Destination or remove the old shortcut manually."
+    }
     $shortcut = $shell.CreateShortcut($temporary)
     $shortcut.TargetPath = $Launcher
     $shortcut.WorkingDirectory = [IO.Path]::GetDirectoryName($Launcher)
