@@ -6,7 +6,7 @@ $gameRoot = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) '日本語 Game'
 $gameSources = Join-Path $gameRoot 'Game'
 [IO.Directory]::CreateDirectory($gameSources) | Out-Null
 $legacy = Join-Path $engineRoot 'Runtime/Reflection/Generated/GeneratedReflection.h'
-$legacyHash = (Get-FileHash -LiteralPath $legacy).Hash
+$legacyHash = if(Test-Path -LiteralPath $legacy) { (Get-FileHash -LiteralPath $legacy).Hash } else { $null }
 & $generator -ProjectRoot $engineRoot -Module Engine
 $engineHeader = Join-Path $engineRoot 'Runtime/Reflection/EngineGenerated/GeneratedReflection.h'
 if([IO.File]::ReadAllText($engineHeader) -match '#include "(Game|Samples|Editor)/') { throw 'Engine reflection depends on an upper layer.' }
@@ -33,6 +33,8 @@ catch {
     $rejected = $true
 }
 if(-not $rejected) { throw 'Engine/Game duplicate ID was accepted.' }
-if((Get-FileHash -LiteralPath $legacy).Hash -ne $legacyHash) { throw 'Legacy generated file was modified.' }
+if($legacyHash) {
+    if(-not (Test-Path -LiteralPath $legacy) -or (Get-FileHash -LiteralPath $legacy).Hash -ne $legacyHash) { throw 'Legacy generated file was modified.' }
+} elseif(Test-Path -LiteralPath $legacy) { throw 'Legacy generated file was unexpectedly created.' }
 [IO.File]::WriteAllText($header, $fixture, [Text.UTF8Encoding]::new($false))
 Write-Output 'PASS: separate Engine/Game reflection, external Unicode root, stable outputs, duplicate IDs and legacy preservation.'

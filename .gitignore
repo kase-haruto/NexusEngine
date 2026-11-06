@@ -16,18 +16,8 @@ imgui.ini
 # Build output (ENGINE)
 ###############################################################################
 generated/
-# 型登録の生成コードはレビューとクリーンビルドの入力として管理する。
-!Project/Runtime/Reflection/Generated/
-!Project/Runtime/Reflection/Generated/*.h
-!Project/Runtime/Reflection/Generated/*.cpp
-!Project/Runtime/Reflection/EngineGenerated/
-!Project/Runtime/Reflection/EngineGenerated/*.h
-!Project/Runtime/Reflection/EngineGenerated/*.cpp
-!Project/Runtime/Reflection/EngineGenerated/*.json
-!Project/Game/Generated/
-!Project/Game/Generated/*.h
-!Project/Game/Generated/*.cpp
-!Project/Game/Generated/*.json
+# リフレクション生成物はビルド時に再生成するため管理しない。
+/Project/Runtime/Reflection/EngineGenerated/
 # Initial standalone ECS builds used these local intermediate directories.
 Project/Tests/NexusEcsTests/
 Project/Tests/x64/
