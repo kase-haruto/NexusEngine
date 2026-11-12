@@ -10,6 +10,8 @@
   <PropertyGroup Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'!='Release'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="Nexus.Common.props" />
+  <PropertyGroup><NexusModuleLivePPRole>Backend</NexusModuleLivePPRole></PropertyGroup>
+  <Import Project="Nexus.NativeModuleLivePP.props" />
   <ItemGroup>
     <ClCompile Include="..\Core\Framework\NexusFramework.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
@@ -87,12 +89,26 @@
     <ClCompile Include="..\Platform\Window\StartupSplash.cpp" />
     <ClCompile Include="..\Runtime\Application\GameApplication.cpp" />
     <ClCompile Include="..\Runtime\Application\GameRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\GameApiBridge.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\GameComponentAccess.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\GameModuleLoader.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\NativeGameSystemScope.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\NativeGameApiMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\DotNetHost.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\MonoHost.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\NativeManagedBridge.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\CSharpRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\ScriptSystem.cpp" />
     <ClCompile Include="..\Runtime\Level\Level.cpp" />
     <ClCompile Include="..\Runtime\Level\LevelDocument.cpp" />
     <ClCompile Include="..\Runtime\Level\LevelSerializer.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
     <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ManagedScriptMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ReflectionRegistration.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\NativeComponentMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\GameComponentData.cpp" />
     <ClCompile Include="..\Runtime\Rendering\RenderSceneExtractor.cpp" />
     <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
@@ -104,6 +120,8 @@
 
   </ItemGroup>
 <Target Name="GenerateEngineTypes" BeforeTargets="ClCompile"><Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusEngineRoot)\Tools\Reflection\Generate-Reflection.ps1&quot; -ProjectRoot &quot;$(NexusEngineRoot)\.&quot; -Module Engine" /></Target>
+  <Import Project="Nexus.Jolt.targets" />
+  <Import Project="Nexus.Audio.targets" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup>
     <ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" />

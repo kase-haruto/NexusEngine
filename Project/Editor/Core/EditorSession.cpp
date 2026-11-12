@@ -1,8 +1,25 @@
 #include "EditorSession.h"
-
+#include "Foundation/Logging/Logger.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+
+/** \brief CLR非依存のMetadataを検証してからPlay設定へ接続する。失敗時は旧Catalogを維持する */
+bool NexusEngine::EditorSession::SetCSharpRuntime(CSharpRuntimeSettings settings) {
+    std::shared_ptr<const ManagedScriptMetadata> metadata;
+    if(!settings.gameAssembly.empty()) {
+        auto file = settings.gameAssembly; file.replace_extension(".metadata.json");
+        auto loaded = ManagedScriptMetadata::Load(file);
+        if(!loaded) {
+            NEXUS_LOG_ERROR("Editor", "Managed metadata: " + loaded.error().GetMessageText() + " Rebuild GameScripts before opening the Editor.");
+            return false;
+        }
+        metadata = std::move(*loaded);
+    }
+    // Runtimeが設定を受け入れた場合だけCatalogを置換し、失敗時は現在の編集状態を保つ。
+    if(!playRuntime_.SetCSharpRuntime(std::move(settings))) return false;
+    managedMetadata_ = std::move(metadata); return true;
+}
 
 bool NexusEngine::EditorSession::SetCameraPreview(PersistentId id) {
 	auto* level = GetLevel();
@@ -50,6 +67,8 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
 	auto document = std::make_unique<LevelDocument>(reflection_);
 	auto result = document->Create("EditorLevel");
 	if(!result) return result;
+    if(!document->GetLevel()->SetPhysicsModelSource(physicsModels_)) return std::unexpected(Error(ErrorCategory::Resource,260,"Cannot configure document collision assets."));
+    if(!resourceRoot_.empty()) { auto resources=document->GetLevel()->SetResourceRoot(resourceRoot_); if(!resources) return resources; }
 	Close();
 	levelDocument_ = std::move(document);
 	return {};
@@ -67,14 +86,27 @@ void NexusEngine::EditorSession::Close() noexcept {
 bool NexusEngine::EditorSession::StartPlay() {
 	playError_.reset();
 	if(IsPlaying() || !GetLevel() || !GetLevel()->GetScene()) return false;
+    ++playEpoch_;
 	auto scene = GetLevel()->GetScene()->Clone();
 	if(!scene) return false;
 	auto level = std::make_unique<Level>(GetLevel()->GetName(), reflection_);
+    if(!level->SetPhysicsModelSource(GetLevel()->PhysicsModels())) return false;
+    if(!GetLevel()->ResourceRoot().empty()) {
+        auto resources=level->SetResourceRoot(GetLevel()->ResourceRoot());
+        if(!resources) { playError_=resources.error(); return false; }
+    }
 	level->Lighting() = GetLevel()->Lighting();
 	level->ExchangeScene(std::move(scene));
 	auto result = playRuntime_.Start(std::move(level));
 	if(!result) { playError_ = std::move(result.error()); return false; }
 	return true;
+}
+NexusEngine::Result<void> NexusEngine::EditorSession::ReloadCSharp(const std::filesystem::path& assembly) {
+    auto file = assembly; file.replace_extension(".metadata.json");
+    auto metadata = ManagedScriptMetadata::Load(file); if(!metadata) return std::unexpected(metadata.error());
+    auto result = playRuntime_.ReloadCSharp(assembly);
+    if(result) managedMetadata_ = std::move(*metadata);
+    return result;
 }
 
 NexusEngine::Result<void> NexusEngine::EditorSession::UpdatePreview(float deltaTime) {
@@ -88,6 +120,8 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem
 	auto document = std::make_unique<LevelDocument>(reflection_);
 	auto result = document->Open(path);
 	if(!result) return result;
+    if(!document->GetLevel()->SetPhysicsModelSource(physicsModels_)) return std::unexpected(Error(ErrorCategory::Resource,260,"Cannot configure document collision assets."));
+    if(!resourceRoot_.empty()) { auto resources=document->GetLevel()->SetResourceRoot(resourceRoot_); if(!resources) return resources; }
 	Close();
 	levelDocument_ = std::move(document);
 	return {};

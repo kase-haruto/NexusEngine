@@ -1,0 +1,14 @@
+#pragma once
+#include <Nexus/NativeGameSystemApi.h>
+/*-----------------------------------------------------------------------------------------
+ * GameState / TargetRequest
+ * - Game DLLだけが所有・解釈するstateと入力値。EngineへC++型を公開しない
+ * - 関数本体パッチではこのヘッダーと所有権を固定し、変更時は通常再ビルド・再起動する
+ *---------------------------------------------------------------------------------------*/
+struct GameState {
+    NexusGameApiV1 api{}; //< Engine常駐の値API
+    NexusEntityHandle entity{}; //< 既存Worldの世代付きHandle
+    NexusNativeSystemsRegistrationV1 systems{}; //< System pointerを保持しない数値scope
+    uint64_t updateCount=0; //< 明示snapshotで保存するゲーム値。関数表やscopeをdumpしない
+};
+struct TargetRequest { NexusEntityHandle entity; float target[3]; }; //< callback中だけ借用する入力

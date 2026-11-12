@@ -1,5 +1,12 @@
 # ゲーム実行基盤
 
+独立Game DLLを利用する経路とRuntime所有権は[Game API / Native Module](GameModulesREADME.md)を参照。
+旧GameLevelSetupによる静的登録も維持している。
+Managedセッションも同じGameRuntimeが所有する。[.NET Runtime Hosting](CSharpRuntimeREADME.md)を参照。
+ScriptBehaviourの更新順、自己破棄とStopの扱いは[Managed Gameplay](ManagedGameplayREADME.md)を参照。
+
+GameRuntimeは最初の有効なStart要求で所有Threadを固定し、Stop後の再生も同じThreadで行う。開始前の設定値は逐次handoffできるが、初期化中の同時操作や、開始後の別Threadからの照会・所有者破棄は行わない。Update / Reload / patchの誤Thread要求はWorldや停止状態を変更する前に拒否する。Stop / Pause / patch放棄の誤Thread要求も無視し、終了は所有Threadで再試行する。別Threadから操作を転送する場合は既存のホスト側command経路へ値要求を渡し、Runtime内部を直接変更しない。[統合監査・第10回](IntegrationAuditREADME.md)に変更と未検証事項を記録した。
+
 EditorのPlayと単体起動は、同じ`GameRuntime`とGame側の構築関数を使用する。
 引数なしでは従来どおりEditorが起動し、`--game`ではEditor UIを生成せずゲームを起動する。
 互換用NexusEngine.exeには両方の起動経路を残し、分離構成には専用Runtime / Editorホストを用意している。

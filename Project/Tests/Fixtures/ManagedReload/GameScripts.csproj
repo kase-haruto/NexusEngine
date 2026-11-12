@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>GameScripts</AssemblyName><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Configurations>Debug;Develop;Release</Configurations><PlatformTarget>x64</PlatformTarget><EnableDynamicLoading>true</EnableDynamicLoading><EnableDefaultCompileItems>false</EnableDefaultCompileItems><DefineConstants>$(DefineConstants);NEXUS_RELOAD_V2</DefineConstants></PropertyGroup>
+  <PropertyGroup Condition="'$(NexusReloadFailure)'=='true'"><DefineConstants>$(DefineConstants);NEXUS_RELOAD_FAIL</DefineConstants></PropertyGroup>
+  <ItemGroup><Compile Include="../ManagedGameplay/Behaviours.cs" /></ItemGroup>
+  <ItemGroup><Reference Include="Nexus.Managed"><HintPath>$(NexusManagedApiPath)</HintPath><Private>false</Private></Reference></ItemGroup>
+</Project>

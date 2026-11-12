@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Develop|x64"><Configuration>Develop</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{@MODULE_GUID@}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Utility</ConfigurationType><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(ProjectDir)Nexus.Engine.local.props" Condition="Exists('$(ProjectDir)Nexus.Engine.local.props')" />
+  <PropertyGroup><NexusDeferredModuleDeployment>true</NexusDeferredModuleDeployment><NexusNativePatchProfile Condition="'$(NexusNativeModuleLivePP)'=='true'">LivePP\</NexusNativePatchProfile><OutDir>$(ProjectDir)Build\Bin\$(NexusNativePatchProfile)$(Platform)\$(Configuration)\</OutDir><IntDir>$(ProjectDir)Intermediate\$(NexusNativePatchProfile)ManagedBootstrap\$(Platform)\$(Configuration)\</IntDir><NexusGameScriptsProject>$(ProjectDir)GameScripts.csproj</NexusGameScriptsProject></PropertyGroup>
+  <!-- 両ホストが参照する同じUtilityで依存を束ね、DLL / Managed成果物の完了後にstampを書く。 -->
+  <ItemGroup><ProjectReference Include="$(ProjectDir)GameModule.vcxproj"><LinkLibraryDependencies>false</LinkLibraryDependencies></ProjectReference></ItemGroup>
+  <Import Project="$(NexusEngineRoot)\Build\Nexus.ManagedGameplay.targets" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

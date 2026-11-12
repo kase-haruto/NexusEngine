@@ -24,6 +24,8 @@ public:
     bool Register(std::string id, Command command) {
         return !id.empty() && command.execute && commands_.emplace(std::move(id), std::move(command)).second;
     }
+    /** \brief Workspace終了・パッチ前に所有callbackを解除する。子Compile processの所有も解放する */
+    void Clear() noexcept { commands_.clear(); }
     /** \brief 同じ割当の競合を拒否してShortcutを接続する */
     bool Bind(std::string_view id, int key, bool ctrl, bool shift, bool alt, std::string label) {
         auto it = commands_.find(id);

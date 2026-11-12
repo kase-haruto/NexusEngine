@@ -1,7 +1,10 @@
 #include "Runtime/Project/ProjectService.h"
 #include "Runtime/Project/ProjectSerializer.h"
 #include "Runtime/Project/ProjectJson.h"
+#include "Runtime/Project/ModuleDeployment.h"
 #include "Tools/Project/ProjectRegistry.h"
+#include "Tools/Project/ProjectTemplates.h"
+#include "Tools/Project/ProjectBuild.h"
 #include "Runtime/Application/GameApplication.h"
 #include "Runtime/Application/ApplicationPaths.h"
 #include "Editor/Services/EditorSettings.h"
@@ -11,6 +14,9 @@
 #include <fstream>
 #include <iostream>
 #include <thread>
+#include <utility>
+#include <algorithm>
+#include <array>
 
 using namespace NexusEngine;
 namespace {
@@ -33,6 +39,45 @@ void SerializerTests(const ProjectContext& context) {
     auto read = ProjectSerializer::Load(context.File()); Require(read.has_value(), "Descriptor load failed.");
     Require(read->name == context.Descriptor().name && read->projectId == context.Descriptor().projectId, "Descriptor round-trip failed.");
     auto json = ProjectJson::Json::parse(saved);
+    Require(read->modules.empty() && !json.contains("modules"), "Legacy Project acquired an implicit Game Module.");
+    // 言語追加が既存データの配置やProject IDを変更しないことを検証する。
+    auto hybrid = context.Descriptor();
+    hybrid.modules = {{"gameplay", "Gameplay", ProjectModuleLanguage::CSharp, "Code/Gameplay", ProjectModuleType::Game},
+        {"combat", "Native Combat", ProjectModuleLanguage::Cpp, "Code/NativeCombat", ProjectModuleType::Game}};
+    const auto modulesFile = context.Root() / "Modules.nxproject";
+    Require(ProjectSerializer::Save(modulesFile, hybrid).has_value(), "Hybrid metadata save failed.");
+    auto modulesRead = ProjectSerializer::Load(modulesFile);
+    Require(modulesRead && modulesRead->modules.size() == 2 && modulesRead->modules[0].id == "gameplay" &&
+        modulesRead->modules[0].language == ProjectModuleLanguage::CSharp && modulesRead->modules[1].language == ProjectModuleLanguage::Cpp &&
+        modulesRead->modules[1].path == "Code/NativeCombat" && modulesRead->modules[1].type == ProjectModuleType::Game,
+        "Hybrid Module metadata was lost.");
+    Require(modulesRead->projectId == hybrid.projectId && modulesRead->paths.assets == hybrid.paths.assets &&
+        modulesRead->startupLevel == hybrid.startupLevel, "Language addition changed common Project data.");
+    Require(ProjectContext::Resolve(modulesFile, hybrid).has_value(), "Declaration-only Module requires generated code.");
+    const auto modulesJson = ProjectJson::Json::parse(Bytes(modulesFile));
+    // 公開名と配置を変更しても安定IDを再生成しない。
+    hybrid.modules[0].name = "Renamed Gameplay"; hybrid.modules[0].path = "Code/RenamedGameplay";
+    Require(ProjectSerializer::Save(modulesFile, hybrid).has_value(), "Renamed Module save failed.");
+    modulesRead = ProjectSerializer::Load(modulesFile);
+    Require(modulesRead && modulesRead->modules[0].id == "gameplay" && modulesRead->modules[0].name == "Renamed Gameplay",
+        "Module rename changed its stable ID.");
+    const auto moduleBytes = Bytes(modulesFile);
+    auto duplicate = hybrid; duplicate.modules[1].id = duplicate.modules[0].id;
+    Require(!ProjectSerializer::Save(modulesFile, duplicate) && Bytes(modulesFile) == moduleBytes, "Duplicate Module ID replaced the descriptor.");
+    for(const char* path : {"../Outside", "C:/Outside", "Code/../Outside", "Code\\Game", "CON"}) {
+        auto invalidModule = hybrid; invalidModule.modules[0].path = path;
+        Require(!ProjectSerializer::Save(modulesFile, invalidModule) && Bytes(modulesFile) == moduleBytes, "Invalid Module path was saved.");
+    }
+    // 未知言語・用途・項目を既定値へ読み替えると後続保存で情報が失われるため拒否する。
+    for(const auto& [key, value] : {std::pair{"language", "Lua"}, std::pair{"type", "Editor"}, std::pair{"future", "value"}}) {
+        auto invalidModule = modulesJson; invalidModule["modules"][0][key] = value;
+        Put(modulesFile, invalidModule.dump()); Require(!ProjectSerializer::Load(modulesFile), "Unknown Module metadata accepted.");
+    }
+    for(const auto& value : {ProjectJson::Json(nullptr), ProjectJson::Json::object(), ProjectJson::Json("Cpp")}) {
+        auto invalidModules = modulesJson; invalidModules["modules"] = value;
+        Put(modulesFile, invalidModules.dump()); Require(!ProjectSerializer::Load(modulesFile), "Invalid modules container accepted.");
+    }
+    Require(Bytes(context.File()) == saved, "Module checks modified the legacy Project.");
     const auto badFile = context.Root() / "Malformed.nxproject";
     for(const auto& malformed : {std::string("{}"), std::string("{\"schemaVersion\":1,\"schemaVersion\":1}"), std::string("[]"), saved + "false"}) {
         Put(badFile, malformed); Require(!ProjectSerializer::Load(badFile), "Malformed JSON was accepted.");
@@ -68,6 +113,120 @@ void SerializerTests(const ProjectContext& context) {
     malformedUtf8.insert(name + std::string("\"name\": \"").size(), 1, static_cast<char>(-1));
     Put(badFile, malformedUtf8); Require(!ProjectSerializer::Load(badFile), "Invalid UTF-8 accepted.");
 }
+/** \brief 保存互換性と依存検証のソース。実行判断はユーザーへ委ねる */
+void ModuleDependencyTests(const ProjectContext& context) {
+    auto descriptor = context.Descriptor();
+    descriptor.modules = {{"Gameplay", "Gameplay", ProjectModuleLanguage::CSharp, "Code/Game", ProjectModuleType::Game, {"Native"}},
+                          {"Native", "Native", ProjectModuleLanguage::Cpp, "Code/Native", ProjectModuleType::Game}};
+    auto order = ProjectSerializer::DependencyOrder(descriptor);
+    Require(order && *order == std::vector<size_t>{1, 0}, "Dependency must precede the initial-language ordering.");
+    Require(CheckProjectRuntimeModules(descriptor).has_value(), "Supported Hybrid dependency was rejected.");
+    const auto file = context.Root() / "Dependencies.nxproject";
+    Require(ProjectSerializer::Save(file, descriptor).has_value(), "Dependency save failed.");
+    const auto before = Bytes(file); auto loaded = ProjectSerializer::Load(file);
+    Require(loaded && loaded->modules[0].dependencies == std::vector<std::string>{"Native"}, "Dependency roundtrip lost IDs.");
+    for(const auto& dependencies : {std::vector<std::string>{"Missing"}, {"Gameplay"}, {"Native", "Native"}}) {
+        auto invalid = descriptor; invalid.modules[0].dependencies = dependencies;
+        Require(!ProjectSerializer::Save(file, invalid) && Bytes(file) == before, "Invalid graph replaced the descriptor.");
+    }
+    auto cycle = descriptor; cycle.modules[1].dependencies = {"Gameplay"};
+    Require(!ProjectSerializer::DependencyOrder(cycle), "Cyclic dependency accepted.");
+    auto reverse = descriptor; reverse.modules[0].dependencies.clear(); reverse.modules[1].dependencies = {"Gameplay"};
+    Require(ProjectSerializer::Validate(reverse) && !CheckProjectRuntimeModules(reverse), "Declaration-only initialization order was executed.");
+    for(const auto& value : {ProjectJson::Json(nullptr), ProjectJson::Json("Native"), ProjectJson::Json::array({1})}) {
+        auto document = ProjectJson::Json::parse(before); document["modules"][0]["dependencies"] = value;
+        Put(file, document.dump()); Require(!ProjectSerializer::Load(file), "Malformed dependency container accepted.");
+    }
+}
+/** \brief Buildしない計画検証のソース。profileの配置・拒否条件と通常版の互換性を確認する */
+void BuildProfileTests(const std::filesystem::path& root) {
+    auto descriptor = Descriptor(); descriptor.startupLevel = descriptor.paths.levels + "/Startup.level";
+    descriptor.modules = {{"Native", "Native", ProjectModuleLanguage::Cpp, "Code/Native", ProjectModuleType::Game}};
+    auto created = ProjectService::Create(root / "Profiles", descriptor, InitialLevel); Require(created.has_value(), "Profile fixture creation failed.");
+    const auto targetsFile = created->Config() / "BuildTargets.json";
+    const ProjectJson::Json targets{{"schemaVersion", 1}, {"editorProject", "GameEditor.vcxproj"}, {"runtimeProject", "GameRuntime.vcxproj"},
+        {"editorExecutable", "Build/Bin/x64/{configuration}/GameEditor.exe"}, {"runtimeExecutable", "Build/Bin/x64/{configuration}/GameRuntime.exe"},
+        {"nativeModule", "Build/Bin/x64/{configuration}/Game.dll"}};
+    Put(targetsFile, targets.dump()); const auto before = Bytes(targetsFile);
+    auto standard = ProjectBuild::Targets(*created, "Debug");
+    auto native = ProjectBuild::Targets(*created, "Debug", ProjectBuildProfile::NativeLivePatch);
+    Require(standard && native && SameFilePath(standard->runtimeExecutable, created->Root() / "Build/Bin/x64/Debug/GameRuntime.exe") &&
+        SameFilePath(native->runtimeExecutable, created->Root() / "Build/Bin/LivePP/x64/Debug/GameRuntime.exe"), "Profile outputs were mixed.");
+    Require(SameFilePath(standard->editorProject, native->editorProject) && Bytes(targetsFile) == before, "Planning rewrote the shared project.");
+    Require(!ProjectBuild::Targets(*created, "Release", ProjectBuildProfile::NativeLivePatch), "Release patch profile accepted.");
+    Require(!ProjectBuild::Targets(*created, "Debug", static_cast<ProjectBuildProfile>(99)), "Unknown profile accepted.");
+    auto bad = targets; bad["nativeModule"] = "Other/Game.dll"; Put(targetsFile, bad.dump());
+    Require(!ProjectBuild::Targets(*created, "Debug", ProjectBuildProfile::NativeLivePatch), "Unrelated profile output accepted.");
+}
+/** \brief 複数Moduleの通常計画・衝突・配布inventory破損を検査するソース。実行はユーザーに委ねる */
+void ModuleDeliveryTests(const std::filesystem::path& root) {
+    auto descriptor = Descriptor();
+    descriptor.modules = {{"Native", "Native", ProjectModuleLanguage::Cpp, "Code/Native", ProjectModuleType::Game},
+        {"Other", "Other", ProjectModuleLanguage::Cpp, "Code/Other", ProjectModuleType::Game, {"Native"}},
+        {"Scripts", "Scripts", ProjectModuleLanguage::CSharp, "Code/Scripts", ProjectModuleType::Game, {"Other"}},
+        {"ExtraScripts", "ExtraScripts", ProjectModuleLanguage::CSharp, "Code/ExtraScripts", ProjectModuleType::Game, {"Scripts"}}};
+    auto project = ProjectService::Create(root / "Delivery", descriptor, InitialLevel); Require(project.has_value(), "Delivery Project creation failed.");
+    ProjectJson::Json targets{{"schemaVersion", 1}, {"runtimeProject", "GameRuntime.vcxproj"}, {"editorProject", "GameEditor.vcxproj"},
+        {"runtimeExecutable", "Build/Bin/x64/{configuration}/GameRuntime.exe"}, {"editorExecutable", "Build/Bin/x64/{configuration}/GameEditor.exe"},
+        {"nativeModule", "Build/Bin/x64/{configuration}/Game.dll"}, {"managedBootstrap", "Build/Bin/x64/{configuration}/Managed/Nexus.Managed.Bootstrap.dll"},
+        {"gameScripts", "Build/Bin/x64/{configuration}/Managed/GameScripts.dll"},
+        {"moduleProjects", ProjectJson::Json::array({{{"id", "Other"}, {"project", "Other.vcxproj"}, {"output", "Build/Bin/x64/{configuration}/Other.dll"}},
+            {{"id", "ExtraScripts"}, {"project", "ExtraScripts.csproj"}, {"output", "Build/Bin/x64/{configuration}/Managed/ExtraScripts.dll"}}})}};
+    Put(project->Config() / "BuildTargets.json", targets.dump());
+    auto plan = ProjectBuild::Targets(*project, "Debug"); Require(plan && plan->modules.size() == 2, "Multi-language Module plan rejected.");
+    Require(!ProjectBuild::Targets(*project, "Debug", ProjectBuildProfile::NativeLivePatch), "Multi-DLL patch profile accepted.");
+    auto conflict = targets; conflict["moduleProjects"][0]["output"] = "Build/Bin/x64/{configuration}/gAmE.dll";
+    Put(project->Config() / "BuildTargets.json", conflict.dump()); Require(!ProjectBuild::Targets(*project, "Debug"), "Case-insensitive output collision accepted.");
+    for(const auto& reserved : {"nethost.dll", "dxcompiler.dll", "LPP_Agent_x64_CPP.dll", "Nexus.Managed.dll"}) {
+        auto invalid = targets; invalid["moduleProjects"][0]["output"] = std::string("Build/Bin/x64/{configuration}/") + reserved;
+        Put(project->Config() / "BuildTargets.json", invalid.dump()); Require(!ProjectBuild::Targets(*project, "Debug"), "Reserved runtime filename accepted as a Module output.");
+    }
+    auto recursive = targets; recursive["moduleProjects"][0]["project"] = "GameRuntime.vcxproj";
+    Put(project->Config() / "BuildTargets.json", recursive.dump()); Require(!ProjectBuild::Targets(*project, "Debug"), "Recursive host Project accepted as a Module input.");
+    const auto package = root / "Package", bin = package / "Bin", executable = bin / "GameRuntime.exe";
+    std::filesystem::create_directories(bin); std::filesystem::create_directories(package / "EngineData/Shaders");
+    Put(executable, "inert executable fixture"); Put(package / "Game.nxproject", "inert Project fixture"); Put(bin / "Nexus.modules.json", "{}");
+    ProjectJson::Json entries = ProjectJson::Json::array();
+    for(const auto& relative : {"Bin/GameRuntime.exe", "Game.nxproject", "Bin/Nexus.modules.json"}) {
+        auto hash = Sha256File(package / relative); Require(hash.has_value(), "Package fixture hash failed."); entries.push_back({{"path", relative}, {"sha256", *hash}});
+    }
+    ProjectJson::Json manifest{{"schemaVersion", 1}, {"project", "Game.nxproject"}, {"engineData", "EngineData"}, {"dotnetRoot", ""},
+        {"configuration", "Debug"}, {"engineId", "fixture"}, {"engineVersion", "1"}, {"files", entries}};
+    Put(bin / "NexusGame.package.json", manifest.dump()); Require(LoadPackageStartup(executable, "fixture", "1").has_value(), "Valid Package inventory rejected.");
+    Require(!LoadPackageStartup(executable, "other", "1"), "Foreign Engine Package accepted.");
+    auto missing = manifest; missing["files"].erase(missing["files"].begin()); Put(bin / "NexusGame.package.json", missing.dump());
+    Require(!LoadPackageStartup(executable), "Incomplete startup inventory accepted.");
+    Put(bin / "NexusGame.package.json", manifest.dump()); Put(executable, "changed fixture"); Require(!LoadPackageStartup(executable), "Changed Package accepted.");
+    Put(executable, "inert executable fixture");
+    auto escaped = manifest; escaped["project"] = "../Foreign.nxproject"; Put(bin / "NexusGame.package.json", escaped.dump());
+    Require(!LoadPackageStartup(executable), "Package root escape accepted.");
+}
+/** \brief 設定だけ変更された古い成果物を拒否する。fixtureは通常ファイルで、DLL / Gameを起動しない */
+void BuildTargetsStampTests(const std::filesystem::path& root) {
+    auto descriptor = Descriptor(); descriptor.engine.version = "0.1.0";
+    descriptor.modules = {{"Native", "Native", ProjectModuleLanguage::Cpp, "Code/Native", ProjectModuleType::Game}};
+    auto project = ProjectService::Create(root / "Stamp", descriptor, InitialLevel); Require(project.has_value(), "Stamp Project creation failed.");
+    ProjectJson::Json targets{{"schemaVersion", 1}, {"runtimeProject", "GameRuntime.vcxproj"}, {"editorProject", "GameEditor.vcxproj"},
+        {"runtimeExecutable", "Build/Bin/x64/{configuration}/GameRuntime.exe"}, {"editorExecutable", "Build/Bin/x64/{configuration}/GameEditor.exe"},
+        {"nativeModule", "Build/Bin/x64/{configuration}/Game.dll"}};
+    const auto config = project->Config() / "BuildTargets.json";
+    Put(config, targets.dump());
+    const auto bin = project->Root() / "Build/Bin/x64/Debug"; std::filesystem::create_directories(bin);
+    const auto executable = bin / "GameRuntime.exe";
+    Put(executable, "inert host bytes"); Put(bin / "Game.dll", "inert module bytes");
+    auto targetHash = Sha256File(config), projectHash = Sha256File(project->File()), hostHash = Sha256File(executable), moduleHash = Sha256File(bin / "Game.dll");
+    Require(targetHash && projectHash && hostHash && moduleHash, "Cannot hash stamp fixtures.");
+    EngineInstallation engine; engine.identity = project->Descriptor().engine; engine.configuration = "Debug"; engine.buildId = "fixture-build";
+    ProjectJson::Json stamp{{"schemaVersion", 1}, {"projectId", project->Descriptor().projectId}, {"engineId", engine.identity.id},
+        {"engineVersion", engine.identity.version}, {"association", engine.identity.association}, {"buildId", engine.buildId}, {"configuration", "Debug"},
+        {"hostKind", "Runtime"}, {"engineManifest", "fixture.nxengine"}, {"sha256", *hostHash}, {"projectHash", *projectHash}, {"targetsHash", *targetHash},
+        {"nativeModule", {{"path", "Build/Bin/x64/Debug/Game.dll"}, {"sha256", *moduleHash}}}};
+    auto stampFile = executable; stampFile += ".nxbuild"; Put(stampFile, stamp.dump());
+    Require(ProjectBuild::Verify(*project, engine, executable).has_value(), "Matching BuildTargets stamp rejected.");
+    targets["editorProject"] = "OtherEditor.vcxproj"; Put(config, targets.dump());
+    auto changed = ProjectBuild::Verify(*project, engine, executable);
+    Require(!changed && changed.error().GetMessageText().find("BuildTargets changed") != std::string::npos, "Changed BuildTargets accepted with an old stamp.");
+}
 void CreationTests(const std::filesystem::path& root, const ProjectContext& context) {
     for(const auto* directory : {&context.Assets(), &context.Source(), &context.Config()})
         Require(std::filesystem::is_regular_file(*directory / ".gitkeep"), "Git clone would lose an empty required Directory.");
@@ -94,6 +253,31 @@ void CreationTests(const std::filesystem::path& root, const ProjectContext& cont
         auto escaped = context.Descriptor(); escaped.paths.assets = "Escape";
         Require(!ProjectContext::Resolve(context.File(), escaped), "Symlink escaped Project root.");
     } else std::cout << "SKIP: symlink creation requires Windows privileges.\n";
+}
+/** \brief 共通生成経路のHybrid両初期言語と既存単言語テンプレートを検証する。Buildは行わない */
+void HybridTemplateTests(const std::filesystem::path& root) {
+    auto templates = ProjectTemplates::List(std::filesystem::absolute("Project/Templates")); Require(templates.has_value(), "Cannot list Templates.");
+    EngineInstallation engine; engine.identity = Descriptor().engine;
+    for(const auto language : {ProjectModuleLanguage::Cpp, ProjectModuleLanguage::CSharp}) {
+        const auto found = std::ranges::find(*templates, "hybrid-gameplay", &ProjectTemplate::id); Require(found != templates->end(), "Hybrid Template missing.");
+        auto descriptor = Descriptor(); descriptor.startupLevel = descriptor.paths.levels + "/Startup.level";
+        const auto directory = root / (language == ProjectModuleLanguage::Cpp ? "Hybrid-Cpp" : "Hybrid-CSharp");
+        auto created = ProjectTemplates::Create(directory, descriptor, *found, engine, language);
+        Require(created && created->Descriptor().modules.size() == 2 && created->Descriptor().modules.front().language == language, "Hybrid initial language fixed the Project language.");
+        auto order = ProjectSerializer::DependencyOrder(created->Descriptor());
+        Require(order && created->Descriptor().modules[order->front()].id == "NativeCombat" && CheckProjectRuntimeModules(created->Descriptor()), "Hybrid dependency was lost during generation.");
+        Require(std::filesystem::is_regular_file(created->Source() / "NativeCombat/Main.cpp") && std::filesystem::is_regular_file(created->Source() / "Game/PlayerController.cs"), "Hybrid did not generate both Modules.");
+        const auto native = Bytes(created->Root() / "GameModule.vcxproj");
+        Require(native.find("@NATIVE_GUID@") == native.npos && native.find("Code\\NativeCombat") != native.npos, "Native Project substitutions were lost.");
+        Require(Bytes(created->Root() / "ManagedBootstrap.vcxproj").find("GameModule.vcxproj") != std::string::npos, "Hybrid host dependency is incomplete.");
+        Require(Bytes(created->Source() / "NativeCombat/Main.cpp").find(created->Descriptor().projectId) != std::string::npos, "DLL Project identity does not match.");
+    }
+    for(const auto& entry : std::array{std::pair{"native-module", ProjectModuleLanguage::Cpp}, std::pair{"managed-gameplay", ProjectModuleLanguage::CSharp}}) {
+        const auto found = std::ranges::find(*templates, entry.first, &ProjectTemplate::id); Require(found != templates->end(), "Existing Template missing.");
+        auto descriptor = Descriptor(); descriptor.startupLevel = descriptor.paths.levels + "/Startup.level";
+        auto created = ProjectTemplates::Create(root / entry.first, descriptor, *found, engine, entry.second);
+        Require(created && created->Descriptor().modules.size() == 1, "Single-language generation changed unexpectedly.");
+    }
 }
 void EngineTests() {
     ProjectEngineRequirement current{"development", "engine-a", "0.1.0-dev"};
@@ -165,7 +349,7 @@ int main() {
         Require(dataRoot && SameFilePath(*dataRoot, root / "Installed/Data"), "Installed Data Root was replaced by an ancestor Development Engine.");
         auto created = ProjectService::Create(root / L"Game One 日本語", Descriptor(), InitialLevel);
         if(!created) throw std::runtime_error(created.error().GetMessageText());
-        SerializerTests(*created); CreationTests(root, *created); EngineTests(); EditorSettingsTests(*created); RegistryTests(root, *created);
+        SerializerTests(*created); ModuleDependencyTests(*created); BuildProfileTests(root); ModuleDeliveryTests(root); BuildTargetsStampTests(root); CreationTests(root, *created); HybridTemplateTests(root); EngineTests(); EditorSettingsTests(*created); RegistryTests(root, *created);
         std::cout << "PASS: descriptor validation/round-trip, atomic writes, creation rollback, moved Unicode roots, explicit Engine checks, Editor settings, concurrent registry and Runtime startup.\n";
         return 0;
     } catch(const std::exception& exception) { std::cerr << "FAIL: " << exception.what() << '\n'; return 1; }

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "managed-bootstrap",
+  "name": "Managed Bootstrap (C#)",
+  "description": "共通Runtime内でManaged bootstrapの起動・終了を行う最小構成。C# Gameplayは後続Phase。",
+  "moduleLanguages": ["CSharp"],
+  "files": [
+    {"source":"Shared/Directory.Build.props.in","target":"Directory.Build.props","replace":false},
+    { "source": "ManagedBootstrap/Host.cpp.in", "target": "@SOURCE@/Host/Main.cpp", "replace": false, "language": "CSharp" },
+    { "source": "ManagedBootstrap/GameRuntime.vcxproj.in", "target": "GameRuntime.vcxproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedBootstrap/GameEditor.vcxproj.in", "target": "GameEditor.vcxproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedBootstrap/ManagedBootstrap.vcxproj.in", "target": "ManagedBootstrap.vcxproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedBootstrap/Game.slnx.in", "target": "Game.slnx", "replace": true, "language": "CSharp" },
+    { "source": "ManagedBootstrap/BuildTargets.json.in", "target": "@CONFIG@/BuildTargets.json", "replace": false, "language": "CSharp" },
+    { "source": "ManagedBootstrap/README.md.in", "target": "@SOURCE@/Game/README.md", "replace": false, "language": "CSharp" },
+    { "source": "Basic3D/Startup.level", "target": "@LEVELS@/Startup.level", "replace": false }
+  ]
+}

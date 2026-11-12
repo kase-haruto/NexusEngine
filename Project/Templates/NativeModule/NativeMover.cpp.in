@@ -1,0 +1,13 @@
+#include "NativeMover.h"
+
+NexusGameStatus NativeMover::OnUpdate(float deltaTime) noexcept {
+    NexusComponentValueV1 speed{};
+    auto status = context_.Read({"speed", 5}, speed);
+    if(status != NEXUS_GAME_OK) return status;
+    if(speed.kind != NEXUS_COMPONENT_FLOAT) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    NexusLocalTransform transform{};
+    status = context_.GetTransform(transform); if(status != NEXUS_GAME_OK) return status;
+    // 同じEntityの世代とattachmentをsetterでも検証し、旧instanceからの書込みを防ぐ。
+    transform.translation[0] += speed.number[0] * deltaTime;
+    return context_.SetTransform(transform);
+}

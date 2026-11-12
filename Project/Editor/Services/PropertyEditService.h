@@ -8,6 +8,7 @@ namespace NexusEngine {
 struct PropertyHandle {
     PersistentId entity; //< Componentアドレスを保持しない
     std::string type, property; //< 安定Reflection ID
+    PersistentId instance; //< 任意の保存instance ID。既存Component/旧呼出しは無効IDで従来accessorを使う
     friend bool operator==(const PropertyHandle&, const PropertyHandle&) = default;
 };
 /*-----------------------------------------------------------------------------------------
@@ -45,7 +46,10 @@ private:
     struct Edit { PropertyHandle handle; PropertyValue before, after; };
     const PropertyDescriptor* Resolve(const PropertyHandle& handle) const;
     bool Apply(const PropertyHandle& handle, const PropertyValue& value);
-    bool ApplyEdits(const std::vector<Edit>& edits, bool before);
+    /** \brief 全setterと編集後のHandle解決を確認し、失敗時は直前の値へ戻す
+     * \param observed 成功した最終値のcopy。Previewの正規化値を再読取なしで確定する場合だけ指定する
+     */
+    bool ApplyEdits(const std::vector<Edit>& edits, bool before, std::vector<PropertyValue>* observed = nullptr);
     const TypeRegistry& registry_; //< Workspace所有
     Level* level_ = nullptr; //< Session所有。Worldのポインタをcacheしない
     EditorHistory history_; //< 構造編集と共有する履歴

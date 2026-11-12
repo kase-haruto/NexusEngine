@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Develop|x64"><Configuration>Develop</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{5F111197-CE89-4C07-B9E7-64C256B59BA6}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'!='Release'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="Nexus.Common.props" />
+  <PropertyGroup><NexusGameScriptsProject>$(MSBuildThisFileDirectory)..\Tests\Fixtures\ManagedGameplay\GameScripts.csproj</NexusGameScriptsProject></PropertyGroup>
+  <ItemGroup><ClCompile Include="..\Tests\ManagedGameplayTests.cpp" /><ProjectReference Include="NexusRuntime.vcxproj" /><ProjectReference Include="NexusEditorSupport.vcxproj" /></ItemGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><PreprocessorDefinitions>NEXUS_HYBRID_FIXTURE;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile></ItemDefinitionGroup>
+  <ItemGroup Condition="'$(Configuration)'=='Debug'"><ProjectReference Include="..\Tests\Fixtures\NativeModule\NativeModuleFixture.vcxproj"><LinkLibraryDependencies>false</LinkLibraryDependencies></ProjectReference></ItemGroup>
+  <Import Project="Nexus.ManagedGameplay.targets" />
+  <!-- 明示的なテストBuildで新旧Reload fixtureとMetadataを生成し、実行時の検証入力を揃える。 -->
+  <Target Name="PrepareManagedReloadFixtures" BeforeTargets="Build" DependsOnTargets="PrepareNexusManagedGameplay">
+    <Exec Command="dotnet build &quot;$(MSBuildThisFileDirectory)..\Tests\Fixtures\ManagedReload\GameScripts.csproj&quot; --configuration &quot;$(Configuration)&quot; --output &quot;$(OutDir)ReloadV2/.&quot; -p:BaseIntermediateOutputPath=&quot;$(IntDir)ReloadV2/&quot; -p:NexusManagedApiPath=&quot;$(OutDir)Managed/Nexus.Managed.dll&quot;" />
+    <Exec Command="dotnet &quot;$(OutDir)ManagedTools/Nexus.Managed.Metadata.dll&quot; &quot;$(OutDir)ReloadV2/GameScripts.dll&quot; &quot;$(OutDir)ReloadV2/GameScripts.metadata.json&quot;" />
+    <Exec Command="dotnet build &quot;$(MSBuildThisFileDirectory)..\Tests\Fixtures\ManagedReload\GameScripts.csproj&quot; --configuration &quot;$(Configuration)&quot; --output &quot;$(OutDir)ReloadFailure/.&quot; -p:BaseIntermediateOutputPath=&quot;$(IntDir)ReloadFailure/&quot; -p:NexusManagedApiPath=&quot;$(OutDir)Managed/Nexus.Managed.dll&quot; -p:NexusReloadFailure=true" />
+    <Exec Command="dotnet &quot;$(OutDir)ManagedTools/Nexus.Managed.Metadata.dll&quot; &quot;$(OutDir)ReloadFailure/GameScripts.dll&quot; &quot;$(OutDir)ReloadFailure/GameScripts.metadata.json&quot;" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

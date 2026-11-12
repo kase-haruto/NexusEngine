@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "managedRuntime": "Mono",
+  "runtimeProject": "GameRuntime.vcxproj",
+  "editorProject": "GameEditor.vcxproj",
+  "runtimeExecutable": "Build/Bin/x64/{configuration}/GameRuntime.exe",
+  "editorExecutable": "Build/Bin/x64/{configuration}/GameEditor.exe",
+  "managedBootstrap": "Build/Bin/x64/{configuration}/Managed/Nexus.Managed.Bootstrap.dll",
+  "gameScripts": "Build/Bin/x64/{configuration}/Managed/GameScripts.dll"
+}

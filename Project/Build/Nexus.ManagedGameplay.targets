@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="Nexus.ManagedBootstrap.targets" />
+  <Target Name="PrepareNexusManagedGameplay" BeforeTargets="Build" DependsOnTargets="PrepareNexusManagedBootstrap">
+    <Error Condition="'$(NexusGameScriptsProject)'=='' or !Exists('$(NexusGameScriptsProject)')" Text="Managed Gameplay requires an explicit GameScripts.csproj." />
+    <Exec Command="dotnet build &quot;$(NexusGameScriptsProject)&quot; $(NexusManagedBuildArguments) $(NexusManagedFrameworkArguments) --configuration &quot;$(Configuration)&quot; --output &quot;$(OutDir)Managed/.&quot; -p:NexusManagedIntermediateRoot=&quot;$(ProjectDir)Intermediate/$(NexusNativePatchProfile)ManagedModules/$(Configuration)/&quot; -p:NexusManagedApiPath=&quot;$(OutDir)Managed/Nexus.Managed.dll&quot;" />
+    <!-- ExporterはEditorから独立したprocess。生成失敗時はBuild stampを更新しない。 -->
+    <Exec Command="dotnet build &quot;$(NexusEngineRoot)/Managed/Nexus.Managed.Metadata/Nexus.Managed.Metadata.csproj&quot; $(NexusManagedBuildArguments) $(NexusManagedFrameworkArguments) --configuration &quot;$(Configuration)&quot; --output &quot;$(OutDir)ManagedTools/.&quot; -p:NexusManagedIntermediateRoot=&quot;$(IntDir)MetadataAssemblies/&quot; -p:NexusManagedApiPath=&quot;$(OutDir)Managed/Nexus.Managed.dll&quot;" />
+    <Exec Condition="'$(NexusDeferredModuleDeployment)'!='true' and '$(NexusManagedRuntime)'!='Mono'" Command="dotnet &quot;$(OutDir)ManagedTools/Nexus.Managed.Metadata.dll&quot; &quot;$(OutDir)Managed/GameScripts.dll&quot; &quot;$(OutDir)Managed/GameScripts.metadata.json&quot;" />
+    <Exec Condition="'$(NexusDeferredModuleDeployment)'!='true' and '$(NexusManagedRuntime)'=='Mono'" Command="&quot;$(OutDir)Mono/bin/mono.exe&quot; &quot;$(OutDir)ManagedTools/Nexus.Managed.Metadata.exe&quot; &quot;$(OutDir)Managed/GameScripts.dll&quot; &quot;$(OutDir)Managed/GameScripts.metadata.json&quot;" />
+  </Target>
+</Project>

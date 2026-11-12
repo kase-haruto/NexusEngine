@@ -1,0 +1,68 @@
+#if defined(NEXUS_GAME_MODULE_LIVEPP)
+#include <Nexus/NativeGamePatch.h>
+#include <Windows.h>
+#include "API/x64/LPP_API_x64_CPP.h"
+#include <cstdlib>
+#include <cstdio>
+#include <mutex>
+#include <string>
+
+namespace {
+/*-----------------------------------------------------------------------------------------
+ * PatchObserverState
+ * - 安定Engine entryへの借用参照をSDK hookへ渡す
+ * - 解除と通知を直列化し、Backend破棄後の呼出しを防ぐ。ゲームstateは所有しない
+ * - この翻訳単位はBackendが内容を固定し、パッチ対象の編集を拒否する
+ *---------------------------------------------------------------------------------------*/
+struct PatchObserverState {
+    std::mutex mutex; //< SDKのCompile hookと所有Threadの解除を直列化する
+    NexusNativePatchObserverV1 observer{}; //< Disable通知の後に解除するEngine常駐entry
+};
+PatchObserverState patchObserver;
+/** \brief callback中だけObserverを借用する。SDKのThreadからゲームstateへ直接触れない */
+bool Notify(uint32_t event, const wchar_t* output = nullptr) noexcept {
+    try {
+        std::lock_guard lock(patchObserver.mutex);
+        const auto& observer = patchObserver.observer;
+        // SDKのUTF-16診断を値コピーして既存Logger / Consoleへ渡す。SDK pointerを保持しない。
+        std::string message;
+        if(output) {
+            const int bytes = WideCharToMultiByte(CP_UTF8, 0, output, -1, nullptr, 0, nullptr, nullptr);
+            if(bytes > 0 && bytes <= 65536) {
+                message.resize(static_cast<size_t>(bytes));
+                if(!WideCharToMultiByte(CP_UTF8, 0, output, -1, message.data(), bytes, nullptr, nullptr)) message.clear();
+                else message.pop_back();
+            }
+        }
+        return observer.notify && observer.notify(observer.context, event, {message.data(), static_cast<uint32_t>(message.size())}) != 0;
+    } catch(...) { return false; }
+}
+/** \brief SDKには取消戻り値がないため、固定入力が破られた場合は新コード適用前に終了する */
+void BeforePatch(lpp::LppHotReloadPrepatchHookId, const wchar_t*, const wchar_t* const* files, unsigned int count, const wchar_t* const*, unsigned int layoutCount) {
+    // 編集を元へ戻してもSDKに古い候補が残りうる。SDKが報告した入力もbody-onlyの範囲へ制限する。
+    if(!files || !count || layoutCount) {
+        // SDKが取消戻り値を提供しないため終了するが、無言の失敗にせず受領した契約差を残す。
+        std::fprintf(stderr, "Native pre-patch rejected: files=%u, layouts=%u, file array=%s\n", count, layoutCount, files ? "present" : "null");
+        std::_Exit(EXIT_FAILURE);
+    }
+    for(unsigned int index = 0; index < count; ++index) if(!Notify(NEXUS_NATIVE_PATCH_SOURCE, files[index])) std::_Exit(EXIT_FAILURE);
+    if(!Notify(NEXUS_NATIVE_PATCH_PRE)) std::_Exit(EXIT_FAILURE);
+}
+/** \brief 適用を確認できた場合だけEngineへ通知する。Unloadやstate再生成とは区別する */
+void AfterPatch(lpp::LppHotReloadPostpatchHookId, const wchar_t*, const wchar_t* const*, unsigned int, const wchar_t* const*, unsigned int) { static_cast<void>(Notify(NEXUS_NATIVE_PATCH_POST)); }
+/** \brief コンパイル失敗では旧コードを維持し、既存Consoleへ診断を転送する */
+void CompileError(lpp::LppCompileErrorHookId, const wchar_t*, const wchar_t*, const wchar_t* output) { static_cast<void>(Notify(NEXUS_NATIVE_PATCH_COMPILE_ERROR, output)); }
+/** \brief Link失敗も非適用として扱い、実パッチ成功と区別する */
+void LinkError(lpp::LppLinkErrorHookId, const wchar_t*, const wchar_t* output) { static_cast<void>(Notify(NEXUS_NATIVE_PATCH_LINK_ERROR, output)); }
+LPP_HOTRELOAD_PREPATCH_HOOK(BeforePatch);
+LPP_HOTRELOAD_POSTPATCH_HOOK(AfterPatch);
+LPP_COMPILE_ERROR_HOOK(CompileError);
+LPP_LINK_ERROR_HOOK(LinkError);
+}
+/** \brief ロード済みDLLだけに設定する。解除は実行中通知が戻ってから完了する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusSetNativePatchObserver(const NexusNativePatchObserverV1* observer) noexcept {
+    if(observer && (observer->abiVersion != 1 || observer->structSize != sizeof(*observer) || !observer->context || !observer->notify)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    try { std::lock_guard lock(patchObserver.mutex); patchObserver.observer = observer ? *observer : NexusNativePatchObserverV1{}; return NEXUS_GAME_OK; }
+    catch(...) { return NEXUS_GAME_FAILED; }
+}
+#endif

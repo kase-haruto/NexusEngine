@@ -61,6 +61,32 @@ namespace NexusEngine {
 		}
 		[[nodiscard]] size_t GetEntityCount() const noexcept { return livingEntityCount_; }
 
+        /** \brief Componentの有無に依存せず生存Entityを列挙する。callback中の構造変更は拒否する */
+        template<typename Function>
+        void ForEachEntity(Function&& function) {
+            IterationGuard guard(iterationDepth_);
+            for(size_t index = 0; index < entitySlots_.size(); ++index) {
+                const auto& slot = entitySlots_[index];
+                if(slot.alive) function(Entity(this, {static_cast<uint32_t>(index), slot.generation}));
+            }
+        }
+
+        /**
+         * \brief cursor以降の生存Entityを反復し、callbackがfalseを返すと次のcursorを返す
+         * \param cursor 0または直前の戻り値。構造変更を挟んだcursorの再利用は禁止する
+         * \return 次の未走査位置。UINT32_MAXは終端。全ページで先頭から再走査しないために使う
+         */
+        template<typename Function>
+        uint32_t ForEachEntityFrom(uint32_t cursor, Function&& function) {
+            IterationGuard guard(iterationDepth_);
+            for(size_t index = cursor; index < entitySlots_.size(); ++index) {
+                const auto& slot = entitySlots_[index];
+                if(slot.alive && !function(Entity(this, {static_cast<uint32_t>(index), slot.generation})))
+                    return index + 1 < entitySlots_.size() ? static_cast<uint32_t>(index + 1) : UINT32_MAX;
+            }
+            return UINT32_MAX;
+        }
+
 		/** 再インスタンス化専用。Entity の配置と世代を保ち、旧コードで全 Component を破棄する。 */
 		void ReleaseComponentStorages() {
 			if(iterationDepth_ != 0) throw std::logic_error("Cannot reinstance during scene iteration");

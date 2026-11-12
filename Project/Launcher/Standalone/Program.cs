@@ -114,15 +114,23 @@ public sealed class LauncherForm : Form
         Add(create, "使用するエンジン", engines);
         var name = new TextBox { Width = 400 }; var parent = new TextBox { Width = 600, Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
         var template = new ComboBox { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-        template.Items.AddRange(["blank", "basic-3d"]); template.SelectedIndex = 0;
+        template.Items.AddRange(["blank", "basic-3d", "native-module", "managed-bootstrap", "managed-gameplay", "hybrid-gameplay"]); template.SelectedIndex = 0;
         Add(create, "新規プロジェクト名", name); Add(create, "親フォルダー", parent);
         Button(create, "プロジェクト保存先を選択", () => { var path = Folder(); if (path != null) parent.Text = path; });
         Add(create, "テンプレート", template);
+        var initialLanguage = new ComboBox { Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
+        initialLanguage.Items.AddRange(["C++ — Native Game Development", "C# — Managed Game Development"]); initialLanguage.SelectedIndex = 0;
+        Add(create, "Initial Game Language", initialLanguage);
+        create.Controls.Add(new Label { Width = 740, Height = 65, Text = "最初のGame Moduleの種類を選択します。Projectの言語は固定されません。HybridはC++とC#で同じWorldを操作します。Managed GameplayはProperty編集とReload C#に対応します。Managed Bootstrapは起動確認、blank / basic-3dのC#は宣言のみです。" });
         Button(create, "新規プロジェクトを作成", () => Work(async token =>
         {
             EnsureTool(); var engine = engines.SelectedItem as Installed ?? throw new IOException("エンジンを選択してください。");
             var target = ProjectTarget(parent.Text, name.Text);
-            var file = await Distribution.Run(Tool, ["create-template", target, name.Text.Trim(), engine.Manifest, template.Text], token);
+            var language = initialLanguage.SelectedIndex == 0 ? "Cpp" : "CSharp";
+            // C++の既定選択は旧CLIと同じ引数を維持し、既存の配布Toolでも作成できるようにする。
+            List<string> createArguments = ["create-template", target, name.Text.Trim(), engine.Manifest, template.Text];
+            if (language == "CSharp") createArguments.Add(language);
+            var file = await Distribution.Run(Tool, createArguments, token);
             await Distribution.Run(Tool, ["register", file], token); RefreshLocal();
         }));
         var git = Page("Gitから追加", "WORKSPACE / SOURCE CONTROL");

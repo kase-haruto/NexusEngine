@@ -242,11 +242,15 @@ void LauncherApplication::DrawProjects() {
 void LauncherApplication::DrawNewProject() {
     const float scale = LauncherUI::Scale();
     LauncherUI::Title("Create a project","Choose a starting point. Make it your own.");
-    const bool wide = ImGui::GetContentRegionAvail().x > 720 * scale;
+    // 既定Windowと125% DPIでも入力欄を横へ残す。初期言語を長いTemplate一覧の下へ隠さない。
+    const bool wide = ImGui::GetContentRegionAvail().x > 600 * scale;
     if(!ImGui::BeginTable("Creation layout",wide ? 2 : 1,ImGuiTableFlags_SizingStretchSame)) return;
     ImGui::TableNextColumn();
     ImGui::TextDisabled("01  STARTING TEMPLATE"); LauncherUI::Gap(8);
     const LauncherEngine* selectedEngine = engine_ >= 0 && engine_ < static_cast<int>(snapshot_.engines.size()) ? &snapshot_.engines[engine_] : nullptr;
+    // 一覧だけをscrollし、Module種類を増やしてもProject名・Location・言語の位置を維持する。
+    const float templateHeight = wide ? std::max(220 * scale, ImGui::GetContentRegionAvail().y - 40 * scale) : 220 * scale;
+    ImGui::BeginChild("Project template list", {0,templateHeight});
     if(selectedEngine) {
         for(size_t index = 0; index < selectedEngine->templates.size(); ++index) {
             const auto& item = selectedEngine->templates[index];
@@ -265,6 +269,7 @@ void LauncherApplication::DrawNewProject() {
         ImGui::TextWrapped("Choose an engine to see its project templates.");
         if(ImGui::Button("Go to engine library")) tab_ = 2;
     }
+    ImGui::EndChild();
     ImGui::TableNextColumn();
     ImGui::TextDisabled("02  PROJECT DETAILS");
     LauncherUI::Label("Project name"); ImGui::SetNextItemWidth(-1);
@@ -272,6 +277,11 @@ void LauncherApplication::DrawNewProject() {
     LauncherUI::Label("Location"); ImGui::SetNextItemWidth(-1);
     ImGui::InputTextWithHint("##Parent folder","Parent folder",location_.data(),location_.size());
     if(ImGui::Button("Browse folders...")) PickPath(location_,true);
+    LauncherUI::Label("Initial Game Language"); ImGui::SetNextItemWidth(-1);
+    ImGui::Combo("##Initial Game Language", &initialLanguage_, "C++ — Native Game Development\0C# — Managed Game Development\0");
+    ImGui::TextWrapped("Selects the first Game Module. Additional languages can be added to the same project.");
+    // 初期言語と実行可能なテンプレートを区別し、宣言だけのProjectをGameplay環境と誤認させない。
+    if(initialLanguage_ == 1) ImGui::TextWrapped("Managed Gameplay generates C# game logic for the shared ECS. Building requires .NET 10 SDK and an explicit x64 Host Pack; running requires .NET 10 Runtime. Managed Bootstrap checks startup only; blank/basic-3d create module declarations only. C++ modules can be added later.");
     LauncherUI::Label("Engine version");
     std::string selected = "Select an engine";
     if(engine_ >= 0 && engine_ < static_cast<int>(snapshot_.engines.size())) {
@@ -303,8 +313,10 @@ void LauncherApplication::DrawNewProject() {
         const auto projectTemplate = selectedEngine->templates[template_];
         ProjectDescriptor descriptor; descriptor.name = name_.data(); descriptor.engine = engine.identity;
         const auto destination = Path(location_.data()) / Path(name_.data());
-        Begin("Creating project...", [engine, projectTemplate, descriptor, destination, recent = recentFile_](std::stop_token) -> Result<void> {
-            auto project = ProjectTemplates::Create(destination, descriptor, projectTemplate, engine); if(!project) return std::unexpected(project.error());
+        const auto language = initialLanguage_ == 0 ? ProjectModuleLanguage::Cpp : ProjectModuleLanguage::CSharp;
+        // workerへは値を渡し、生成中のUI変更から選択済みModuleを保護する。
+        Begin("Creating project...", [engine, projectTemplate, descriptor, destination, language, recent = recentFile_](std::stop_token) -> Result<void> {
+            auto project = ProjectTemplates::Create(destination, descriptor, projectTemplate, engine, language); if(!project) return std::unexpected(project.error());
             return ProjectRegistry(recent).Register(*project);
         });
         tab_ = 0;

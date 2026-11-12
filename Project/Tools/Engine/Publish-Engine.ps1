@@ -97,7 +97,7 @@ try {
         Invoke-Child $msbuild @((Join-Path $sdkSource "Build/$buildTarget.vcxproj"),'/verbosity:minimal',"/p:Configuration=$configuration",'/p:Platform=x64') $sdkSource
     }
     # Engine実装cppとGame/SamplesはSDKへ含めない。公開範囲は既存include構造から段階的に絞る。
-    foreach($directory in @('Foundation','Core','Runtime','Graphics','Platform','Editor','Tools','ThirdParty')) {
+    foreach($directory in @('Public','Foundation','Core','Runtime','Graphics','Platform','Editor','Tools','ThirdParty')) {
         Copy-Tree (Join-Path $sdkSource $directory) (Join-Path $sdk $directory) {
             param($item)
             # 旧一括生成headerはGame型を含むため、Sourceに残しても共有SDKへは公開しない。
@@ -106,11 +106,30 @@ try {
             $item.Extension -cin @('.h','.hpp','.inl') -or $item.Name -match '^(LICENSE|COPYING|UPSTREAM)'
         }
     }
-    foreach($file in @('Build/Nexus.Common.props','Build/Nexus.Game.props','Build/Nexus.Compatibility.json','Tools/Reflection/Generate-Reflection.ps1','Tools/Project/Build-Game.ps1','Tools/Project/Write-GameBuildStamp.ps1','Tools/Project/Create-LauncherShortcut.ps1','Runtime/Reflection/EngineGenerated/ReflectionSchema.json')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    foreach($file in @('Build/Nexus.Common.props','Build/Nexus.Game.props','Build/Nexus.GameModule.props','Build/Nexus.Compatibility.json','Tools/Reflection/Generate-Reflection.ps1','Tools/Project/Build-Game.ps1','Tools/Project/Write-GameBuildStamp.ps1','Tools/Project/Create-LauncherShortcut.ps1','Runtime/Reflection/EngineGenerated/ReflectionSchema.json')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    foreach($file in @('Build/Nexus.ManagedBootstrap.targets', 'Managed/Nexus.Managed.Bootstrap/Nexus.Managed.Bootstrap.csproj', 'Managed/Nexus.Managed.Bootstrap/EntryPoints.cs')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    # 通常SDKでもpropsのimportを解決する。Live++本体・有効profileの配布は行わない。
+    Copy-File (Join-Path $sdkSource 'Build/Nexus.NativeModuleLivePP.props') (Join-Path $sdk 'Build/Nexus.NativeModuleLivePP.props')
+    Copy-File (Join-Path $sdkSource 'Tools/Project/Project-ModuleOrder.ps1') (Join-Path $sdk 'Tools/Project/Project-ModuleOrder.ps1')
+    foreach($file in @('Build/Nexus.GameDeployment.targets','Tools/Project/Complete-GameDeployment.ps1','Tools/Project/Managed-Deployment.ps1','Tools/Project/Add-GameModule.ps1','Tools/Project/Add-GameSource.ps1','Tools/Project/Package-Game.ps1')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    Copy-File (Join-Path $sdkSource 'Tools/Project/Build-Scripts.ps1') (Join-Path $sdk 'Tools/Project/Build-Scripts.ps1')
+    # MonoでもInstalled SDKからBuild / Reloadできるよう、Backend固有の小さな実装だけを含める。
+    foreach($file in @('Tools/Project/Managed-Runtime.ps1','Tools/Project/Deploy-MonoRuntime.ps1',
+        'Managed/Nexus.Managed/MonoCompatibility.cs','Managed/Nexus.Managed/MonoInterop.cs',
+        'Managed/Nexus.Managed.Bootstrap/MonoGameScriptCatalog.cs','Managed/Nexus.Managed.Bootstrap/MonoEntryPoints.cs',
+        'ThirdParty/Mono/PATENTS.txt')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    foreach($file in @('Build/Nexus.ManagedGameplay.targets', 'Managed/Directory.Build.props',
+        'Managed/Nexus.Managed/Nexus.Managed.csproj', 'Managed/Nexus.Managed/Interop.cs', 'Managed/Nexus.Managed/Entity.cs', 'Managed/Nexus.Managed/GameWorld.cs', 'Managed/Nexus.Managed/ScriptBehaviour.cs',
+        'Managed/Nexus.Managed/ExposeAttribute.cs', 'Managed/Nexus.Managed/ScriptMetadata.cs',
+        'Managed/Nexus.Managed/GameServices.cs', 'Managed/Nexus.Managed/GameComponents.cs', 'Managed/Nexus.Managed/GameScripts.cs', 'Managed/Nexus.Managed/GamePhysics.cs', 'Managed/Nexus.Managed/GameInput.cs', 'Managed/Nexus.Managed/GameAudio.cs', 'Managed/Nexus.Managed/GameWorldControl.cs', 'Managed/Nexus.Managed/NativeBindings.cs',
+        'Managed/Nexus.Managed.Metadata/Nexus.Managed.Metadata.csproj', 'Managed/Nexus.Managed.Metadata/Program.cs',
+        'Managed/Nexus.Managed.Bootstrap/GameplayEntryPoints.cs', 'Managed/Nexus.Managed.Bootstrap/ScriptRuntime.cs', 'Managed/Nexus.Managed.Bootstrap/GameScriptCatalog.cs', 'Managed/Nexus.Managed.Bootstrap/ReloadEntryPoints.cs')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     foreach($directory in @('Shaders')) {
         Copy-Tree (Join-Path $sdkSource $directory) (Join-Path $sdk $directory) { $true }
         Copy-Tree (Join-Path $sdkSource $directory) (Join-Path $staging "Data/$directory") { $true }
     }
+    # 配布版に対応したAPI契約・既知の制約をSDKと一緒に保持する。利用者が別版の資料を参照するのを防ぐ。
+    Copy-Tree (Join-Path $sdkSource 'Docs') (Join-Path $sdk 'Docs') { param($item) $item.Extension -ieq '.md' }
     Copy-Tree (Join-Path $sdkSource 'Resources/Editor') (Join-Path $staging 'Data/Resources/Editor') { $true }
     Copy-Tree (Join-Path $sdkSource 'Resources/Assets/Fonts') (Join-Path $staging 'Data/Resources/Assets/Fonts') { $true }
     Copy-Tree (Within $sourceRoot $source.paths.templates) (Join-Path $staging 'Templates') { $true }

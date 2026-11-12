@@ -1,0 +1,15 @@
+using Nexus.Managed;
+using System.Numerics;
+namespace Game;
+/*-----------------------------------------------------------------------------------------
+ * EnemyController
+ * - 型付きFacadeからGame ProjectのNative Crowd Systemへ移動要求を渡す
+ * - Native Systemは先に実行されるため、入力は次frameのSimulationで処理する
+ *---------------------------------------------------------------------------------------*/
+[ScriptType("game.enemy")]
+public sealed class EnemyController : ScriptBehaviour
+{
+    [Expose(Id = "target", Label = "Target")]
+    public Vector3 Target { get; set; } = new(5, 0, 0);
+    protected override void OnUpdate(float deltaTime) => CrowdSimulation.SetTarget(Entity, Target);
+}

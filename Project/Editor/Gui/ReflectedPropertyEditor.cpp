@@ -12,23 +12,45 @@ namespace NexusEngine {
 // 値の解決から確定まで共通化し、複数Panelで同じUndo・検証・Asset Drop経路を使う。
 ////////////////////////////////////////////////////////////////////////////////////////////
 void DrawReflectedProperty(const EditorContext& context, std::string_view typeId, std::string_view propertyId,
-    bool primaryOnly) {
+    bool primaryOnly, PersistentId instance) {
+    // 型IDの値編集はDetailsのScript pickerへ統一する。公開Propertyは従来の共通Drawerで編集する。
+    if(typeId == "Script" && propertyId == "scriptType") return;
     const auto* type = context.types.Find(typeId);
     if(!type) return;
     const auto found = std::ranges::find(type->properties, propertyId, &PropertyDescriptor::id);
     if(found == type->properties.end()) return;
     const auto& descriptor = *found;
     const auto id = context.selection.Primary();
-    const PropertyHandle handle{id, std::string(typeId), std::string(propertyId)};
+    const PropertyHandle handle{id, std::string(typeId), std::string(propertyId),instance};
+    const auto unavailable = [&](PersistentId target) {
+        if(instance.IsValid()) { ImGui::TextDisabled("%s",context.text.Text("property.instanceUnavailable").c_str()); return; }
+        // 失敗理由は共通Descriptorから取得する。言語専用InspectorやCLR参照を追加しない。
+        if(!descriptor.unavailableReason) return;
+        auto* level = context.session.GetLevel();
+        const auto reason = descriptor.unavailableReason(level ? level->FindEntity(target) : Entity{});
+        if(!reason.empty()) ImGui::TextDisabled("%s: %s", context.text.Text(descriptor.labelKey).c_str(), reason.c_str());
+    };
     auto value = context.properties.Read(handle);
-    if(!value) return;
+    if(!value) { unavailable(id); return; }
     std::vector<PropertyHandle> handles;
+    size_t occurrence=0;
+    if(instance.IsValid()) {
+        if(!type->instances) return;
+        const auto ids=type->instances(context.session.GetSelectedEntity());
+        const auto foundId=std::ranges::find(ids,instance); if(foundId==ids.end()) return;
+        occurrence=static_cast<size_t>(foundId-ids.begin());
+    }
     bool mixed = false;
     for(auto selected : context.selection.All()) {
         if(primaryOnly && selected != id) continue;
         PropertyHandle target{selected, handle.type, handle.property};
+        if(instance.IsValid()) {
+            const auto ids=type->instances(context.session.GetLevel()->FindEntity(selected));
+            if(occurrence>=ids.size()) { unavailable(selected); return; }
+            target.instance=ids[occurrence];
+        }
         const auto other = context.properties.Read(target);
-        if(!other) return;
+        if(!other) { unavailable(selected); return; }
         mixed |= *other != *value; handles.push_back(std::move(target));
     }
     std::string mesh, nodeProperty;
@@ -46,7 +68,7 @@ void DrawReflectedProperty(const EditorContext& context, std::string_view typeId
     const auto label = context.text.Text(descriptor.labelKey);
     options.id = UI::ItemId::FromString(handle.property);
     options.label = label;
-    options.enabled = static_cast<bool>(found->set);
+    options.enabled = instance.IsValid() ? static_cast<bool>(found->setInstance) : static_cast<bool>(found->set);
     options.size.x = std::max(40.0f, ImGui::GetContentRegionAvail().x * .54f);
     const bool asset = descriptor.kind == PropertyKind::MeshAsset || descriptor.kind == PropertyKind::TextureAsset || descriptor.kind == PropertyKind::MeshNode;
     // Stable columns align labels across independently drawn reflected properties.

@@ -65,6 +65,13 @@ int wmain(int argc,wchar_t** argv) {
             EditorWorkspace workspace(editorSession);
             workspace.Initialize(context->Root(),{},engine->data,context.get());
             RegisterStandaloneCommands(workspace,commandSession,{.hidden=true});
+            // Project Job中は直接command経由の別Runtime起動も拒否する。compilerは起動しない。
+            bool developmentBusy = true;
+            EditorCommandRegistry::Command development{[] {}};
+            development.isChecked = [&] { return developmentBusy; };
+            Require(workspace.Commands().Register("project.development", std::move(development)),"Cannot register operation state probe.");
+            Require(!workspace.Commands().Execute("project.runStandalone"),"Project operation allowed a competing Runtime build.");
+            developmentBusy = false;
             Require(workspace.Commands().CanExecute("project.runStandalone"),"Editor Runtime command is unavailable.");
             Require(!workspace.Commands().CanExecute("project.stopStandalone"),"Idle Runtime stop command is enabled.");
             Require(workspace.Commands().Execute("play.mode.window"),"Cannot choose separate-window mode.");

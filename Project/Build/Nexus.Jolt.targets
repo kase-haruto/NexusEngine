@@ -1,0 +1,32 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NexusJoltRoot>$(MSBuildThisFileDirectory)..\ThirdParty\JoltPhysics</NexusJoltRoot>
+    <NexusJoltConfiguration>Debug</NexusJoltConfiguration>
+    <NexusJoltConfiguration Condition="'$(Configuration)'=='Release'">Release</NexusJoltConfiguration>
+    <NexusJoltLibrary>$(MSBuildThisFileDirectory)..\..\Generated\ThirdParty\JoltPhysics-5.6.0\$(NexusJoltConfiguration)\Jolt.lib</NexusJoltLibrary>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(NexusJoltRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- 上流headerの警告方針とEngine自身のW4/WXを分離する。JoltとCRTも一致させる。 -->
+      <AdditionalOptions>/external:I&quot;$(NexusJoltRoot)&quot; %(AdditionalOptions)</AdditionalOptions>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <RuntimeLibrary Condition="'$(Configuration)'!='Release'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <!-- Static libraryへsolver objectを統合し、Installed SDKで別のSource Buildを要求しない。 -->
+    <Lib><AdditionalDependencies>$(NexusJoltLibrary);%(AdditionalDependencies)</AdditionalDependencies></Lib>
+    <Link><AdditionalDependencies>$(NexusJoltLibrary);%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- Level.cppを直接コンパイルする既存テストも同じBackend実装を利用する。 -->
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsWorld.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsUpdateSystem.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\GamePhysicsAccess.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsMeshCooking.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsContactCollector.cpp" />
+  </ItemGroup>
+  <Target Name="PrepareNexusJolt" BeforeTargets="ClCompile;Lib;Link" Condition="'$(DesignTimeBuild)'!='true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\Tools\Engine\Build-Jolt.ps1&quot; -Configuration &quot;$(Configuration)&quot;" />
+  </Target>
+</Project>

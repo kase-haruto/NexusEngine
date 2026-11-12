@@ -1,0 +1,26 @@
+# Native Game System
+
+CrowdSimulationSystemはGame ProjectのSystemです。Entity / Transformは既存ECSのものを使い、targets_は目標入力のコピーだけを保持します。
+
+NexusRegisterGameSystemsV2で既存Schedulerへ登録し、別のpublications.declareFunctionでSetTarget(EntityHandle, Vector3) → Voidを宣言します。
+CrowdBinding.hでbindings.bindを明示し、この関数だけを公開します。System登録・署名宣言だけでは呼出先を公開しません。
+C#利用時は同じWorldのBindNativeFunctionでModule ID、System ID、関数ID、Versionと署名を照合します。
+このテンプレートのModule IDはGameです。HybridテンプレートのNativeCombatとはModule IDが異なります。
+
+Module.Updateはfindで数値Handleを取得し、accessのNative callback中だけSystemを借用して目標を渡します。
+Systemの実行は既存SchedulerのSimulation、派生Matrix確定はTransform phaseです。Module.UpdateからSystem.Updateを直接呼びません。
+同phaseは登録順です。afterへ指定する依存は同じModuleで先に登録してください。前方参照・循環は拒否します。
+
+登録は初期化時だけです。System / 関数Metadataの変更はexport完了でsealedになり、Update中の追加・解除は行いません。
+System pointerをcallback外へ保存せず、scope / Handleを保存してください。HandleはModule終了で失効します。
+
+終了時は既存公開APIを失効させ、逆登録順にSystem stateをDLLで破棄し、Schedulerのadapterを除き、Module stateを破棄してからDLLを解放します。
+停止失敗やcallback実行中の解放要求は安全に復旧できたとは扱わず、DLLをpinしてホスト再起動を要求します。
+通常Buildと動作確認はユーザーが行ってください。Engine本体にCrowd固有ロジックを追加する必要はありません。
+
+関数本体パッチ向けにNexusGetNativePatchContract / NexusRebindGameSystemsを提供します。
+GameStateはNativeModuleState.hへ固定し、変更時は通常再ビルド・再起動します。stateやSystemをパッチで再生成しません。
+RuntimeのPrepareNativePatch / FinishNativePatchは明示Source directoryを設定したBackend向け契約です。
+通常BuildではLive++を有効化しません。development EngineのDebug / Develop x64で、MSBuildのglobal property `NexusNativeModuleLivePP=true`と`NexusLivePPDir`を指定した専用profileを利用できます。
+profileはNativePatchHooks.cppを通じてDLLを登録し、既存Reload C++を同期Runtime契約へ接続します。Engine SDKのDocs/NativeModuleLivePPREADME.mdを参照してください。
+固定ヘッダー・Public API・Build設定・hook翻訳単位は変更できません。変更時は通常再ビルド・ホスト再起動が必要です。実SDKでのビルド・動作は未検証です。

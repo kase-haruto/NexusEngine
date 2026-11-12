@@ -44,6 +44,13 @@ namespace NexusEngine {
 		void AddEditorExtension(std::function<void(EditorWorkspace&)> extension) { editorExtensions_.push_back(std::move(extension)); }
 		/** \brief Play開始時にGame側の共通System構成を生成する。再生中の変更は拒否する */
 		[[nodiscard]] bool SetGameLevelSetup(GameLevelSetup setup) { return session_.SetGameLevelSetup(std::move(setup)); }
+        /** \brief Native ModuleのlifecycleはPlayのGameRuntimeへ委譲する */
+        [[nodiscard]] bool SetNativeGameModule(NativeGameModuleSettings settings) { return session_.SetNativeGameModule(std::move(settings)); }
+        /** \brief DLLはPlayのGameRuntimeが所有し、Editorは設定だけを渡す */
+        [[nodiscard]] bool SetNativeGameModules(std::vector<NativeGameModuleSettings> settings) { return session_.SetNativeGameModules(std::move(settings)); }
+        void SetFrameInput(const InputFrame& input) override { frameInput_ = input; }
+        /** \brief Managed bootstrapの起動・停止はPlay用GameRuntimeへ委譲する */
+        [[nodiscard]] bool SetCSharpRuntime(CSharpRuntimeSettings settings) { return session_.SetCSharpRuntime(std::move(settings)); }
 		/** \brief 既存Renderer診断画面を必要時だけ描く */
 		void ShowLegacyDiagnostics();
 		/** \brief Application所有Rendererの設定窓口を非所有接続する */
@@ -97,6 +104,7 @@ namespace NexusEngine {
 
 	private:
 		ApplicationPaths paths_; //< ホストが選択したGame / Engineのルート
+        InputFrame frameInput_; //< Platform値の借用コピー。Editorのfocus判定後だけPlayへ渡す
 		ModelAssetLibrary::ReloadStartup startupLoader_; //< 旧Level互換用。具体的なSample処理はホストから注入する
 		struct PreparedAssets {
 			std::unique_ptr<ModelAssetLibrary> library;

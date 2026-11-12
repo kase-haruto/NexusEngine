@@ -1,6 +1,7 @@
 #include "StandaloneSession.h"
 #include "Platform/FileSystem/AtomicFile.h"
 #include "Runtime/Application/ApplicationPaths.h"
+#include "Runtime/Project/ProjectService.h"
 #include "Foundation/Utility/String/ConvertString.h"
 
 namespace NexusEngine {
@@ -47,6 +48,11 @@ Result<void> StandaloneSession::RequestStart(const ProjectLaunchOptions& options
     if(state->running || state->building) return std::unexpected(Failed("A Runtime or Runtime build is already active."));
     if(options.frames > 10000 || (options.checkOnly && options.frames) || (!options.log.empty() && !options.log.is_absolute()))
         return std::unexpected(Failed("Invalid Runtime launch options."));
+    // Module追加後の別Runtimeは最新定義からBuildする。既存Hostの古いsnapshotを持ち越さない。
+    // このsnapshotをBuildからLaunchまで共有し、Build途中の外部変更は既存stamp検証で拒否する。
+    auto current = ProjectService::Open(project_->File());
+    if(!current) return std::unexpected(current.error());
+    project_ = std::make_shared<const ProjectContext>(std::move(*current));
     auto uuid = CreateUuid(); if(!uuid) return std::unexpected(uuid.error());
     auto logs = ResolveProjectPath(project_->Root(),"Build/Logs/Standalone");
     if(!logs) return std::unexpected(logs.error());
@@ -63,8 +69,8 @@ Result<void> StandaloneSession::RequestStart(const ProjectLaunchOptions& options
     if(!hasTargets) return Start(pendingOptions_);
     cancelBuild_ = std::stop_source{};
     try {
-        build_ = std::async(std::launch::async,[project = project_,engine = engine_,log = buildLog_,stop = cancelBuild_.get_token()]() -> Result<std::filesystem::path> {
-            try { return ProjectBuild::Build(*project,engine,ProjectHostKind::Runtime,log,stop); }
+        build_ = std::async(std::launch::async,[project = project_,engine = engine_,log = buildLog_,stop = cancelBuild_.get_token(), build = options.build]() -> Result<std::filesystem::path> {
+            try { return ProjectBuild::Build(*project,engine,ProjectHostKind::Runtime,log,stop,build); }
             catch(const std::exception& exception) { return std::unexpected(Failed(exception.what())); }
         });
     } catch(const std::exception& exception) { return std::unexpected(Failed(exception.what())); }

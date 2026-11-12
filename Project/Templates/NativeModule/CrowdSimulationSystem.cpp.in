@@ -1,0 +1,76 @@
+#include "CrowdSimulationSystem.h"
+#include <algorithm>
+#include <cmath>
+#include <memory>
+
+CrowdSimulationSystem::CrowdSimulationSystem(const NexusNativeSystemContextV1& context) : game_(context.game), world_(context.world) {}
+NexusGameStatus CrowdSimulationSystem::ConnectSettings(const NexusGameServicesContextV1& services, NexusGameString type) noexcept {
+    if(settings_ || services.world != world_ || services.abiVersion != 1 || services.structSize != sizeof(services) ||
+        services.api.abiVersion != 1 || services.api.structSize != sizeof(services.api) || !services.client || !services.api.invoke ||
+        !type.data || !type.length || type.length > 512) return NEXUS_GAME_INVALID_ARGUMENT;
+    try { settingsType_.assign(type.data, type.length); settings_ = std::make_unique<NexusGame::Components>(services); return NEXUS_GAME_OK; }
+    catch(...) { return NEXUS_GAME_FAILED; }
+}
+NexusGameStatus CrowdSimulationSystem::SetTarget(NexusEntityHandle entity, const float target[3]) noexcept {
+    if(!target) return NEXUS_GAME_INVALID_ARGUMENT;
+    for(int index = 0; index < 3; ++index) if(!std::isfinite(target[index])) return NEXUS_GAME_INVALID_ARGUMENT;
+    if(entity.world != world_ || game_.isEntityAlive(entity) != NEXUS_GAME_OK) return NEXUS_GAME_INVALID_HANDLE;
+    try {
+        // Handleの世代まで一致させ、同slotの再利用後に古い目標を適用しない。
+        for(auto& request : targets_) if(request.entity.world == entity.world && request.entity.index == entity.index && request.entity.generation == entity.generation) {
+            for(int index = 0; index < 3; ++index) request.point[index] = target[index]; return NEXUS_GAME_OK;
+        }
+        targets_.push_back({entity, {target[0], target[1], target[2]}}); return NEXUS_GAME_OK;
+    } catch(...) { return NEXUS_GAME_FAILED; }
+}
+NexusGameStatus CrowdSimulationSystem::Update(float deltaTime) noexcept {
+    if(!std::isfinite(deltaTime) || deltaTime < 0) return NEXUS_GAME_INVALID_ARGUMENT;
+    float speed = 1;
+    if(settings_) {
+        const NexusGameString type{settingsType_.data(), static_cast<uint32_t>(settingsType_.size())};
+        NexusEntityHandle owners[2]{}; NexusComponentQueryV1 page{};
+        auto status = settings_->Query(type, 0, owners, 2, page); if(status != NEXUS_GAME_OK) return status;
+        // 保存ownerはゲーム側が一つのEntityとして明示配置する。重複時に任意の先頭を採用しない。
+        if(page.count > 1 || page.nextOffset != UINT32_MAX) return NEXUS_GAME_INVALID_ARGUMENT;
+        if(page.count) {
+            NexusComponentValueV1 value{}; status = settings_->Read(owners[0], type, {"speed", 5}, value);
+            if(status != NEXUS_GAME_OK) return status;
+            if(value.kind != NEXUS_COMPONENT_FLOAT || !std::isfinite(value.number[0]) || value.number[0] < 0) return NEXUS_GAME_INVALID_ARGUMENT;
+            speed = value.number[0];
+        }
+    }
+    for(auto position = targets_.begin(); position != targets_.end();) {
+        NexusLocalTransform transform{}; const auto read = game_.getLocalTransform(position->entity, &transform);
+        if(read == NEXUS_GAME_INVALID_HANDLE) { position = targets_.erase(position); continue; }
+        if(read != NEXUS_GAME_OK) return read;
+        // 設定値もdoubleで乗算し、大きな有限値でも中間計算をfloatでoverflowさせない。
+        double offset[3]{}, squared = 0;
+        for(int index = 0; index < 3; ++index) { offset[index] = static_cast<double>(position->point[index]) - transform.translation[index]; squared += offset[index] * offset[index]; }
+        const auto distance = std::sqrt(squared); const auto factor = distance > 0 ? (std::min)(static_cast<double>(deltaTime) * speed / distance, 1.0) : 0;
+        for(int index = 0; index < 3; ++index) transform.translation[index] = static_cast<float>(transform.translation[index] + offset[index] * factor);
+        const auto written = game_.setLocalTransform(position->entity, &transform); if(written != NEXUS_GAME_OK) return written;
+        ++position;
+    }
+    return NEXUS_GAME_OK;
+}
+namespace {
+/** \brief 実体を確保元DLLで所有する。例外をC ABIへ出さない */
+NexusGameStatus NEXUS_GAME_CALL CreateCrowd(const NexusNativeSystemContextV1* context, void** output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = nullptr;
+    if(!context || context->abiVersion != 1 || context->structSize != sizeof(*context)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    try { *output = new CrowdSimulationSystem(*context); return NEXUS_GAME_OK; } catch(...) { return NEXUS_GAME_FAILED; }
+}
+/** \brief Module.Updateから二重実行せず、Scheduler経由でだけ更新する */
+NexusGameStatus NEXUS_GAME_CALL UpdateCrowd(void* instance, float deltaTime) noexcept { return static_cast<CrowdSimulationSystem*>(instance)->Update(deltaTime); }
+/** \brief System stateをDLLのCRTで解放する。Module stateのDestroyより先に呼ばれる */
+NexusGameStatus NEXUS_GAME_CALL DestroyCrowd(void* instance) noexcept { delete static_cast<CrowdSimulationSystem*>(instance); return NEXUS_GAME_OK; }
+}
+NexusNativeSystemDescriptorV1 CrowdSimulationSystem::Descriptor() noexcept {
+    static const NexusGameString transforms[]{{"Transform", 9}};
+    static const NexusGameString reads[]{{"Transform", 9}, {"GameComponents", 14}};
+    NexusNativeSystemDescriptorV1 descriptor{};
+    descriptor.structSize = sizeof(descriptor); descriptor.version = 1; descriptor.id = {"CrowdSimulation", 15};
+    descriptor.reads = reads; descriptor.readCount = 2; descriptor.writes = transforms; descriptor.writeCount = 1;
+    descriptor.create = CreateCrowd; descriptor.update = UpdateCrowd; descriptor.destroy = DestroyCrowd;
+    return descriptor;
+}

@@ -10,12 +10,17 @@
   <PropertyGroup><OutDir>$(ProjectDir)..\..\Generated\Outputs\EcsTests\</OutDir><IntDir>$(ProjectDir)..\..\Generated\obj\EcsTests\</IntDir></PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><LanguageStandard>stdcpp23</LanguageStandard><PreprocessorDefinitions>NEXUS_ECS_TEST_MAIN;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
-    <Link><SubSystem>Console</SubSystem></Link>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>bcrypt.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EcsTests.cpp" />
     <ClCompile Include="..\Foundation\Reflection\ReflectionTextArchive.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ReflectionRegistration.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\NativeComponentMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\GameComponentData.cpp" />
+    <ClCompile Include="..\Runtime\Project\ProjectJson.cpp" />
+    <ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" />
     <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
@@ -29,6 +34,8 @@
     <ClCompile Include="..\Runtime\Rendering\RenderSceneExtractor.cpp" />
   </ItemGroup>
   <Import Project="..\Reflection.props" />
+  <Import Project="..\Build\Nexus.Jolt.targets" />
+  <Import Project="..\Build\Nexus.Audio.targets" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup><ClCompile Include="..\Game\Generated\GeneratedGameReflection.cpp" /></ItemGroup>
 </Project>

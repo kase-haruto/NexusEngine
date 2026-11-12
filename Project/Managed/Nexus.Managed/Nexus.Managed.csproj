@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework Condition="'$(NexusManagedRuntime)'!='Mono'">net10.0</TargetFramework><AssemblyName>Nexus.Managed</AssemblyName><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Configurations>Debug;Develop;Release</Configurations><PlatformTarget>x64</PlatformTarget><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup Condition="'$(NexusManagedRuntime)'=='Mono'">
+    <PackageReference Include="System.Text.Json" Version="10.0.15" />
+    <PackageReference Include="System.Reflection.Metadata" Version="10.0.15" />
+    <Reference Include="System.Numerics" />
+    <Compile Include="MonoCompatibility.cs" />
+    <Compile Include="MonoInterop.cs" />
+  </ItemGroup>
+  <ItemGroup><Compile Include="Interop.cs" /><Compile Include="Entity.cs" /><Compile Include="GameWorld.cs" /><Compile Include="GameScripts.cs" /><Compile Include="ScriptBehaviour.cs" /><Compile Include="ExposeAttribute.cs" /><Compile Include="ScriptMetadata.cs" /><Compile Include="GameServices.cs" /><Compile Include="GameComponents.cs" /><Compile Include="NativeBindings.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="GamePhysics.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="GameInput.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="GameAudio.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="GameWorldControl.cs" /></ItemGroup>
+</Project>

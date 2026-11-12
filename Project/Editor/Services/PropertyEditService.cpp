@@ -9,10 +9,12 @@ const PropertyDescriptor* PropertyEditService::Resolve(const PropertyHandle& han
 }
 std::optional<PropertyValue> PropertyEditService::Read(const PropertyHandle& handle) const {
     auto* descriptor = Resolve(handle);
+    if(handle.instance.IsValid()) return level_ && descriptor && descriptor->getInstance ? descriptor->getInstance(level_->FindEntity(handle.entity),handle.instance) : std::nullopt;
     return level_ && descriptor && descriptor->get ? descriptor->get(level_->FindEntity(handle.entity)) : std::nullopt;
 }
 bool PropertyEditService::Apply(const PropertyHandle& handle, const PropertyValue& value) {
     auto* descriptor = Resolve(handle);
+    if(handle.instance.IsValid()) return level_ && descriptor && descriptor->setInstance && descriptor->setInstance(level_->FindEntity(handle.entity),handle.instance,value);
     return level_ && descriptor && descriptor->set && descriptor->set(level_->FindEntity(handle.entity), value);
 }
 void PropertyEditService::Begin(std::span<const PropertyHandle> handles) {
@@ -27,7 +29,7 @@ void PropertyEditService::Begin(std::span<const PropertyHandle> handles) {
     }
     pending_ = std::move(edits);
 }
-bool PropertyEditService::ApplyEdits(const std::vector<Edit>& edits, bool before) {
+bool PropertyEditService::ApplyEdits(const std::vector<Edit>& edits, bool before, std::vector<PropertyValue>* observed) {
     std::vector<PropertyValue> previous;
     previous.reserve(edits.size());
     for(const auto& edit : edits) {
@@ -48,8 +50,23 @@ bool PropertyEditService::ApplyEdits(const std::vector<Edit>& edits, bool before
         return true;
     };
     std::vector<PropertyValue> requested;
+    requested.reserve(edits.size());
     for(const auto& edit : edits) requested.push_back(before ? edit.before : edit.after);
-    if(applyValues(requested)) return true;
+    // Script型等の変更で、成功したsetterが別のProperty Handleを無効化する場合もある。
+    // Undo / Cancelにも必要な全Handleを、最終状態で再検証してから成功とする。
+    std::vector<PropertyValue> normalized; normalized.reserve(edits.size());
+    if(applyValues(requested)) {
+        bool readable = true;
+        for(const auto& edit : edits) {
+            auto value = Read(edit.handle);
+            if(!value) { readable = false; break; }
+            normalized.push_back(std::move(*value));
+        }
+        if(readable) {
+            if(observed) *observed = std::move(normalized);
+            return true;
+        }
+    }
     // 失敗setterは元を変更しない契約。依存する値も元の有効状態へ順序を解決して戻す。
     applyValues(previous); return false;
 }
@@ -63,8 +80,10 @@ bool PropertyEditService::PreviewValues(std::span<const PropertyHandle> handles,
     if(pending_.empty() || pending_.size() != handles.size()) return false;
     auto edits = pending_;
     for(size_t i = 0; i < edits.size(); ++i) edits[i].after = values[i];
-    if(!ApplyEdits(edits, false)) return false;
-    for(auto& edit : pending_) edit.after = *Read(edit.handle);
+    std::vector<PropertyValue> observed;
+    if(!ApplyEdits(edits, false, &observed)) return false;
+    // 検証済みのcopyだけを履歴候補へ渡す。型変更後のoptionalを無条件にdereferenceしない。
+    for(size_t index = 0; index < pending_.size(); ++index) pending_[index].after = std::move(observed[index]);
     return true;
 }
 bool PropertyEditService::HasPendingChanges() const {

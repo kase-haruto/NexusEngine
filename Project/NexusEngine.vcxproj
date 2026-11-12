@@ -157,6 +157,15 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
   <ItemGroup>
     <ClCompile Include="Editor\Gui\Panels\DetailsPanel.cpp" />
     <ClCompile Include="Runtime\Application\GameRuntime.cpp" />
+    <ClCompile Include="Runtime\Gameplay\GameApiBridge.cpp" />
+    <ClCompile Include="Runtime\Gameplay\GameComponentAccess.cpp" />
+    <ClCompile Include="Runtime\Gameplay\GameModuleLoader.cpp" />
+    <ClCompile Include="Runtime\Gameplay\NativeGameSystemScope.cpp" />
+    <ClCompile Include="Runtime\Gameplay\NativeGameApiMetadata.cpp" />
+    <ClCompile Include="Runtime\Scripting\DotNetHost.cpp" />
+    <ClCompile Include="Runtime\Scripting\NativeManagedBridge.cpp" />
+    <ClCompile Include="Runtime\Scripting\CSharpRuntime.cpp" />
+    <ClCompile Include="Runtime\Scripting\ScriptSystem.cpp" />
     <ClCompile Include="Foundation\Reflection\ReflectionTextArchive.cpp" />
     <ClInclude Include="Foundation\Reflection\ReflectionTextArchive.h" />
     <ClInclude Include="Game\Components\MoveComponent.h" />
@@ -435,6 +444,10 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Resource\HdrImage.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
     <ClCompile Include="Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="Runtime\Reflection\ManagedScriptMetadata.cpp" />
+    <ClCompile Include="Runtime\Reflection\ReflectionRegistration.cpp" />
+    <ClCompile Include="Runtime\Reflection\NativeComponentMetadata.cpp" />
+    <ClCompile Include="Runtime\Scene\Components\GameComponentData.cpp" />
     <ClCompile Include="Editor\Gui\DockingLayout.cpp" />
     <ClCompile Include="Editor\Services\AssetCatalog.cpp" />
     <ClCompile Include="Editor\Gui\MainMenuBar.cpp" />
@@ -497,6 +510,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Runtime\Reflection\ReflectedInspector.h" />
     <ClInclude Include="Runtime\Reflection\EngineGenerated\GeneratedReflection.h" />
   </ItemGroup>
+  <Import Project="Build\Nexus.Jolt.targets" />
+  <Import Project="Build\Nexus.Audio.targets" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CopyGameProjectSettings" AfterTargets="Build">
     <MakeDir Directories="$(OutDir)Config" />
@@ -605,6 +620,8 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Tools\Project\SourceCodeEditor.cpp" />
     <ClCompile Include="Editor\Services\StandaloneSession.cpp" />
     <ClCompile Include="Editor\Services\StandaloneCommands.cpp" />
+    <ClCompile Include="Editor\Services\ManagedReloadCommands.cpp" />
+    <ClCompile Include="Editor\Services\ProjectDevelopmentCommands.cpp" />
     <ClCompile Include="Tools\Engine\EngineRegistry.cpp" />
     <ClCompile Include="Platform\Process\Process.cpp" />
     <ClCompile Include="Platform\Window\StartupSplash.cpp" />

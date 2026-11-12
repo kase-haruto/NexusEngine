@@ -1,0 +1,33 @@
+#pragma once
+#include <Nexus/NativeGameSystems.h>
+#include <Nexus/GameComponents.hpp>
+#include <memory>
+#include <string>
+#include <vector>
+
+/*-----------------------------------------------------------------------------------------
+ * CrowdSimulationSystem
+ * - Game Projectが定義する最小の移動System。共通Entityを目標位置へ移動する
+ * - Entity / Componentは所有しない。targets_は入力要求であり、独自ECSのStorageではない
+ * - 所有・逐次実行はEngineの既存Scheduler、実体の確保・解放はこのGame DLLで行う
+ *---------------------------------------------------------------------------------------*/
+class CrowdSimulationSystem final {
+public:
+    /** \brief 共通World APIをコピーする。contextのNative pointerは保存しない */
+    explicit CrowdSimulationSystem(const NexusNativeSystemContextV1& context);
+    /** \brief 有効なEntityの移動目標を更新する \param entity 共通世代付きHandle \param target 有限float32三要素 \return 不正Handleや座標を拒否する */
+    NexusGameStatus SetTarget(NexusEntityHandle entity, const float target[3]) noexcept;
+    /** \brief Schedulerからだけ呼ぶ逐次処理。派生Matrixは後続Transform phaseが更新する */
+    NexusGameStatus Update(float deltaTime) noexcept;
+    /** \brief 共有設定の保存ownerを共通Entity値として指定する。Module接続中だけ呼び、pointerは保存しない */
+    NexusGameStatus ConnectSettings(const NexusGameServicesContextV1& services, NexusGameString type) noexcept;
+    /** \brief Systemの生成・更新・破棄だけを宣言する。関数公開は別のexportで明示する */
+    static NexusNativeSystemDescriptorV1 Descriptor() noexcept;
+private:
+    struct Target { NexusEntityHandle entity; float point[3]; }; //< pointerを持たない入力要求のコピー
+    NexusGameApiV1 game_; //< Engine常駐API。ECS内部やRendererへ依存しない
+    uint64_t world_; //< Level停止で失効する既存World token
+    std::vector<Target> targets_; //< 破棄されたEntityの要求はUpdate時に除く
+    std::unique_ptr<NexusGame::Components> settings_; //< Loader所有clientを借用する値API。Settings未接続なら従来速度1
+    std::string settingsType_; //< Moduleが明示する設定型。保存ownerはこの型を持つ唯一のEntity
+};

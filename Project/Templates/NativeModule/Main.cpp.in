@@ -1,0 +1,112 @@
+#include <Nexus/GameModule.h>
+#include <Nexus/NativeGameSystemApi.h>
+#include <Nexus/NativeGameState.h>
+#include <cstring>
+#include "CrowdSimulationSystem.h"
+#include "CrowdBinding.h"
+#include "NativeModuleState.h"
+#define NEXUS_GAME_COMPONENT_MODULE_ID "Game"
+#include "GameComponents.h"
+#include <memory>
+
+namespace {
+
+/** \brief Module専用のstateを生成する。失敗時にC++例外をDLL外へ出さない */
+NexusGameStatus NEXUS_GAME_CALL Create(const NexusGameModuleContextV1* context, void** output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT;
+    *output = nullptr;
+    if(!context || context->abiVersion != NEXUS_GAME_ABI_VERSION || context->structSize != sizeof(*context) ||
+       context->api.abiVersion != NEXUS_GAME_ABI_VERSION || context->api.structSize != sizeof(context->api)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    try {
+        auto state = std::make_unique<GameState>();
+        state->api = context->api;
+        const auto result = state->api.createEntity(context->world, {"NativeGame", 10}, &state->entity);
+        if(result != NEXUS_GAME_OK) return result;
+        // Engineはstateを解釈せず、同じDLLのDestroyへ返すだけに限定する。
+        *output = state.release();
+        return NEXUS_GAME_OK;
+    } catch(...) { return NEXUS_GAME_FAILED; }
+}
+
+/* 借用callbackへ渡す値だけの入力。callback外にSystemのアドレスを持ち出さない。 */
+/** \brief Nativeの限定借用中だけ型付きSetTargetを呼ぶ。Managed Bindingはまだ実装しない */
+NexusGameStatus NEXUS_GAME_CALL SetTarget(void* system, void* input) noexcept {
+    const auto& request = *static_cast<const TargetRequest*>(input);
+    return static_cast<CrowdSimulationSystem*>(system)->SetTarget(request.entity, request.target);
+}
+/** \brief Systemの取得と利用を分ける。System.Updateは後続のSchedulerに任せる */
+NexusGameStatus NEXUS_GAME_CALL Update(void* instance, float) noexcept {
+    if(!instance) return NEXUS_GAME_INVALID_ARGUMENT;
+    auto& state = *static_cast<GameState*>(instance);
+    ++state.updateCount;
+    if(state.api.isEntityAlive(state.entity) != NEXUS_GAME_OK) return NEXUS_GAME_OK;
+    uint64_t system = 0;
+    const auto found = state.systems.systems.find(state.systems.scope, {"CrowdSimulation", 15}, 1, &system);
+    if(found != NEXUS_GAME_OK) return found;
+    TargetRequest request{state.entity, {5, 0, 0}};
+    return state.systems.systems.access(state.systems.scope, system, SetTarget, &request);
+}
+
+/** \brief Worldが有効な間にEntityを解放し、stateを生成元DLLのCRTで破棄する */
+NexusGameStatus NEXUS_GAME_CALL Destroy(void* instance) noexcept {
+    if(!instance) return NEXUS_GAME_OK;
+    auto* state = static_cast<GameState*>(instance);
+    const auto removed = state->api.destroyEntity(state->entity);
+    if(removed != NEXUS_GAME_OK && removed != NEXUS_GAME_INVALID_HANDLE) return removed;
+    delete state;
+    return NEXUS_GAME_OK;
+}
+}
+
+/** \brief metadataだけを返す。DllMain / 静的初期化でWorldやThreadを生成しない */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusGetGameModule(uint32_t requestedAbi, NexusGameModuleV1* output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT;
+    *output = {};
+    if(requestedAbi != NEXUS_GAME_ABI_VERSION) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    static constexpr char engineId[] = NEXUS_HOST_ENGINE_ID;
+    static constexpr char engineVersion[] = NEXUS_HOST_ENGINE_VERSION;
+    static constexpr char projectId[] = "@PROJECT_GUID@";
+    *output = {NEXUS_GAME_ABI_VERSION, sizeof(NexusGameModuleV1),
+        {engineId, sizeof(engineId) - 1}, {engineVersion, sizeof(engineVersion) - 1},
+        {projectId, sizeof(projectId) - 1}, {"Game", 4}, Create, Update, Destroy};
+    return NEXUS_GAME_OK;
+}
+/** \brief 既存Schedulerへの登録と公開する関数契約の宣言を別の操作で行う */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusRegisterGameSystemsV2(void* instance, const NexusNativeSystemsRegistrationV2* context) noexcept {
+    if(!instance || !context) return NEXUS_GAME_INVALID_ARGUMENT;
+    const auto registered = RegisterCrowdBinding(*context); if(registered != NEXUS_GAME_OK) return registered;
+    auto& state = *static_cast<GameState*>(instance); state.systems = context->registration;
+    return RegisterNativeMover(state.systems);
+}
+/** \brief 既存Systemへ値APIを接続する。Entityへの配置はEditor/Levelが担当する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusConnectGameServices(void* instance, const NexusGameServicesContextV1* context) noexcept {
+    if(!instance || !context) return NEXUS_GAME_INVALID_ARGUMENT;
+    const auto& systems = static_cast<GameState*>(instance)->systems;
+    const auto status = ConnectNativeMover(systems, *context); if(status != NEXUS_GAME_OK) return status;
+    return ConnectCrowdSettings(systems, *context);
+}
+/** \brief stateへ触れず、固定layout契約の値だけを返す */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusGetNativePatchContract(uint32_t abi, NexusNativePatchContractV1* output) noexcept {
+    return CrowdPatchContract<GameState>(abi, output);
+}
+/** \brief パッチ後は既存Systemを検索し、Bindingだけを再登録する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusRebindGameSystems(void* instance, const NexusNativeSystemsRegistrationV2* context) noexcept {
+    if(!instance || !context) return NEXUS_GAME_INVALID_ARGUMENT;
+    return RebindCrowdBinding(*context);
+}
+/** \brief Moduleが保存対象として明示したcounterだけをコピーする。生のGameStateをdumpしない */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusSaveNativeGameState(void* instance,uint32_t abi,
+    uint64_t* schema,uint8_t* output,uint32_t capacity,uint32_t* length) noexcept {
+    if(!instance || !schema || !length || abi!=1) return NEXUS_GAME_INVALID_ARGUMENT;
+    *schema=1; *length=sizeof(uint64_t);
+    if(capacity<*length) return NEXUS_GAME_BUFFER_TOO_SMALL;
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT;
+    std::memcpy(output,&static_cast<GameState*>(instance)->updateCount,sizeof(uint64_t)); return NEXUS_GAME_OK;
+}
+/** \brief 内容を先に検査し、再利用する固定rootへゲーム値だけを復元する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusRestoreNativeGameState(void* instance,uint32_t abi,
+    uint64_t schema,const uint8_t* data,uint32_t length) noexcept {
+    if(!instance || abi!=1 || schema!=1 || !data || length!=sizeof(uint64_t)) return NEXUS_GAME_INVALID_ARGUMENT;
+    uint64_t value=0; std::memcpy(&value,data,sizeof(value));
+    static_cast<GameState*>(instance)->updateCount=value; return NEXUS_GAME_OK;
+}

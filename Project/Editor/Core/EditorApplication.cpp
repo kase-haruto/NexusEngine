@@ -242,6 +242,8 @@ namespace NexusEngine {
 		auto levelPath = ResolveProjectPath(paths_.projectRoot, startupLevel.empty()
 			? std::filesystem::path{ConvertString(bootSettings.project.startupLevel)} : startupLevel);
 		if(!levelPath) return std::unexpected(levelPath.error());
+        auto resourceRoot=session_.SetResourceRoot(paths_.projectRoot);
+        if(!resourceRoot) return resourceRoot;
 		auto levelResult = session_.Open(*levelPath);
 		if(!levelResult) return levelResult;
 
@@ -261,6 +263,8 @@ namespace NexusEngine {
 		auto poseResult = modelPose_.Initialize(*modelAsset_);
         modelLibrary_ = std::make_unique<ModelAssetLibrary>(std::move(startupAsset), assetDirectory,
             startupLoader_);
+        if(!session_.SetPhysicsModelSource([this](std::string_view reference) { return modelLibrary_->Model(std::string(reference)); }))
+            return std::unexpected(Error(ErrorCategory::Resource,260,"Cannot configure Editor collision model assets."));
         uploadedAssetRevision_ = modelLibrary_->Revision();
 		if(!poseResult) return poseResult;
 
@@ -605,6 +609,17 @@ namespace NexusEngine {
 	}
 
 	Result<void> EditorApplication::Update(const float deltaTime) {
+        // Platform入力は編集Worldへ渡さない。Game View外では保持キーも解除する。
+        auto input = frameInput_;
+        const auto previous = session_.GetPlayLevel() ? session_.GetPlayLevel()->Input() : InputFrame{};
+        const bool accepts=workspace_ && workspace_->Viewport().AcceptsGameInput(input) && ImGui::GetCurrentContext() && !ImGui::GetIO().WantTextInput;
+        if(!accepts) {
+            input = previous; input.ClearTransitions(); input.LoseFocus();
+            // 非focus時もhot-plugは追跡し、Editor操作中のbutton/analogだけを遮断する。
+            input.gamepads=frameInput_.gamepads;
+        } else input=workspace_->Viewport().GameInput(input);
+        for(size_t slot=0;slot<input.gamepads.size();++slot) input.gamepads[slot].Gate(previous.gamepads[slot],accepts);
+        session_.SetFrameInput(input);
 		if(session_.IsPlaying() && !editPose_) editPose_ = modelPose_;
 		if(!session_.IsPlaying() && editPose_) { modelPose_ = std::move(*editPose_); editPose_.reset(); }
 		auto* preview = session_.GetPreviewLevel();

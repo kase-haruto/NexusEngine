@@ -12,15 +12,9 @@ std::filesystem::path Path(const std::string& value) { return std::filesystem::p
 ////////////////////////////
 // 外部JSONのサイズ・深さ・重複キーを検証する
 ////////////////////////////
-Result<Json> Read(const std::filesystem::path& file) {
+Result<Json> Parse(std::string_view text) {
     try {
-        std::ifstream input(file, std::ios::binary | std::ios::ate);
-        if(!input) throw std::runtime_error("Cannot read file.");
-        const auto size = input.tellg();
-        if(size < 0 || size > 1024 * 1024) throw std::runtime_error("JSON file exceeds 1 MiB.");
-        std::string text(static_cast<size_t>(size), '\0');
-        input.seekg(0); input.read(text.data(), static_cast<std::streamsize>(text.size()));
-        if(!input) throw std::runtime_error("Cannot read complete JSON file.");
+        if(text.size() > 1024 * 1024) throw std::runtime_error("JSON exceeds 1 MiB.");
         std::vector<std::set<std::string>> keys;
         const auto validate = [&](int depth, Json::parse_event_t event, Json& value) {
             if(depth > 32) throw std::runtime_error("JSON nesting exceeds 32 levels.");
@@ -30,6 +24,18 @@ Result<Json> Read(const std::filesystem::path& file) {
             return true;
         };
         return Json::parse(text, validate);
+    } catch(const std::exception& exception) { return std::unexpected(Error(ErrorCategory::FileSystem, 160, exception.what())); }
+}
+Result<Json> Read(const std::filesystem::path& file) {
+    try {
+        std::ifstream input(file, std::ios::binary | std::ios::ate);
+        if(!input) throw std::runtime_error("Cannot read file.");
+        const auto size = input.tellg();
+        if(size < 0 || size > 1024 * 1024) throw std::runtime_error("JSON file exceeds 1 MiB.");
+        std::string text(static_cast<size_t>(size), '\0');
+        input.seekg(0); input.read(text.data(), static_cast<std::streamsize>(text.size()));
+        if(!input) throw std::runtime_error("Cannot read complete JSON file.");
+        auto result = Parse(text); if(!result) throw std::runtime_error(result.error().GetMessageText()); return result;
     } catch(const std::exception& exception) {
         return std::unexpected(Error(ErrorCategory::FileSystem, 160, Utf8(file) + ": " + exception.what()));
     }

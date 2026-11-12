@@ -1,0 +1,78 @@
+#include <Nexus/GameModule.h>
+#include <Nexus/GameServices.h>
+#include <cmath>
+#include <cstring>
+#include <memory>
+#include "CrowdBinding.h"
+#include "NativeCombatState.h"
+#define NEXUS_GAME_COMPONENT_MODULE_ID "NativeCombat"
+#include "GameComponents.h"
+
+namespace {
+/** \brief Native DLLだけでstateを確保する。Worldや既存Entityは作り直さない */
+NexusGameStatus NEXUS_GAME_CALL Create(const NexusGameModuleContextV1* context, void** output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = nullptr;
+    if(!context || context->abiVersion != 1 || context->structSize != sizeof(*context)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    try { auto state = std::make_unique<NativeCombat>(); state->game = context->api; *output = state.release(); return NEXUS_GAME_OK; }
+    catch(...) { return NEXUS_GAME_FAILED; }
+}
+/** \brief 明示的なcombat.impulse v1契約。request / responseはlittle-endian float32一個 */
+NexusGameStatus NEXUS_GAME_CALL Impulse(void* instance, NexusEntityHandle target, NexusGameBytes request, uint8_t* response, uint32_t capacity, uint32_t* length) noexcept {
+    if(!instance || !length) return NEXUS_GAME_INVALID_ARGUMENT; *length = 0;
+    if(request.length != sizeof(float) || !request.data || capacity < sizeof(float) || !response) return NEXUS_GAME_INVALID_ARGUMENT;
+    auto& state = *static_cast<NativeCombat*>(instance); float value = 0; std::memcpy(&value, request.data, sizeof(value));
+    if(!std::isfinite(value)) return NEXUS_GAME_INVALID_ARGUMENT;
+    NexusLocalTransform transform{}; auto status = state.game.getLocalTransform(target, &transform); if(status != NEXUS_GAME_OK) return status;
+    transform.translation[1] += value; if(!std::isfinite(transform.translation[1])) return NEXUS_GAME_INVALID_ARGUMENT;
+    status = state.game.setLocalTransform(target, &transform); if(status != NEXUS_GAME_OK) return status;
+    ++state.hits;
+    std::memcpy(response, &transform.translation[1], sizeof(float)); *length = sizeof(float);
+    // Eventは補助通知。queue満杯時も成功済みWorld操作を巻き戻したとは扱わない。
+    if(state.services.api.publish(state.services.client, {"combat.hit", 10}, 1, target, request) != NEXUS_GAME_OK)
+        static_cast<void>(state.game.log(state.services.world, {"combat.hit queue full", 21}));
+    return NEXUS_GAME_OK;
+}
+/** \brief 前frameのManaged値Eventを同じWorldのqueueから受け取る */
+NexusGameStatus NEXUS_GAME_CALL Update(void* instance, float) noexcept {
+    auto& state = *static_cast<NativeCombat*>(instance); NexusGameEventV1 event{}; uint8_t buffer[4224]{}; uint32_t length = 0;
+    for(uint32_t count = 0; count < 256; ++count) {
+        const auto status = state.services.api.poll(state.services.client, &event, buffer, sizeof(buffer), &length);
+        if(status != NEXUS_GAME_OK) return status; if(!length) break;
+    }
+    return NEXUS_GAME_OK;
+}
+/** \brief 登録はEngineが先に失効させる。確保元DLLのCRTでだけ解放する */
+NexusGameStatus NEXUS_GAME_CALL Destroy(void* instance) noexcept { delete static_cast<NativeCombat*>(instance); return NEXUS_GAME_OK; }
+}
+/** \brief 既存combat commandとは別に、Crowd Systemと型付きAPIを明示登録する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusRegisterGameSystemsV2(void* instance, const NexusNativeSystemsRegistrationV2* context) noexcept {
+    if(!instance || !context) return NEXUS_GAME_INVALID_ARGUMENT;
+    const auto registered = RegisterCrowdBinding(*context); if(registered != NEXUS_GAME_OK) return registered;
+    auto& state = *static_cast<NativeCombat*>(instance); state.systems = context->registration;
+    return RegisterNativeMover(state.systems);
+}
+/** \brief Native SystemとModuleの固定state契約を値で返す */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusGetNativePatchContract(uint32_t abi, NexusNativePatchContractV1* output) noexcept {
+    return CrowdPatchContract<NativeCombat>(abi, output);
+}
+/** \brief 既存Crowd Systemを保持し、型付きAPIだけを再登録する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusRebindGameSystems(void* instance, const NexusNativeSystemsRegistrationV2* context) noexcept {
+    if(!instance || !context) return NEXUS_GAME_INVALID_ARGUMENT;
+    return RebindCrowdBinding(*context);
+}
+/** \brief Game Moduleの既存V1 ABIと選択Project / Engineの識別情報を返す */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusGetGameModule(uint32_t abi, NexusGameModuleV1* output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = {};
+    if(abi != 1) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    static constexpr char engine[] = NEXUS_HOST_ENGINE_ID, version[] = NEXUS_HOST_ENGINE_VERSION, project[] = "@PROJECT_GUID@";
+    *output = {1, sizeof(*output), {engine, sizeof(engine) - 1}, {version, sizeof(version) - 1}, {project, sizeof(project) - 1}, {"NativeCombat", 12}, Create, Update, Destroy};
+    return NEXUS_GAME_OK;
+}
+/** \brief Native内部型ではなく、名前・Versionと値codecを明示して機能を登録する */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusConnectGameServices(void* instance, const NexusGameServicesContextV1* context) noexcept {
+    if(!instance || !context || context->abiVersion != 1 || context->structSize != sizeof(*context) || context->api.abiVersion != 1 || context->api.structSize != sizeof(context->api)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    auto& state = *static_cast<NativeCombat*>(instance); state.services = *context;
+    const auto connected = ConnectNativeMover(state.systems, *context); if(connected != NEXUS_GAME_OK) return connected;
+    const auto settings = ConnectCrowdSettings(state.systems, *context); if(settings != NEXUS_GAME_OK) return settings;
+    return context->api.registerCommand(context->client, {"combat.impulse", 14}, 1, Impulse, instance);
+}

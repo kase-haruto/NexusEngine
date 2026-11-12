@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- 明示指定した開発profileだけを有効化する。既存EXE Live++とは併用しない。 -->
+  <PropertyGroup>
+    <NexusNativeModuleLivePP Condition="'$(NexusNativeModuleLivePP)'==''">false</NexusNativeModuleLivePP>
+    <NexusLivePPDir Condition="'$(NexusLivePPDir)'==''">$(NexusEngineRoot)\ThirdParty\LivePP</NexusLivePPDir>
+    <NexusLivePPDir>$([System.IO.Path]::GetFullPath('$(NexusLivePPDir)'))</NexusLivePPDir>
+    <NexusNativePatchProfile Condition="'$(NexusNativeModuleLivePP)'=='true'">LivePP\</NexusNativePatchProfile>
+    <NexusModuleLivePPCompilerPath>$([System.String]::Copy('$(NexusLivePPDir)').Replace('\', '/').TrimEnd('/'))</NexusModuleLivePPCompilerPath>
+    <NexusModuleLivePPEnginePath>$([System.String]::Copy('$(NexusEngineRoot)').Replace('\', '/').TrimEnd('/'))</NexusModuleLivePPEnginePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(NexusNativeModuleLivePP)'=='true' and '$(NexusModuleLivePPRole)'=='GameModule'"><LinkIncremental>false</LinkIncremental></PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(NexusNativeModuleLivePP)'=='true' and '$(NexusModuleLivePPRole)'=='Host'">
+    <ClCompile><PreprocessorDefinitions>NEXUS_GAME_MODULE_LIVEPP_HOST=1;NEXUS_GAME_MODULE_LIVEPP_DIRECTORY=L&quot;$(NexusModuleLivePPCompilerPath)&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(NexusNativeModuleLivePP)'=='true' and '$(NexusModuleLivePPRole)'=='Backend'">
+    <!-- SDKを呼ぶEngine自体はパッチ対象にしない。Reflectionのpre-build生成も実行しない。 -->
+    <ClCompile><AdditionalIncludeDirectories>$(NexusLivePPDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>NEXUS_WITH_LIVEPP=1;NEXUS_LIVEPP_GAME_MODULE_ONLY=1;NEXUS_LIVEPP_DIRECTORY=L&quot;$(NexusModuleLivePPCompilerPath)&quot;;NEXUS_PROJECT_DIRECTORY=&quot;$(NexusModuleLivePPEnginePath)&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(NexusNativeModuleLivePP)'=='true' and '$(NexusModuleLivePPRole)'=='GameModule'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(NexusLivePPDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NEXUS_GAME_MODULE_LIVEPP=1;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat><WholeProgramOptimization>false</WholeProgramOptimization><MinimalRebuild>false</MinimalRebuild><FunctionLevelLinking>true</FunctionLevelLinking>
+      <AdditionalOptions>/Gw /hotpatch %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link><CreateHotPatchableImage>Enabled</CreateHotPatchableImage><OptimizeReferences>false</OptimizeReferences><EnableCOMDATFolding>false</EnableCOMDATFolding><GenerateDebugInformation>DebugFull</GenerateDebugInformation><LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration></Link>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateNexusNativeModuleLivePP" BeforeTargets="PrepareForBuild" Condition="'$(NexusNativeModuleLivePP)'=='true'">
+    <Error Condition="'$(Platform)'!='x64' or ('$(Configuration)'!='Debug' and '$(Configuration)'!='Develop')" Text="Module-only Live++ requires Debug/Develop x64; Release is not supported." />
+    <Error Condition="'$(NexusLivePPEnabled)'=='true'" Text="Module-only Live++ cannot be combined with legacy EXE Live++ instrumentation." />
+    <Error Condition="'$(NexusModuleLivePPRole)'=='Host' and '$(NexusEngineAssociation)'!='development'" Text="Module-only Live++ requires a development Engine; installed Engine libraries are not compatible with this profile." />
+    <Error Condition="!Exists('$(NexusEngineRoot)\Runtime\Application\GameRuntime.cpp')" Text="Module-only Live++ requires the Engine source checkout." />
+    <Error Condition="!Exists('$(NexusLivePPDir)\API\x64\LPP_API_x64_CPP.h')" Text="Live++ SDK is missing. Configure NexusLivePPDir explicitly. See Docs/NativeModuleLivePPREADME.md." />
+  </Target>
+</Project>

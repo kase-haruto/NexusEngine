@@ -3,6 +3,9 @@
 #include "Runtime/Application/ApplicationPaths.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include <Windows.h>
+#include <shellapi.h>
+#include <objbase.h>
+#pragma comment(lib, "shell32.lib")
 #include <chrono>
 #include <cstdlib>
 #include <cwctype>
@@ -95,5 +98,35 @@ Result<Process> SourceCodeEditor::Open(const ProjectContext& project, const std:
     if(!ide) return std::unexpected(ide.error());
     // shellの文字列組立を避け、空白や日本語を含むSolutionも一つのargvとして渡す。
     return Process::Start(*ide,{solution->wstring()},project.Root());
+}
+Result<void> SourceCodeEditor::OpenFile(const std::filesystem::path& file) {
+    std::error_code error;
+    const auto resolved = std::filesystem::canonical(file, error);
+    if(error || !std::filesystem::is_regular_file(resolved, error) || error)
+        return std::unexpected(Failed("The source file no longer exists."));
+    auto extension = resolved.extension().wstring();
+    for(auto& value : extension) value = static_cast<wchar_t>(std::towlower(value));
+    if(extension != L".cs" && extension != L".cpp" && extension != L".cc" && extension != L".cxx" &&
+       extension != L".h" && extension != L".hpp" && extension != L".hxx")
+        return std::unexpected(Failed("Select a C# or C++ source file."));
+    // 引数列をshell文字列へ連結せず、Windowsのファイル関連付けを使用する。
+    SHELLEXECUTEINFOW open{};
+    open.cbSize = sizeof(open); open.fMask = SEE_MASK_FLAG_NO_UI;
+    open.lpVerb = L"open"; open.lpFile = resolved.c_str(); open.nShow = SW_SHOWNORMAL;
+    // COMベースの関連付けhandlerにも対応する。既に別apartmentなら既存の初期化を借用する。
+    const auto apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    const bool opened = ShellExecuteExW(&open) != FALSE;
+    const auto code = opened ? ERROR_SUCCESS : GetLastError();
+    if(SUCCEEDED(apartment)) CoUninitialize();
+    if(opened) return {};
+    if(code != ERROR_NO_ASSOCIATION)
+        return std::unexpected(Failed("Cannot open source file in its associated editor. Windows error " + std::to_string(code)));
+    // 関連付けのない開発環境でも編集できるよう、System directoryのEditorへ一つのargvで渡す。
+    wchar_t system[MAX_PATH]{};
+    const auto length = GetSystemDirectoryW(system, MAX_PATH);
+    if(!length || length >= MAX_PATH) return std::unexpected(Failed("Cannot locate the Windows text editor."));
+    auto process = Process::Start(std::filesystem::path(system) / "notepad.exe", {resolved.wstring()}, resolved.parent_path());
+    if(!process) return std::unexpected(process.error());
+    return {};
 }
 }

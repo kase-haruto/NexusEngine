@@ -1,0 +1,16 @@
+namespace Game;
+/*-----------------------------------------------------------------------------------------
+ * CrowdSimulation
+ * - Game固有の型付きFacade。ScriptはInteropやNative内部型を扱わない
+ * - staticへWorldやHandleを保存せず、現在Worldの明示署名を解決して呼ぶ
+ *---------------------------------------------------------------------------------------*/
+public static class CrowdSimulation
+{
+    /// <summary>同じWorldのEntityへ目標を渡す。Systemの実行は既存Schedulerが担当する。</summary>
+    public static void SetTarget(global::Nexus.Managed.Entity entity, global::System.Numerics.Vector3 target)
+    {
+        // 生成したFacade名がEntity / Vector3 / NativeValueでもSDK型の解決先を変えない。
+        var function = entity.World.BindNativeFunction("NativeCombat", "CrowdSimulation", 1, "SetTarget", 1, global::Nexus.Managed.NativeType.Void, global::Nexus.Managed.NativeType.Entity, global::Nexus.Managed.NativeType.Vector3);
+        function.Invoke(global::Nexus.Managed.NativeValue.From(entity), global::Nexus.Managed.NativeValue.From(target));
+    }
+}

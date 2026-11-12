@@ -10,6 +10,10 @@
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "Runtime/Reflection/ReflectedInspector.h"
+#include "Platform/Development/LiveCodingAgent.h"
+#include "Tools/Project/SourceCodeEditor.h"
+#include "Editor/Services/SourceFileActions.h"
+#include <stdexcept>
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -20,8 +24,24 @@ EditorWorkspace::EditorWorkspace(EditorSession& session)
     : session_(session), properties_(types_), sceneEdits_(session, properties_), documents_(session, properties_), viewportTools_(session, properties_) {}
 EditorWorkspace::~EditorWorkspace() noexcept {
     // 部分初期化時も、Panel/Factoryが借用するAsset・Viewport・編集サービスより先に破棄する。
-    panels_.Clear(); properties_.Reset(nullptr);
+    reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear(); panels_.Clear(); properties_.Reset(nullptr);
     if(logSink_) Logger::Get().RemoveSink(logSink_);
+}
+Result<void> EditorWorkspace::ReloadCSharp(const std::filesystem::path& assembly, ManagedReloadState* outcome) {
+    // Metadata検証でRuntimeへ到達しない失敗も、前回の結果と取り違えない。
+    if(outcome) *outcome = ManagedReloadState::CompatibilityError;
+    auto file = assembly; file.replace_extension(".metadata.json");
+    auto metadata = ManagedScriptMetadata::Load(file); if(!metadata) return std::unexpected(metadata.error());
+    auto candidate = types_;
+    if(const auto& old = session_.GetManagedScriptMetadata()) old->Unregister(candidate);
+    if(!(*metadata)->Register(candidate)) return std::unexpected(Error(ErrorCategory::Framework, 235, "Reload Metadata conflicts with an existing type."));
+    auto result = session_.ReloadCSharp(assembly);
+    if(outcome) *outcome = session_.CSharpReloadState();
+    if(!result) return result;
+    // 旧schemaのPropertyHandle履歴を新型へ適用させない。編集Documentの未保存状態は維持する。
+    if(properties_.IsDirty()) session_.MarkDirty();
+    properties_.Reset(session_.GetLevel()); types_ = std::move(candidate);
+    return {};
 }
 void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions,
                                  const std::filesystem::path& engineRoot, const ProjectContext* project) {
@@ -38,12 +58,15 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     if(!text_.Load((engineRoot.empty() ? root : engineRoot) / "Resources/Editor/Localization")) NEXUS_LOG_WARNING("Editor", "Localization dictionary unavailable.");
     text_.SetLanguage(settings_.user.language);
     RegisterSceneTypes(types_);
-    if(const auto registration = session_.GetReflectionRegistration(); registration.inspector) registration.inspector(types_);
+    session_.GetReflectionRegistration().RegisterInspector(types_);
+    if(const auto& metadata = session_.GetManagedScriptMetadata(); metadata && !metadata->Register(types_))
+        throw std::runtime_error("Managed Script metadata collides with a registered Reflection type.");
     drawers_.RegisterDefaults();
     RegisterPropertyPages(categories_);
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     assets_ = std::make_unique<AssetCatalog>(root / std::filesystem::path{ConvertString(settings_.project.assetPath)});
     levels_ = std::make_unique<AssetCatalog>(project ? project->Levels() : assets_->Root() / "Levels");
+    sources_ = std::make_unique<AssetCatalog>(project ? project->Source() : root / "Source");
     logs_ = std::make_shared<BufferedLogBuffer>();
     auto sink = std::make_unique<BufferedLogSink>(logs_); logSink_ = sink.get();
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
@@ -57,8 +80,9 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
         return std::make_unique<ContentBrowserPanel>(*assets_, [this](const auto& path) {
             if((path.extension() == ".json" || path.extension() == ".level") && path.parent_path() == levels_->Root()) OpenLevel(path);
+            else if(SourceFileActions::Contains(sources_->Root(), path)) Report(SourceCodeEditor::OpenFile(path));
             else notifications_.Push(AssetCatalog::Utf8(path));
-        });
+        }, sources_.get());
     });
     panels_.RegisterFactory("Preferences", "edit.preferences", [this] {
         return std::make_unique<PreferencesPanel>(settings_, [this] {
@@ -160,6 +184,22 @@ void EditorWorkspace::RegisterToolbar() {
         }
     }});
     toolbar_.RegisterButton("play.stop", "play.stop", "play.stop", 120);
+    toolbar_.RegisterButton("project.reloadCpp", "Reload C++", "project.reloadCpp", 125);
+    toolbar_.RegisterSection({"project.nativeReloadState", 205, 10, [](const auto&, const auto&) {
+        const char* state = "Unavailable";
+        switch(LiveCodingAgent::State()) {
+            case NativeReloadState::Idle: state = "Idle"; break;
+            case NativeReloadState::Queued: state = "Queued"; break;
+            case NativeReloadState::Reloading: state = "Reloading"; break;
+            case NativeReloadState::Succeeded: state = "Reload Success"; break;
+            case NativeReloadState::NoChanges: state = "No Changes"; break;
+            case NativeReloadState::CompileError: state = "Compile Error"; break;
+            case NativeReloadState::CompatibilityError: state = "Compatibility Error"; break;
+            case NativeReloadState::StateRestoreError: state = "State Restore Error"; break;
+            default: break;
+        }
+        ImGui::TextDisabled("Native: %s", state);
+    }});
 
     // Viewportの設定UIもPlay/Stopと同じ描画領域へ登録する。
     // ツールバー自体はViewportToolsの型やカメラ・ギズモの内部状態を参照しない。
@@ -171,6 +211,13 @@ void EditorWorkspace::RegisterToolbar() {
 }
 
 void EditorWorkspace::RegisterCommands() {
+    EditorCommandRegistry::Command nativeReload{[this] {
+        if(!LiveCodingAgent::RequestReload()) Report(std::unexpected(Error(ErrorCategory::Framework, 239, "Native Reload unavailable or busy. Module-only mode requires an opt-in development build and an active Native Game Module session.")));
+    }, [this] { return !IsProjectOperationActive() && !commands_.IsChecked("project.runStandalone"); }};
+    // Compile要求からpatch完了までを公開し、Managed Compileや通常Buildとの競合を防ぐ。
+    nativeReload.isChecked = [] { const auto state = LiveCodingAgent::State(); return state == NativeReloadState::Queued || state == NativeReloadState::Reloading; };
+    commands_.Register("project.reloadCpp", std::move(nativeReload));
+    menu_.RegisterTool({"Reload C++", "project.reloadCpp"});
     const auto editing = [this] { return !session_.IsPlaying() && !documents_.ConfirmationRequired() && !documents_.NeedsSaveAs(); };
     const auto sceneResult = [this](bool result) { if(!result) notifications_.Push(text_.Text("edit.rejected"), true); };
     commands_.Register("file.new", {[this] { documents_.Request(EditorDocumentService::Action::New); }, editing});
@@ -192,7 +239,7 @@ void EditorWorkspace::RegisterCommands() {
     commands_.Register("scene.model", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Model")); }, editing});
     commands_.Register("scene.light", {[this, sceneResult] { sceneResult(sceneEdits_.Create("DirectionalLight")); }, editing});
     commands_.Register("scene.sky", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Sky")); }, editing});
-    const auto canChangeMode = [this] { return !session_.IsPlaying() && !commands_.IsChecked("project.runStandalone"); };
+    const auto canChangeMode = [this] { return !session_.IsPlaying() && !IsProjectOperationActive() && !commands_.IsChecked("project.runStandalone"); };
     EditorCommandRegistry::Command editorMode{[this] { playMode_ = PlayMode::Editor; },canChangeMode};
     editorMode.isChecked = [this] { return playMode_ == PlayMode::Editor; };
     commands_.Register("play.mode.editor",std::move(editorMode));
@@ -209,10 +256,10 @@ void EditorWorkspace::RegisterCommands() {
             else sceneResult(false);
         }
     }, [this,editing] {
-        return editing() && !commands_.IsChecked("project.runStandalone") &&
+        return editing() && !IsProjectOperationActive() && !commands_.IsChecked("project.runStandalone") &&
             (playMode_ == PlayMode::Editor || commands_.CanExecute("project.runStandalone"));
     }});
-    EditorCommandRegistry::Command pause{[this] { session_.TogglePause(); },[this] { return session_.IsPlaying(); }};
+    EditorCommandRegistry::Command pause{[this] { session_.TogglePause(); },[this] { return session_.IsPlaying() && !session_.IsCSharpSuspended(); }};
     pause.isChecked = [this] { return session_.IsPaused(); };
     commands_.Register("play.pause",std::move(pause));
     commands_.Register("play.stop", {[this] {
@@ -284,7 +331,13 @@ void EditorWorkspace::DrawFileDialog() {
         ImGui::EndPopup();
     }
 }
-void EditorWorkspace::PrepareFrame() { if(initialized_ && settingsChanged_) ApplyUserSettings(); }
+void EditorWorkspace::PrepareFrame() {
+    if(!initialized_) return;
+    if(reloadPoller_) reloadPoller_();
+    // ToolbarやPanelの表示有無で完了通知と子Runtime起動の進行を変えない。
+    for(const auto& poll : framePollers_) poll();
+    if(settingsChanged_) ApplyUserSettings();
+}
 void EditorWorkspace::Draw() {
     if(!initialized_) return;
     SynchronizeDocument();
@@ -313,7 +366,7 @@ void EditorWorkspace::Draw() {
         toolbarLayoutRevision_ = toolbar_.LayoutRevision();
     }
     layout_.Draw();
-    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_};
+    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_, sources_.get()};
     viewport_.SetCameraPreviewVisible(false);
     renderGraph_.capturesKeyboard = false;
     panels_.Draw(context, session_.IsPlaying());
@@ -347,7 +400,7 @@ void EditorWorkspace::Shutdown() {
     layout_.Save(settings_.user.autoSaveLayout);
 
     // 借用先のサービスを切断する前に、ツールバーの描画コールバックを解除する。
-    toolbar_.Clear();
+    reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear();
     panels_.Clear();
     viewport_.Detach();
     properties_.Reset(nullptr);

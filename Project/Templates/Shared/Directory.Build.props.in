@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <NexusManagedRuntime Condition="'$(NexusManagedRuntime)'==''">Mono</NexusManagedRuntime>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectExtension)'=='.csproj'">
+    <LangVersion>latest</LangVersion>
+    <!-- 配布済みMonoのBCLをcompiler参照として拾わず、target frameworkの参照Assemblyを使う。 -->
+    <AssemblySearchPath_UseCandidateAssemblyFiles>false</AssemblySearchPath_UseCandidateAssemblyFiles>
+  </PropertyGroup>
+  <!-- 複数Managed Projectのobjを分離する。Engine側のSourceへ中間生成物を書かない。 -->
+  <PropertyGroup Condition="'$(MSBuildProjectExtension)'=='.csproj' and '$(NexusManagedIntermediateRoot)'!=''">
+    <BaseIntermediateOutputPath>$(NexusManagedIntermediateRoot)$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>

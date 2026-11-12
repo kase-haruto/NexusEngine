@@ -102,7 +102,7 @@ namespace NexusEngine {
 		// 非対応Componentを黙って落とすとEditorの保存でデータを失うため、I/O前に拒否する。
 		ComponentReflection components;
 		try {
-			if(level.reflection_.components) level.reflection_.components(components);
+			level.reflection_.RegisterComponents(components);
 		} catch(const std::exception& exception) {
 			return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, std::string("Component registration failed: ") + exception.what()));
 		}
@@ -281,7 +281,7 @@ namespace NexusEngine {
 		auto loadedScene = std::make_unique<Scene>();
         ComponentReflection components;
         try {
-            if(level.reflection_.components) level.reflection_.components(components);
+            level.reflection_.RegisterComponents(components);
         } catch(const std::exception& exception) {
             return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, std::string("Component registration failed: ") + exception.what()));
         }
@@ -426,7 +426,10 @@ namespace NexusEngine {
 		if(!transformResult) return transformResult;
 
 		// 完全に検証できたWorldだけを公開するため、失敗時は既存Levelを変更しない。
-		level.scene_ = std::move(loadedScene);
+		// 完成した候補だけ交換し、旧WorldのPhysics bodyも共通の寿命境界で解除する。
+        level.audio_.reset(); // ファイルからのLevel遷移では旧音声を持ち越さない。Managed snapshot交換とは別操作。
+        level.nextLevel_.reset();
+		static_cast<void>(level.ExchangeScene(std::move(loadedScene)));
 		level.name_ = std::move(loadedName);
 		level.lighting_ = std::move(lighting);
         level.screenEffects_.clear();

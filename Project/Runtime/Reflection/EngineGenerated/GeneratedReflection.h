@@ -7,12 +7,15 @@
 #include "Graphics/Shadow/ShadowTypes.h"
 #include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/ColliderComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/NameComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/RigidBodyComponent.h"
+#include "Runtime/Scene/Components/ScriptComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/EntityId.h"
@@ -38,6 +41,21 @@ template<> struct ReflectionTraits<CameraComponent> {
         visitor("primary", &CameraComponent::primary);
         visitor("enabled", &CameraComponent::enabled);
         visitor("frustumSize", &CameraComponent::smallFrustum);
+    }
+};
+template<> struct ReflectionTraits<ColliderComponent> {
+    static constexpr const char* Id = "Collider";
+    static constexpr const char* Label = "component.collider";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &ColliderComponent::enabled);
+        visitor("meshAsset", &ColliderComponent::meshAsset);
+        visitor("shape", &ColliderComponent::shape);
+        visitor("halfExtent", &ColliderComponent::halfExtent);
+        visitor("radius", &ColliderComponent::radius);
+        visitor("halfHeight", &ColliderComponent::halfHeight);
+        visitor("friction", &ColliderComponent::friction);
+        visitor("restitution", &ColliderComponent::restitution);
+        visitor("sensor", &ColliderComponent::sensor);
     }
 };
 template<> struct ReflectionTraits<DirectionalLightComponent> {
@@ -141,6 +159,37 @@ template<> struct ReflectionTraits<Quaternion> {
         visitor("y", &Quaternion::y);
         visitor("z", &Quaternion::z);
         visitor("w", &Quaternion::w);
+    }
+};
+template<> struct ReflectionTraits<RigidBodyComponent> {
+    static constexpr const char* Id = "RigidBody";
+    static constexpr const char* Label = "component.rigidBody";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &RigidBodyComponent::enabled);
+        visitor("motion", &RigidBodyComponent::motion);
+        visitor("shape", &RigidBodyComponent::shape);
+        visitor("halfExtent", &RigidBodyComponent::halfExtent);
+        visitor("radius", &RigidBodyComponent::radius);
+        visitor("halfHeight", &RigidBodyComponent::halfHeight);
+        visitor("mass", &RigidBodyComponent::mass);
+        visitor("friction", &RigidBodyComponent::friction);
+        visitor("restitution", &RigidBodyComponent::restitution);
+        visitor("gravityScale", &RigidBodyComponent::gravityScale);
+        visitor("velocity", &RigidBodyComponent::velocity);
+        visitor("angularVelocity", &RigidBodyComponent::angularVelocity);
+        visitor("sensor", &RigidBodyComponent::sensor);
+        visitor("continuous", &RigidBodyComponent::continuous);
+    }
+};
+template<> struct ReflectionTraits<ScriptComponent> {
+    static constexpr const char* Id = "Script";
+    static constexpr const char* Label = "component.script";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("scriptType", &ScriptComponent::scriptType);
+        visitor("enabled", &ScriptComponent::enabled);
+        visitor("propertyState", &ScriptComponent::propertyState);
+        visitor("additional", &ScriptComponent::additional);
+        visitor("slotId", &ScriptComponent::slotId);
     }
 };
 template<> struct ReflectionTraits<SkyRendererComponent> {

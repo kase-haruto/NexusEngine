@@ -1,0 +1,14 @@
+<Project>
+  <!-- Monoは従来Desktop profileへ明示targetする。C#の言語versionとBCL互換性は別に管理する。 -->
+  <PropertyGroup Condition="'$(NexusManagedRuntime)'=='Mono'">
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <DefineConstants>$(DefineConstants);NEXUS_MONO</DefineConstants>
+    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+  <!-- RestoreとBuildの両方でProject別の中間配置を確定し、Bootstrap / APIのassets衝突を防ぐ。 -->
+  <PropertyGroup Condition="'$(NexusManagedIntermediateRoot)'!=''">
+    <BaseIntermediateOutputPath>$(NexusManagedIntermediateRoot)$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>

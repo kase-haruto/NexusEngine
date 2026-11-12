@@ -26,6 +26,35 @@
 * Language: C++
 * Platform: Windows
 
+ゲーム開発言語の段階的な拡張は[C++ / C# Project基盤](Project/Docs/CppCSharpREADME.md)を参照してください。
+公開されているクラス・関数・Component ID・使用例は[ゲーム開発API一覧（C++ / C#）](Project/Docs/GameApiReference.md)にまとめています。追加APIの未検証範囲も記載しています。
+
+C#の異なるScriptを同じEntityへ追加し、個別に有効化・解除・保存する実装は[複数Scriptアタッチ](Project/Docs/MultipleScriptsREADME.md)を参照してください。
+
+2026-11-12にMono複数Script統合テストと既存CoreCLR回帰テストを実行し、両方の成功を確認しました。[実行結果と確認範囲](Project/Docs/MultipleScriptsVerificationREADME.md)を参照してください。
+Content BrowserのSource閲覧、Component / Scriptのアタッチ、テキストエディタ起動は[ソース操作の手順](Project/Docs/SourceContentBrowserREADME.md)を参照してください。
+
+新規C# / Hybrid Projectの実行BackendはMonoです。[Mono RuntimeとScript編集](Project/Docs/MonoRuntimeREADME.md)にSDK、Build、Domain Reload、アタッチ・解除と従来CoreCLR Projectとの互換性を記載しています。
+
+C++／C#からの登録済みComponent操作、Entity Query、Transform一括取得・更新のソース実装は[共通Component API](Project/Docs/GameComponentApiREADME.md)を参照してください。今回の変更は静的確認のみで、Build・実行は未検証です。
+
+独立Native DLLの値Component宣言、共通Editorへのアタッチ・解除・保存、既存SchedulerからのC++ Entity Lifecycleは[Native Entity Component](Project/Docs/NativeEntityComponentsREADME.md)を参照してください。Native/HybridテンプレートにNativeMoverサンプルを追加しています。これらの変更もBuild・実行は未検証です。
+改訂仕様の[Phase 3：Native Game System](Project/Docs/NativeGameSystemsREADME.md)では、Game DLLのSystemを既存Schedulerへ登録し、公開関数の契約宣言をSystem登録から分離しています。以下のPhase番号は旧仕様の実装履歴です。
+改訂仕様の[Phase 4：C# Runtime / Game Logic](Project/Docs/CSharpGameLogicREADME.md)では、既存Hosting・Managed Gameplayを再利用し、World検証、ScriptSystem登録解除、Component値取得を補完しています。
+改訂仕様の[Phase 5：Native / Managed API](Project/Docs/NativeManagedApiREADME.md)では、明示公開したNative System関数を署名・登録世代・寿命を検証してC#から呼ぶ経路を追加しています。
+改訂仕様の[Phase 6：Reflection / Editor / 保存](Project/Docs/GameLogicReflectionREADME.md)では、共通Property経路を使い、保存Versionの保護とHybrid設定値の編集を補完しています。
+改訂仕様の[Phase 7-A：Reload境界と状態通知](Project/Docs/HotReloadCoordinationREADME.md)では、Managed適用を描画から分離し、Interop sessionと未対応Nativeパッチの競合を拒否しています。Game DLL接続は後続7-Cを参照してください。
+改訂仕様の[Phase 7-B：Native Patch Runtime契約](Project/Docs/NativePatchRuntimeREADME.md)では、固定stateを保持する準備・完了通知、Bindingの一括差替えとManaged Handle再解決を追加しています。動的Module登録・同期Backend接続は後続7-Cで実装しています。
+改訂仕様の[Phase 7-C：Game DLL専用Live++ Backend](Project/Docs/NativeModuleLivePPREADME.md)では、明示的な開発profile、動的DLLのEnable / Disable通知、SDK hookによる結果通知と7-Bの同期実行を接続しました。実SDKでのBuild・Agent接続・起動に加え、World / Entityを保持したNative実コードパッチを確認しました。任意state移行や複数DLLの協調は対象外です。
+改訂仕様の[Phase 8：Hybrid Project / Build / Packaging](Project/Docs/HybridProjectREADME.md)では、複数Native / Managed Moduleの共通実行、言語の途中追加、共通開発Panel、Build・依存DLL検査、可搬Packageと任意のprivate .NET Runtime配置を接続しています。[実行検証記録](Project/Docs/HybridVerificationREADME.md)にDebugのビルド・回帰テスト、C++ / C# / Hybrid Projectの起動、Hybrid Editor / RuntimeのDirectX 12描画、private .NET付きPackage起動の確認結果と使用方法を記載しました。
+Phase 1の共通Project基盤に続き、[Phase 2：Game API / Native Module](Project/Docs/GameModulesREADME.md)を追加しました。
+[Phase 3：.NET Runtime Hosting](Project/Docs/CSharpRuntimeREADME.md)ではManaged bootstrapの起動・終了まで追加しました。
+[Phase 4：C# Gameplay / 共通ECS](Project/Docs/ManagedGameplayREADME.md)ではScriptBehaviourから既存Entity / Transformを操作する経路を追加しました。
+[Phase 5：Managed Reflection / 共通Editor・保存](Project/Docs/ManagedReflectionREADME.md)では公開Propertyを既存Details・Undo / Redo・Level保存へ接続しました。
+[Phase 6：Managed Hot Reload](Project/Docs/ManagedHotReloadREADME.md)ではC#のCompile・状態復元・collectible contextの解放確認を追加しました。
+[Phase 7：Hybrid C++ / C#](Project/Docs/HybridGameplayREADME.md)では同一WorldでNativeとManagedを併用し、明示的なPublic APIと値Eventを接続しました。
+上記の各Phase文書には当時の静的確認記録が含まれます。最新の実行済み範囲と未確認項目は実行検証記録を参照してください。
+
 ## ブランチ作成規則
 
 ブランチ名は、変更内容を表す接頭辞と作業内容を組み合わせて作成します。
@@ -181,8 +210,16 @@ Live++ の導入・操作、Reflection の自動生成と Reinstancing による
 
 ライセンスは現在未設定です。
 
+## Physics
+
+Jolt Physics 5.6.0を既存ECSへ接続し、共通RigidBodyの編集・保存とC++/C#のRaycast・Force・Impulse APIを追加しています。Engine統合の実行確認は未完了です。構成、使用方法、所有権と制約は[Jolt Physics](Project/Docs/JoltPhysicsREADME.md)を参照してください。
+
 ## レンダリング
 
 Metallic/Roughness PBR、HDR、Compute IBL（Diffuse Irradiance / GGX Prefilter / BRDF LUT）、DDGI（動的照度フィールド）、ベイクGI＋ライトプローブ（比較用）、拡散RTGI（比較用）、Emissive / AO、RT Shadow、鏡・ガラス、Mesh Shaderに対応しています。
 
 通常描画のGIは[DDGI](Project/Docs/DDGI.md)、事前計算方式は[ベイクGI＋ライトプローブ](Project/Docs/BakedLighting.md)を参照してください。RTGIの設定・検証・制約は[拡散GI設計](Project/Docs/GlobalIllumination.md)を参照してください。環境HDRの設定、責務分離、リソース寿命、テストと制約は[IBL設計資料](Project/Docs/IBL.md)、既存の描画基盤は[Graphics設計](Project/Docs/GraphicsREADME.md)を参照してください。
+
+## ゲームパッド入力（1.1.1）
+
+XInput対応機器を4台まで共通Inputへ接続します。C++/C#の取得方法、対応範囲、focusと切断の契約は[Gamepad Input](Project/Docs/GamepadInputREADME.md)を参照してください。

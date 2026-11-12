@@ -11,6 +11,11 @@
     },
     {
         "Kind":  "COMPONENT",
+        "Type":  "ColliderComponent",
+        "Id":  "\"Collider\""
+    },
+    {
+        "Kind":  "COMPONENT",
         "Type":  "DirectionalLightComponent",
         "Id":  "\"DirectionalLight\""
     },
@@ -63,6 +68,16 @@
         "Kind":  "VALUE",
         "Type":  "Quaternion",
         "Id":  "\"Quaternion\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "RigidBodyComponent",
+        "Id":  "\"RigidBody\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "ScriptComponent",
+        "Id":  "\"Script\""
     },
     {
         "Kind":  "COMPONENT",

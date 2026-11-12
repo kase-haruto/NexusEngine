@@ -19,6 +19,7 @@
 #include "EditorSession.h"
 #include "Foundation/Logging/BufferedLogSink.h"
 #include <array>
+#include <vector>
 
 namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
@@ -59,6 +60,19 @@ namespace NexusEngine {
 		EditorCommandRegistry&			   Commands() { return commands_; }
 		/** \brief 拡張commandの失敗も既存のログと通知へ表示する */
 		void Report(const Result<void>& result);
+        /** \brief 候補Registryを事前検証し、Reload成功後に履歴と型情報を差し替える */
+        [[nodiscard]] Result<void> ReloadCSharp(const std::filesystem::path& assembly, ManagedReloadState* outcome = nullptr);
+        EditorSession& Session() noexcept { return session_; }
+        /** \brief 非同期Compileの監視を描画から分離し、ImGui開始前の所有Threadへ接続する */
+        void SetReloadPoller(std::function<void()> poller) { reloadPoller_ = std::move(poller); }
+        /** \brief 起動時の拡張から所有Threadの完了監視を追加する。描画を省略しても毎frame処理する
+         * \param poller Workspaceより短い寿命のcallback。監視中の追加・Workspace破棄・再入は禁止する
+         */
+        void AddFramePoller(std::function<void()> poller) { if(poller) framePollers_.push_back(std::move(poller)); }
+        /** \brief 既存Commandの継続状態からBuildと両Reloadの競合を判定する。UI Thread専用 */
+        [[nodiscard]] bool IsProjectOperationActive() const {
+            return commands_.IsChecked("project.development") || commands_.IsChecked("project.reloadCpp") || commands_.IsChecked("project.reloadCSharp");
+        }
 		/** 機能の初期化時に、共通ツールバーへボタンや専用UIを登録するための窓口。 */
 		EditorToolbarRegistry& Toolbar() {
 			return toolbar_;
@@ -73,6 +87,7 @@ namespace NexusEngine {
 		enum class PlayMode { Editor, SeparateWindow };
 		PlayMode playMode_ = PlayMode::Editor; //< 実行中は変更しないEditorセッション内の選択
 		std::unique_ptr<AssetCatalog> levels_; //< Asset Rootと独立したLevel保存先の一覧
+        std::unique_ptr<AssetCatalog> sources_; //< Source一覧。Panelより長寿命で同じAssetCatalogの範囲検証を使う
 		void							   RegisterCommands();
 		void							   RegisterToolbar();
 		void							   DrawFileDialog();
@@ -98,6 +113,8 @@ namespace NexusEngine {
 		EditorToolbarRegistry			   toolbar_;					   //< コマンドボタンと機能別UIの登録先
 		ConsoleService					   console_;					   //< 登録済みConsoleのみ
         PostProcessGraphDocument renderGraph_;
+        std::function<void()> reloadPoller_; //< Workspace寿命の監視callback。Shutdown / patch前に解除する
+        std::vector<std::function<void()>> framePollers_; //< 拡張初期化時だけ登録する。旧コードとworkerの所有をpatch前に解除する
 		PanelRegistry					   panels_;						   //< Panel所有
 		MainMenuBar						   menu_;						   //< メニュー描画
 		DockingLayout					   layout_;						   //< 配置永続化

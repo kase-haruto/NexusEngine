@@ -7,6 +7,6 @@ void RegisterGameComponents(ComponentReflection& registry) {
     registry.Register<NexusGame::MoveComponent>();
 }
 void RegisterGameInspectorTypes(TypeRegistry& registry) {
-    RegisterReflectedInspector<NexusGame::MoveComponent>(registry);
+    RegisterReflectedInspector<NexusGame::MoveComponent>(registry, {"C:/MyProject/NexusEngine/Project/Game/Components/MoveComponent.h"});
 }
 }

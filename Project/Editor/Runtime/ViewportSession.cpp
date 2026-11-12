@@ -13,6 +13,7 @@ bool ViewportSession::AttachLocalPreview(UI::ITextureProvider& textures, UI::Tex
     localTextures_ = &textures; localTexture_ = texture; localResize_ = std::move(resize); return true;
 }
 void ViewportSession::BeginFrame() {
+    gameInputFocus_ = false; // 非表示PanelはDrawされないため、前frameの権限を残さない。
     if(!connection_) return;
     connection_->Poll();
     if(State() == IPC::RuntimeState::Disconnected || State() == IPC::RuntimeState::Error) return;
@@ -24,6 +25,7 @@ bool ViewportSession::CompleteSubmission() {
     frame_.reset(); return true;
 }
 void ViewportSession::Detach() noexcept {
+    gameInputFocus_ = false;
     if(frames_) frames_->Disconnect();
     frame_.reset(); connection_ = nullptr; frames_ = nullptr; textures_ = nullptr;
     width_ = height_ = 0; generation_ = 0;

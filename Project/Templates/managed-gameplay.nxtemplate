@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "managed-gameplay",
+  "name": "Managed Gameplay (C#)",
+  "description": "共通ECSのCubeをC# ScriptBehaviourから更新する最小ゲーム。公開Property編集とReload C#に対応。",
+  "moduleLanguages": ["CSharp"],
+  "files": [
+    {"source":"Shared/Directory.Build.props.in","target":"Directory.Build.props","replace":false},
+    { "source": "ManagedGameplay/Host.cpp.in", "target": "@SOURCE@/Host/Main.cpp", "replace": false, "language": "CSharp" },
+    { "source": "ManagedBootstrap/GameRuntime.vcxproj.in", "target": "GameRuntime.vcxproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedBootstrap/GameEditor.vcxproj.in", "target": "GameEditor.vcxproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedGameplay/ManagedBootstrap.vcxproj.in", "target": "ManagedBootstrap.vcxproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedGameplay/Game.slnx.in", "target": "Game.slnx", "replace": true, "language": "CSharp" },
+    { "source": "ManagedGameplay/GameScripts.csproj.in", "target": "GameScripts.csproj", "replace": true, "language": "CSharp" },
+    { "source": "ManagedGameplay/PlayerController.cs.in", "target": "@SOURCE@/Game/PlayerController.cs", "replace": false, "language": "CSharp" },
+    { "source": "ManagedGameplay/README.md.in", "target": "@SOURCE@/Game/README.md", "replace": false, "language": "CSharp" },
+    { "source": "ManagedGameplay/BuildTargets.json.in", "target": "@CONFIG@/BuildTargets.json", "replace": false, "language": "CSharp" },
+    { "source": "ManagedGameplay/Startup.level", "target": "@LEVELS@/Startup.level", "replace": false }
+  ]
+}

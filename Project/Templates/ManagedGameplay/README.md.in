@@ -1,0 +1,34 @@
+# C# Gameplay
+
+Source/Game/PlayerController.csは既存LevelのCubeに付いたScriptComponentから実行されます。
+C#側にECSはなく、Entity / TransformはNexus.Managed経由で既存EngineのWorldを操作します。
+GameScripts.csprojは安定APIのNexus.Managed.dllだけを参照し、Engine内部へ依存しません。
+Entity.TryGetTransform(out var value)は既存ComponentのLocal値をコピーし、不在・Entity破棄ならfalseを返します。
+コピーの編集はEntity.Transform = valueで明示的に反映します。無効session・別Threadは例外で通知します。
+任意Component型の汎用取得や、Native Game Systemの型付きBindingはこのAPIに含みません。
+
+最初にGameホストをBuildし、Bootstrap・Nexus.Managed・GameScriptsを共通Utilityから準備します。
+.NET SDK、net48参照Assembly、公式Mono x64 SDKが必要です。NEXUS_MONO_ROOTをMono SDK rootへ設定してください。
+新規ProjectはMono / SGenを使用します。BuildTargets.jsonのmanagedRuntimeを省略した旧ProjectはCoreCLRを維持します。
+GameScripts.csprojをIDEで直接開く場合も、最初にホストBuildでNexus.Managedを準備してください。
+DetailsのScript選択欄、Sourceのdrop / 右クリックで型を設定し、Open Script / Detach Scriptで開く・解除できます。
+SolutionのBuildはUtilityが担当します。GameScripts.csprojの同時直接Buildは避けてください。
+
+OnCreate → OnEnable → OnUpdate、無効化時のOnDisable、解除時のOnDestroyに対応します。
+新しいScriptの関連付けは次のScript同期で生成されます。Nativeポインタを保持せず、Engine APIはMain threadから使います。
+通常停止・開始失敗時はScriptSystemを既存Schedulerから解除し、Managed参照を解放してからWorldを終了します。
+通常のPlay停止とReloadでGameScriptsのcollectible contextをUnloadし、弱参照で解放を確認します。
+Play中はToolsまたはToolbarの「Reload C#」からGameScriptsだけをCompile・Reloadできます。
+Compile失敗時は旧コードを継続します。旧contextの参照残りや新OnCreate失敗時はWorldを保持してPauseします。
+原因修正後にReloadを再試行してください。安定API / Bootstrap自体を変更した場合はホスト再起動が必要です。
+[Expose]を付けたpublic get/set Propertyは共通Detailsで編集でき、既存Levelへ保存されます。
+PlayerController.MoveSpeedは初期値5です。編集値はPlay用複製へ渡され、OnCreate前に復元されます。
+[ScriptType] / Expose.Idを維持すればC#名の変更後も値を引き継げます。旧IDにはAliasesを宣言してください。
+対応型はbool / int / float / string / System.Numerics.Vector2・3・4です。null、indexer、static、init-only、未対応型は拒否します。
+UtilityはGameScripts.metadata.jsonも生成します。Editorはこの値Metadataを読み、CLRを所有しません。
+Metadata生成時にconstructor / getterが別processで実行されるため、これらはWorld非依存で副作用のない実装にしてください。
+Reload成功後はMetadataも共通Detailsへ更新します。schema差替え時は旧Undo履歴を解除し、未保存状態は保持します。
+Expose以外のprivate値・static値は復元しません。Lifetimeでworkerをcancelし、OnDestroyで終了待ちを行ってください。
+外部event / delegate / callback登録の解除はTrackResourceで登録するかOnDestroyで確実に完了させてください。
+Reloadの旧OnDisable / OnDestroyではWorldへの書込を禁止します。Entityの作り直しは行わず、購読・workerの解除に限定してください。
+Compile成果物はIntermediate/ManagedReloadへ出力し、通常BuildのDLLやnxbuild stampを上書きしません。

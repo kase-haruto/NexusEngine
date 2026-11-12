@@ -15,9 +15,24 @@
   <ItemGroup>
     <ClCompile Include="EditorServicesTests.cpp" />
     <ClCompile Include="GameRuntimeTests.cpp" />
+    <ClCompile Include="NativeGameModuleTests.cpp" />
+    <ClCompile Include="NativeGameSystemTests.cpp" />
+    <ClCompile Include="ManagedReflectionTests.cpp" />
+    <ClCompile Include="GameServicesTests.cpp" />
+    <ClCompile Include="NativeComponentTests.cpp" />
     <ClCompile Include="ReflectedComponentTests.cpp" />
     <ClCompile Include="..\Foundation\Reflection\ReflectionTextArchive.cpp" />
     <ClCompile Include="..\Runtime\Application\GameRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\GameApiBridge.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\GameComponentAccess.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\GameModuleLoader.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\NativeGameSystemScope.cpp" />
+    <ClCompile Include="..\Runtime\Gameplay\NativeGameApiMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\DotNetHost.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\MonoHost.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\NativeManagedBridge.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\CSharpRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Scripting\ScriptSystem.cpp" />
     <ClCompile Include="..\Runtime\Application\GameApplication.cpp" />
     <ClCompile Include="..\Game\SampleGame.cpp" />
     <ClCompile Include="ReinstancingTests.cpp" />
@@ -36,18 +51,29 @@
   <ItemGroup>
     <ClCompile Include="..\Foundation\Reflection\ReflectionArchive.cpp" />
     <ClCompile Include="..\Foundation\Reflection\ReinstancingService.cpp" />
+    <ClCompile Include="..\Platform\Development\LiveCodingAgent.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
     <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Editor\Core\EditorWorkspaceReinstancing.cpp" />
   </ItemGroup>
+  <Import Project="..\Build\Nexus.Jolt.targets" />
+  <Import Project="..\Build\Nexus.Audio.targets" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup><ProjectReference Include="Fixtures\NativeModule\NativeModuleFixture.vcxproj"><LinkLibraryDependencies>false</LinkLibraryDependencies></ProjectReference></ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Editor\Core\EditorSession.cpp" />
     <ClCompile Include="..\Editor\Services\PropertyEditService.cpp" />
     <ClCompile Include="..\Editor\Services\SceneEditService.cpp" />
+    <ClCompile Include="..\Editor\Services\SourceFileActions.cpp" />
+    <ClCompile Include="..\Tools\Project\SourceCodeEditor.cpp" />
+    <ClCompile Include="..\Platform\Process\Process.cpp" />
     <ClCompile Include="..\Editor\Services\EditorDocumentService.cpp" />
     <ClCompile Include="..\Runtime\Level\LevelDocument.cpp" />
     <ClCompile Include="..\Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ManagedScriptMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ReflectionRegistration.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\NativeComponentMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\GameComponentData.cpp" />
     <ClCompile Include="..\Editor\Gui\Panels\PanelRegistry.cpp" />
     <ClCompile Include="..\Editor\Services\LocalizationService.cpp" />
     <ClCompile Include="..\ThirdParty\imgui\imgui.cpp" />

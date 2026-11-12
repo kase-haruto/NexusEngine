@@ -31,10 +31,33 @@ std::string Xml(std::string value) {
 Result<Json> Definition(const std::filesystem::path& file) {
     auto data = ProjectJson::Read(file); if(!data) return data;
     try {
-        Keys(*data, {"schemaVersion", "id", "name", "description", "files"});
+        Keys(*data, {"schemaVersion", "id", "name", "description", "files", "moduleLanguages", "modules"});
         if(!data->at("schemaVersion").is_number_integer() || data->at("schemaVersion") != 1 || !data->at("files").is_array() || data->at("files").size() > 256)
             throw std::runtime_error("Invalid template schema.");
         for(const char* key : {"id", "name", "description"}) static_cast<void>(Text(*data, key));
+        if(data->contains("modules")) {
+            const auto& modules = data->at("modules");
+            if(!modules.is_array() || modules.size() != 2) throw std::runtime_error("Hybrid template requires two Modules.");
+            std::set<std::string> languages;
+            for(const auto& item : modules) {
+                Keys(item, {"id", "name", "language", "path", "type", "dependencies"});
+                for(const char* key : {"id", "name", "path"}) static_cast<void>(Text(item, key));
+                const auto language = Text(item, "language");
+                if((language != "Cpp" && language != "CSharp") || !languages.insert(language).second || Text(item, "type") != "Game") throw std::runtime_error("Invalid Hybrid Module declarations.");
+                if(item.contains("dependencies") && (!item.at("dependencies").is_array() || item.at("dependencies").size() > 256 ||
+                    !std::ranges::all_of(item.at("dependencies"), [](const auto& dependency) { return dependency.is_string(); }))) throw std::runtime_error("Invalid template Module dependencies.");
+            }
+        }
+        if(data->contains("moduleLanguages")) {
+            const auto& languages = data->at("moduleLanguages");
+            if(!languages.is_array() || languages.empty() || languages.size() > 2) throw std::runtime_error("Invalid template moduleLanguages.");
+            std::set<std::string> unique;
+            for(const auto& language : languages) {
+                if(!language.is_string()) throw std::runtime_error("Invalid template language.");
+                const auto value = language.get<std::string>();
+                if((value != "Cpp" && value != "CSharp") || !unique.insert(value).second) throw std::runtime_error("Unsupported or duplicate template language.");
+            }
+        }
         return data;
     } catch(const std::exception& exception) { return std::unexpected(Invalid(exception.what())); }
 }
@@ -58,16 +81,56 @@ Result<std::vector<ProjectTemplate>> ProjectTemplates::List(const std::filesyste
 // ファイル生成をstagingへ閉じ、失敗したテンプレートを公開しない
 ////////////////////////////
 Result<ProjectContext> ProjectTemplates::Create(const std::filesystem::path& root, ProjectDescriptor descriptor,
-    const ProjectTemplate& projectTemplate, const EngineInstallation& engine) {
+    const ProjectTemplate& projectTemplate, const EngineInstallation& engine, ProjectModuleLanguage initialLanguage) {
     auto compatible = CheckProjectEngine(descriptor.engine, engine.identity); if(!compatible) return std::unexpected(compatible.error());
     auto definition = Definition(projectTemplate.file); if(!definition) return std::unexpected(definition.error());
+    // Moduleは検証済みTemplate宣言から作る。UI由来の任意一覧を未検証で生成しない。
+    if(!descriptor.modules.empty()) return std::unexpected(Invalid("Initial project generation requires an empty modules list."));
+    if(initialLanguage != ProjectModuleLanguage::Cpp && initialLanguage != ProjectModuleLanguage::CSharp)
+        return std::unexpected(Invalid("Unsupported initial Game language."));
+    const std::string language = initialLanguage == ProjectModuleLanguage::Cpp ? "Cpp" : "CSharp";
+    // 古いSDKのテンプレートは従来どおりCppのみ。未対応テンプレートのCppコードをC#へ混入させない。
+    if(definition->contains("moduleLanguages")) {
+        const auto& languages = definition->at("moduleLanguages");
+        if(std::ranges::none_of(languages, [&](const auto& item) { return item == language; }))
+            return std::unexpected(Invalid("Template does not support the selected initial Game language."));
+    } else if(initialLanguage != ProjectModuleLanguage::Cpp) {
+        return std::unexpected(Invalid("This Engine template supports Cpp only. Select an updated Engine for CSharp project generation."));
+    }
+    // 旧Installed SDKのホストはmodulesキーを認識しないため、旧テンプレートのCpp生成は
+    // 従来形式を維持する。新テンプレートだけが明示的な初期Moduleを生成する。
+    if(definition->contains("modules")) {
+        const auto& modules = definition->at("modules");
+        if(!modules.is_array() || modules.size() != 2) return std::unexpected(Invalid("Hybrid template requires one Native and one Managed Module."));
+        std::set<std::string> languages;
+        for(const auto& item : modules) {
+            Keys(item, {"id", "name", "language", "path", "type", "dependencies"});
+            const auto kind = Text(item, "language");
+            if((kind != "Cpp" && kind != "CSharp") || !languages.insert(kind).second || Text(item, "type") != "Game") return std::unexpected(Invalid("Invalid Hybrid Module declarations."));
+            auto path = Text(item, "path"); Replace(path, "@SOURCE@", descriptor.paths.source);
+            descriptor.modules.push_back({Text(item, "id"), Text(item, "name"), kind == "Cpp" ? ProjectModuleLanguage::Cpp : ProjectModuleLanguage::CSharp, path, ProjectModuleType::Game});
+            if(item.contains("dependencies")) for(const auto& dependency : item.at("dependencies"))
+                descriptor.modules.back().dependencies.push_back(dependency.get<std::string>());
+        }
+        // 初期言語は先頭Moduleの生成順だけを決める。共通データや後続Moduleを制限しない。
+        if(descriptor.modules.front().language != initialLanguage) std::swap(descriptor.modules[0], descriptor.modules[1]);
+    } else if(definition->contains("moduleLanguages"))
+        descriptor.modules.push_back({"Game", "Game", initialLanguage, descriptor.paths.source + "/Game", ProjectModuleType::Game});
     auto editorGuid = CreateUuid(); if(!editorGuid) return std::unexpected(editorGuid.error());
+    auto moduleGuid = CreateUuid(); if(!moduleGuid) return std::unexpected(moduleGuid.error());
+    auto nativeGuid = CreateUuid(); if(!nativeGuid) return std::unexpected(nativeGuid.error());
     return ProjectService::Create(root, std::move(descriptor), [&](const ProjectContext& context) -> Result<void> {
         try {
             std::set<std::filesystem::path> generated;
             const auto& project = context.Descriptor();
             for(const auto& item : definition->at("files")) {
-                Keys(item, {"source", "target", "replace"});
+                Keys(item, {"source", "target", "replace", "language"});
+                // 言語指定のないLevel等は共通ファイルとして同じ生成・検証経路を通す。
+                if(item.contains("language")) {
+                    const auto fileLanguage = Text(item, "language");
+                    if(fileLanguage != "Cpp" && fileLanguage != "CSharp") return std::unexpected(Invalid("Unsupported template file language."));
+                    if(project.modules.empty() ? fileLanguage != language : std::ranges::none_of(project.modules, [&](const auto& module) { return (module.language == ProjectModuleLanguage::Cpp ? "Cpp" : "CSharp") == fileLanguage; })) continue;
+                }
                 std::string target = Text(item, "target");
                 for(const auto& [token, value] : {std::pair{"@SOURCE@", project.paths.source}, {"@LEVELS@", project.paths.levels}, {"@CONFIG@", project.paths.config}}) Replace(target, token, value);
                 const auto sourceReference = Path(Text(item, "source")); const auto targetReference = Path(target);
@@ -85,10 +148,12 @@ Result<ProjectContext> ProjectTemplates::Create(const std::filesystem::path& roo
                 if(!input.eof() && input.fail()) return std::unexpected(Invalid("Cannot read template file."));
                 if(!item.at("replace").is_boolean()) return std::unexpected(Invalid("Template replace must be boolean."));
                 if(item.at("replace").get<bool>()) {
-                    const bool xml = destination->extension() == ".vcxproj" || destination->extension() == ".slnx";
+                    const bool xml = destination->extension() == ".vcxproj" || destination->extension() == ".slnx" || destination->extension() == ".csproj";
                     for(const auto& [token, value] : {std::pair{"@SOURCE@", project.paths.source}, {"@CONFIG@", project.paths.config},
-                        {"@PROJECT_FILE@", Utf8(context.File().filename())}, {"@PROJECT_GUID@", project.projectId}, {"@EDITOR_GUID@", *editorGuid}, {"@ENGINE_ASSOCIATION@", project.engine.association}})
+                        {"@PROJECT_FILE@", Utf8(context.File().filename())}, {"@PROJECT_GUID@", project.projectId}, {"@EDITOR_GUID@", *editorGuid},
+                        {"@MODULE_GUID@", *moduleGuid}, {"@ENGINE_ASSOCIATION@", project.engine.association}})
                         Replace(bytes, token, xml ? Xml(value) : value);
+                    Replace(bytes, "@NATIVE_GUID@", xml ? Xml(*nativeGuid) : *nativeGuid);
                 }
                 std::error_code error; std::filesystem::create_directories(destination->parent_path(), error);
                 if(error) return std::unexpected(Invalid("Cannot create template destination: " + error.message()));

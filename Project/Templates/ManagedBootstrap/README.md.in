@@ -1,0 +1,14 @@
+# Game Module — CSharp / Managed Bootstrap
+
+このProjectは共通Runtime内で.NETと安定Bootstrap assemblyを起動し、開始・終了ログを共通Consoleへ出力します。
+Source/Gameは後続のC# Gameplayコード配置先です。Phase 3ではゲームコードやScriptBehaviourを生成・実行しません。
+Assets / Levels / Config / Entity / ComponentはEngineの共通基盤を利用します。
+
+新規ProjectはMono / SGen Backendです。Buildには.NET SDK、net48参照Assembly、公式Mono x64 SDKが必要です。
+`NEXUS_MONO_ROOT`環境変数または`NexusMonoRoot` MSBuild propertyへSDK rootを設定してください。
+ホストBuild時に安定BootstrapとdepsをManaged/へ、Mono Runtime / BCL / GACをMono/へ配置します。
+
+Play / 単体起動は実行WorldのGameRuntimeがManaged sessionを所有します。
+Stopではセッションと参照を解放して子Domainをunloadしますが、Mono rootはProcess終了まで残ります。
+Bootstrap自体を変更した場合はEditor / Runtimeを終了してから再Buildしてください。
+Managed Gameplay、公開Property編集、Hot Reload、Hybrid、配布Packageは後続Phaseです。

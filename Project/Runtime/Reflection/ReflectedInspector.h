@@ -4,12 +4,18 @@
 
 namespace NexusEngine {
 // 専用 Inspector の検証・表示を優先し、生成情報は未登録の型とプロパティを補う。
-template<class T> void RegisterReflectedInspector(TypeRegistry& registry) {
+template<class T> void RegisterReflectedInspector(TypeRegistry& registry, std::vector<std::string> sourceFiles = {}) {
     if(std::string_view(ReflectionTraits<T>::Label).empty()) return;
     TypeDescriptor descriptor{ReflectionTraits<T>::Id, ReflectionTraits<T>::Label,
         [](Entity entity) { return entity.HasComponent<T>(); }, {},
         [](Entity entity) { return entity.AddComponent<T>() != nullptr; }};
-    ReflectionTraits<T>::Visit([&]<class Member>([[maybe_unused]] const char* id, [[maybe_unused]] Member T::* member) {
+    descriptor.sourceFiles = std::move(sourceFiles);
+    // 破棄関数をEngine側へコピーせず、同じ既存Storageの型付き削除だけを登録する。
+    descriptor.remove = [](Entity entity) { return entity.RemoveComponent<T>(); };
+    ReflectionTraits<T>::Visit([&]<class Member, class Owner>([[maybe_unused]] const char* id, [[maybe_unused]] Member Owner::* member) {
+        static_assert(std::is_base_of_v<Owner, T> || std::is_same_v<Owner, T>);
+        // 保存に必要だが直接編集させない内部値は、型側の明示的な公開方針に従う。
+        if constexpr(requires { T::IsPropertyEditable(std::string_view{}); }) if(!T::IsPropertyEditable(id)) return;
         constexpr bool supported = std::is_same_v<Member, bool> || std::is_same_v<Member, int> ||
             std::is_same_v<Member, uint32_t> || std::is_same_v<Member, float> || std::is_same_v<Member, std::string> ||
             std::is_same_v<Member, std::array<float, 2>> || std::is_same_v<Member, std::array<float, 3>> ||

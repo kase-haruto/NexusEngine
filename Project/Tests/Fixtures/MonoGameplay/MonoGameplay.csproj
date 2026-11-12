@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework><LangVersion>latest</LangVersion><OutputType>Library</OutputType>
+    <AssemblyName>MonoGameScripts</AssemblyName><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants Condition="'$(NexusMonoProbeVersion)'=='2'">$(DefineConstants);MONO_PROBE_V2</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup><Reference Include="Nexus.Managed"><HintPath>$(NexusManagedApiPath)</HintPath><Private>false</Private></Reference><Reference Include="System.Numerics" /><Compile Include="Probe.cs" /></ItemGroup>
+</Project>

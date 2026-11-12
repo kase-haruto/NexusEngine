@@ -34,7 +34,7 @@ ReflectionValue EditorWorkspace::CaptureForReinstancing() {
 void EditorWorkspace::ReleaseForReinstancing() noexcept {
     // ここでは設定ファイルを保存せず、破棄前に非所有参照と操作履歴を切断する。
     // Toolbarのコールバックは旧コードの関数を参照するため、再登録できるよう破棄する。
-    toolbar_.Clear();
+    reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear();
     panels_.Clear();
     viewport_.Detach();
     properties_.Reset(nullptr);

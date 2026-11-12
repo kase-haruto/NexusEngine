@@ -1,9 +1,11 @@
 #include "Editor/Services/EditorDocumentService.h"
 #include "Editor/Services/SceneEditService.h"
+#include "Editor/Services/SourceFileActions.h"
 #include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Gui/Panels/PanelRegistry.h"
 #include "Editor/Gui/PropertyDrawerRegistry.h"
 #include "Editor/Gui/Widgets/PropertyWidgets.h"
+#include "Editor/Gui/Widgets/SourceAttachment.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Gui/ViewportTools.h"
 #include "Editor/Services/TransformGizmoTransaction.h"
@@ -18,6 +20,7 @@
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
+#include "Runtime/Scene/Components/ScriptComponent.h"
 #include "Editor/Core/EditorWorkspace.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
@@ -34,6 +37,7 @@
 #include <limits>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <crtdbg.h>
 
 using namespace NexusEngine;
@@ -662,6 +666,102 @@ void ViewportPickingAndValidation() {
     assert(f.session.GetLevel()->Update(0));
     assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(),1,frame));
 }
+/** \brief 同名ソースの誤アタッチ拒否と、drop先を選択せず変更する共通履歴を検証する */
+/** \brief Script参照の解除も既存document履歴とPlay中の編集禁止に従う */
+void ScriptDetachTransactions() {
+    Fixture f;
+    const auto first = Id(f.session.GetLevel()->CreateEntity("First"));
+    const auto second = Id(f.session.GetLevel()->CreateEntity("Second"));
+    const std::string state = R"({"schemaVersion":1,"types":{"sample":{"version":1,"values":{}}}})";
+    for(const auto id : {first, second}) {
+        auto* script = f.session.GetLevel()->FindEntity(id).AddComponent<ScriptComponent>();
+        assert(script); script->scriptType = "sample"; script->propertyState = state;
+    }
+    f.session.Select(first);
+    f.session.Selection().Select(second, true);
+    assert(f.edits.DetachScripts());
+    for(const auto id : {first, second}) assert(!f.session.GetLevel()->FindEntity(id).HasComponent<ScriptComponent>());
+    assert(f.properties.Undo());
+    for(const auto id : {first, second}) {
+        const auto* script = f.session.GetLevel()->FindEntity(id).GetComponent<ScriptComponent>();
+        assert(script && script->scriptType == "sample" && script->propertyState == state);
+    }
+    assert(f.properties.Redo()); assert(f.properties.Undo());
+    assert(f.session.GetLevel()->FindEntity(first).HasComponent<ScriptComponent>());
+    // このCPU fixtureはManaged hostを起動しない。空Worldで共通Play編集guardを確認する。
+    Fixture playing;
+    assert(playing.session.StartPlay()); assert(!playing.edits.DetachScripts()); playing.session.StopPlay();
+    std::cout << "PASS: multi-entity script detach, exposed-value undo/redo and play edit protection\n";
+}
+void SourceAttachmentTransactions() {
+    const auto root = std::filesystem::absolute("Generated/EditorTests/SourceAttachment") /
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto source = root / "Source";
+    std::filesystem::create_directories(source / "Nested");
+    const auto file = source / "Nested/Camera.CPP";
+    std::ofstream(file) << "// registered Component source";
+    std::ofstream(source / "Camera.CPP") << "// same name, different file";
+    std::ofstream(root / "Outside.cpp") << "// outside Source";
+    Fixture f;
+    auto camera = *f.types.Find("Camera");
+    camera.sourceFiles = {AssetCatalog::Utf8(file)};
+    TypeRegistry types;
+    assert(types.Register(camera));
+    assert(SourceFileActions::IsSource(file));
+    assert(SourceFileActions::Contains(source, file));
+    assert(!SourceFileActions::Contains(source, root / "Outside.cpp"));
+    assert(SourceFileActions::TypesFor(source, source / "Camera.CPP", types).empty());
+    assert(SourceFileActions::TypesFor(source, file, types) == std::vector<std::string>{"Camera"});
+    AssetCatalog catalog(source / "Nested");
+    assert(catalog.List(source / "Nested").front().typeKey == "asset.cpp");
+    const auto selected = Id(f.session.GetLevel()->CreateEntity("Selected"));
+    const auto target = Id(f.session.GetLevel()->CreateEntity("Drop target"));
+    f.session.Select(selected);
+    const std::array targets{target};
+    assert(f.edits.AddComponent(camera, targets));
+    assert(f.session.GetSelection() == selected);
+    assert(f.session.GetLevel()->FindEntity(target).HasComponent<CameraComponent>());
+    assert(f.properties.Undo());
+    assert(!f.session.GetLevel()->FindEntity(target).HasComponent<CameraComponent>());
+    assert(f.properties.Redo());
+    assert(f.session.GetLevel()->FindEntity(target).HasComponent<CameraComponent>());
+    const std::array invalidTargets{selected, PersistentId{999, 999}};
+    assert(!f.edits.AddComponent(camera, invalidTargets));
+    assert(!f.session.GetLevel()->FindEntity(selected).HasComponent<CameraComponent>());
+    // 実ImGui payload経由で型IDを解決し、別Rootのソースをdropしても受理しない。
+    PropertyDrawerRegistry drawers; LocalizationService text; EditorCommandRegistry commands;
+    EditorContext context{f.session, f.session.Selection(), f.properties, types, drawers, text, commands, f.edits, nullptr, &catalog};
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO(); io.DisplaySize = {640, 480}; io.DeltaTime = 1.0f / 60; io.IniFilename = nullptr;
+    unsigned char* pixels; int width, height; io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height); io.Fonts->SetTexID(1);
+    ImVec2 point{50, 50}; std::optional<std::string> delivered;
+    std::string payloadPath = AssetCatalog::Utf8(file);
+    const auto frame = [&](bool dragging, bool down) {
+        io.AddMousePosEvent(point.x, point.y); io.AddMouseButtonEvent(0, down);
+        ImGui::NewFrame(); ImGui::SetNextWindowPos({0, 0}); ImGui::SetNextWindowSize({400, 300});
+        ImGui::Begin("Source attachment test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        if(dragging && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceExtern)) {
+            ImGui::SetDragDropPayload("NEXUS_SOURCE_PATH", payloadPath.c_str(), payloadPath.size() + 1);
+            ImGui::TextUnformatted("Camera.CPP"); ImGui::EndDragDropSource();
+        }
+        ImGui::Selectable("Attach source");
+        const auto minimum = ImGui::GetItemRectMin(), maximum = ImGui::GetItemRectMax();
+        point = {(minimum.x + maximum.x) / 2, (minimum.y + maximum.y) / 2};
+        if(auto type = UI::AcceptSourceAttachment(context)) delivered = std::move(type);
+        ImGui::End(); ImGui::Render();
+    };
+    frame(false, false); frame(true, true); frame(true, true); frame(true, false);
+    assert(delivered == std::optional<std::string>{"Camera"});
+    delivered.reset(); payloadPath = AssetCatalog::Utf8(root / "Outside.cpp");
+    frame(false, false); frame(true, true); frame(true, true); frame(true, false);
+    assert(!delivered);
+    ImGui::DestroyContext();
+    // 曖昧な宣言対応はUIへ複数候補を返し、先頭の型を自動適用しない。
+    camera.id = "SecondCamera";
+    assert(types.Register(camera));
+    assert(SourceFileActions::TypesFor(source, file, types).size() == 2);
+    std::cout << "PASS: source metadata matching, same-name isolation, source scope, ImGui drop and attachment undo/redo/rollback\n";
+}
 void CacheAndWorkspaceIntegration() {
     BufferedLogBuffer buffer; uint64_t version = 0;
     assert(buffer.SnapshotIfChanged(version)); assert(!buffer.SnapshotIfChanged(version));
@@ -709,6 +809,31 @@ void CacheAndWorkspaceIntegration() {
     io.Fonts->SetTexID(2); // Keep the font distinct from the fake viewport texture (1).
     {
         EditorWorkspace workspace(f.session); workspace.Initialize(std::filesystem::absolute("Project"));
+        // 外部processを起動せず、共通Command経由の競合拒否と完了後の再許可を検証する。
+        bool developmentBusy = false, managedBusy = false;
+        EditorCommandRegistry::Command development{[] {}};
+        development.isChecked = [&] { return developmentBusy; };
+        assert(workspace.Commands().Register("project.development", std::move(development)));
+        EditorCommandRegistry::Command managedReload{[] {}};
+        managedReload.isChecked = [&] { return managedBusy; };
+        assert(workspace.Commands().Register("project.reloadCSharp", std::move(managedReload)));
+        assert(workspace.Commands().CanExecute("play.start"));
+        developmentBusy = true;
+        assert(workspace.IsProjectOperationActive());
+        assert(!workspace.Commands().Execute("play.start") && !f.session.IsPlaying());
+        assert(!workspace.Commands().CanExecute("project.reloadCpp"));
+        assert(!workspace.Commands().CanExecute("play.mode.editor"));
+        developmentBusy = false; managedBusy = true;
+        assert(!workspace.Commands().Execute("play.start"));
+        assert(!workspace.Commands().CanExecute("project.reloadCpp"));
+        managedBusy = false;
+        assert(!workspace.IsProjectOperationActive() && workspace.Commands().CanExecute("play.start"));
+        // Drawしなくても完了監視を進め、Shutdown後にはcallbackの所有参照を残さない。
+        int polledFrames = 0;
+        auto pollerOwner = std::make_shared<int>(0); std::weak_ptr<int> pollerLifetime = pollerOwner;
+        workspace.AddFramePoller([pollerOwner, &polledFrames] { ++polledFrames; });
+        pollerOwner.reset();
+        workspace.PrepareFrame(); assert(polledFrames == 1 && !pollerLifetime.expired());
         class TestTextures final : public UI::ITextureProvider {
         public:
             std::optional<UI::ResolvedTexture> Resolve(UI::TextureHandle) const noexcept override { return UI::ResolvedTexture{1,640,480}; }
@@ -768,6 +893,8 @@ void CacheAndWorkspaceIntegration() {
         assert(workspace.Commands().Execute("workspace.Lighting")); frame();
         assert(workspace.Commands().Execute("workspace.General")); frame();
         workspace.Shutdown();
+        const int completedFrames = polledFrames;
+        workspace.PrepareFrame(); assert(polledFrames == completedFrames && pollerLifetime.expired());
         EditorSettingsStore migrated; migrated.Load(std::filesystem::absolute("Project"));
         assert(!migrated.user.panels.contains("Properties") && migrated.user.panels.at("Details"));
     }
@@ -889,6 +1016,6 @@ int main() {
     ViewportSceneGuidesTests();
     ViewportPreviewTests(); ViewportPreviewOverlayTests();
     CameraFarPlaneWorldProjectionTests();
-    CacheAndWorkspaceIntegration();
+    ScriptDetachTransactions(); SourceAttachmentTransactions(); CacheAndWorkspaceIntegration();
     std::cout << "PASS: unified Details categories/header, component fallback/extensions, material source/undo/save, selection lifetime, offset-mesh pivot/rotation/scale, gizmo click capture over background, ImGuizmo mouse interaction, parent/multi-selection transforms, gizmo undo/cancel, component addition, asset round-trip/undo, model/texture variants, thumbnails, property transactions, rollback, structural undo, save protection, play isolation, history bounds, shortcuts, lazy panels, viewport picking, rotation/camera/light validation\n";
 }

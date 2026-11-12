@@ -16,6 +16,20 @@ bool HasType(const EditorContext& context, const char* id) {
 void DrawType(const EditorContext& context, const char* id, std::initializer_list<std::string_view> excluded = {}) {
     const auto* type = context.types.Find(id);
     if(!type) return;
+    if(type->instances) {
+        const auto instances=type->instances(context.session.GetSelectedEntity());
+        for(size_t index=0;index<instances.size();++index) {
+            const auto slot=instances[index];
+            const auto key=std::string(id)+":"+std::to_string(slot.high)+":"+std::to_string(slot.low);
+            const auto label=context.text.Text(type->labelKey)+" #"+std::to_string(index+1)+"##"+key;
+            ImGui::PushID(key.c_str());
+            if(ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen))
+                for(const auto& property:type->properties)
+                    if(std::ranges::find(excluded,property.id)==excluded.end()) DrawReflectedProperty(context,id,property.id,false,slot);
+            ImGui::PopID();
+        }
+        return;
+    }
     if(ImGui::CollapsingHeader(context.text.Label(type->labelKey, id).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
         for(const auto& property : type->properties)
             if(std::ranges::find(excluded, property.id) == excluded.end()) DrawReflectedProperty(context, id, property.id);

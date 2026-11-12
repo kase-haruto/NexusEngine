@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><NexusDeferredModuleDeployment>true</NexusDeferredModuleDeployment></PropertyGroup>
+  <!-- HostのProjectReference完了後、stampより先に追加Moduleと集約Metadataを確定する。 -->
+  <Target Name="CompleteNexusGameDeployment" BeforeTargets="WriteGameIdentity" Condition="'$(NexusEngineManifest)'!='' and '$(NexusSkipDeploymentTarget)'!='true'">
+    <PropertyGroup>
+      <NexusDeploymentProfile>Standard</NexusDeploymentProfile>
+      <NexusDeploymentProfile Condition="'$(NexusNativeModuleLivePP)'=='true'">NativeLivePatch</NexusDeploymentProfile>
+      <!-- IDEから明示したManaged再構築も追加Moduleへ伝える。通常Buildでは空に戻す。 -->
+      <NexusDeploymentManagedArguments></NexusDeploymentManagedArguments>
+      <NexusDeploymentManagedArguments Condition="'$(NexusManagedRebuild)'=='true'">-RebuildManaged</NexusDeploymentManagedArguments>
+    </PropertyGroup>
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusEngineRoot)\Tools\Project\Complete-GameDeployment.ps1&quot; -ProjectFile &quot;$(NexusProjectFile)&quot; -EngineManifest &quot;$(NexusEngineManifest)&quot; -OutputDirectory &quot;$(OutDir).&quot; -Configuration &quot;$(Configuration)&quot; -BuildProfile &quot;$(NexusDeploymentProfile)&quot; -LivePPDirectory &quot;$(NexusLivePPDir)&quot; $(NexusDeploymentManagedArguments)" />
+  </Target>
+</Project>

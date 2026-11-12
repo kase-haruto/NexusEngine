@@ -55,6 +55,7 @@ private:
     std::array<char,256> search_{}, name_{};
     std::array<char,4096> location_{}, manifest_{}, development_{};
     int tab_ = 0, engine_ = -1, template_ = 0, configuration_ = 0;
+    int initialLanguage_ = 0; //< UI threadが所有する初期Moduleの選択。Projectの固定言語ではない
     bool focusSearch_ = false;
     LauncherMigrationPanel migration_; //< 移行操作の表示状態。Projectやworkerを所有しない
 };

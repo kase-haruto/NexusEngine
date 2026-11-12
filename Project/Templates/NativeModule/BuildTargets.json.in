@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "runtimeProject": "GameRuntime.vcxproj",
+  "editorProject": "GameEditor.vcxproj",
+  "runtimeExecutable": "Build/Bin/x64/{configuration}/GameRuntime.exe",
+  "editorExecutable": "Build/Bin/x64/{configuration}/GameEditor.exe",
+  "nativeModule": "Build/Bin/x64/{configuration}/Game.dll"
+}

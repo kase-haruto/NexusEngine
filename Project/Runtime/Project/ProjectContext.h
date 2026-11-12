@@ -29,4 +29,6 @@ private:
 
 /** \brief 実行中ホストの識別情報と要求を照合する。別Engineへのfallbackは行わない */
 [[nodiscard]] Result<void> CheckProjectEngine(const ProjectEngineRequirement& requested, const ProjectEngineRequirement& running);
+/** \brief 現在のRuntimeが全Moduleの初期化依存を実行できるか検証する。宣言可能なModule数とは区別する */
+[[nodiscard]] Result<void> CheckProjectRuntimeModules(const ProjectDescriptor& descriptor);
 }

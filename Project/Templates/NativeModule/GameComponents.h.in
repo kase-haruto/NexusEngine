@@ -1,0 +1,45 @@
+#pragma once
+#include <Nexus/GameComponentMetadata.h>
+#include <Nexus/NativeGameSystemApi.h>
+#include "NativeMover.h"
+#include "CrowdSimulationSystem.h"
+
+/** \brief ゲーム初期化を行わず、Engineがコピーして所有する値Metadataだけを返す */
+extern "C" __declspec(dllexport) NexusGameStatus NEXUS_GAME_CALL NexusGetGameComponentMetadata(uint32_t abi, NexusGameString* output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = {};
+    if(abi != 1) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    static constexpr char metadata[] =
+        "{\"schemaVersion\":1,\"types\":[{\"id\":\"" NEXUS_GAME_COMPONENT_MODULE_ID ".Mover\","
+        "\"fullName\":\"" NEXUS_GAME_COMPONENT_MODULE_ID ".NativeMover\",\"version\":1,\"aliases\":[],\"properties\":["
+        "{\"id\":\"enabled\",\"label\":\"Enabled\",\"aliases\":[],\"kind\":\"Bool\",\"default\":true},"
+        "{\"id\":\"speed\",\"label\":\"Speed\",\"aliases\":[],\"kind\":\"Float\",\"default\":1.0}],"
+        "\"sourceFiles\":[\"NativeMover.h\",\"NativeMover.cpp\"]},{\"id\":\"" NEXUS_GAME_COMPONENT_MODULE_ID ".CrowdSettings\","
+        "\"fullName\":\"" NEXUS_GAME_COMPONENT_MODULE_ID ".CrowdSettings\",\"version\":1,\"aliases\":[],\"properties\":["
+        "{\"id\":\"speed\",\"label\":\"Crowd Speed\",\"aliases\":[],\"kind\":\"Float\",\"default\":1.0}]}]}";
+    *output = {metadata, sizeof(metadata) - 1}; return NEXUS_GAME_OK;
+}
+/** \brief Logicの実行は既存Schedulerへ登録する。Metadata公開とは独立した操作 */
+inline NexusGameStatus RegisterNativeMover(const NexusNativeSystemsRegistrationV1& registration) noexcept {
+    const auto descriptor = NexusGame::EntityBehaviourSystem<NativeMover>::Descriptor({"NativeMover", 11});
+    uint64_t system = 0; return registration.systems.add(registration.scope, &descriptor, &system);
+}
+/** \brief 借用callback内でだけSystemを解決し、services clientを接続する */
+inline NexusGameStatus ConnectNativeMover(const NexusNativeSystemsRegistrationV1& registration, const NexusGameServicesContextV1& services) noexcept {
+    uint64_t system = 0;
+    auto status = registration.systems.find(registration.scope, {"NativeMover", 11}, 1, &system);
+    if(status != NEXUS_GAME_OK) return status;
+    return registration.systems.access(registration.scope, system, [](void* state, void* user) noexcept -> NexusGameStatus {
+        static constexpr char type[] = NEXUS_GAME_COMPONENT_MODULE_ID ".Mover";
+        return NexusGame::EntityBehaviourSystem<NativeMover>::Connect(state, *static_cast<const NexusGameServicesContextV1*>(user), {type, sizeof(type) - 1});
+    }, const_cast<NexusGameServicesContextV1*>(&services));
+}
+/** \brief System設定の型と所有Worldをゲーム側で明示する。System本体をEditorへ渡さない */
+inline NexusGameStatus ConnectCrowdSettings(const NexusNativeSystemsRegistrationV1& registration, const NexusGameServicesContextV1& services) noexcept {
+    uint64_t system = 0;
+    auto status = registration.systems.find(registration.scope, {"CrowdSimulation", 15}, 1, &system);
+    if(status != NEXUS_GAME_OK) return status;
+    return registration.systems.access(registration.scope, system, [](void* state, void* user) noexcept -> NexusGameStatus {
+        static constexpr char type[] = NEXUS_GAME_COMPONENT_MODULE_ID ".CrowdSettings";
+        return static_cast<CrowdSimulationSystem*>(state)->ConnectSettings(*static_cast<const NexusGameServicesContextV1*>(user), {type, sizeof(type) - 1});
+    }, const_cast<NexusGameServicesContextV1*>(&services));
+}

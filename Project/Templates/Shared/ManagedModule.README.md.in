@@ -1,0 +1,10 @@
+# Game Module — CSharp
+
+このDirectoryは、Projectの最初のC# Game ModuleのSource配置先です。
+共通のAssets / Levels / Configを利用し、Project全体の言語を固定しません。
+Moduleの安定ID、表示名、言語、配置は`.nxproject`の`modules`で管理します。
+
+Phase 1では共通ProjectとModule宣言のみ生成します。C# Runtime、Game API、
+ScriptBehaviour、csproj、Managed assemblyの生成・実行は後続Phaseの対象です。
+この段階ではBuild / Play / Packageに対応していません。
+AssetsやLevelを作り直す必要はなく、後からNative Moduleも追加できるモデルです。

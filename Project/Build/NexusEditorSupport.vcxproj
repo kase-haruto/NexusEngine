@@ -13,6 +13,8 @@
   <ItemGroup>
     <ClCompile Include="..\Editor\Services\StandaloneSession.cpp" />
     <ClCompile Include="..\Editor\Services\StandaloneCommands.cpp" />
+    <ClCompile Include="..\Editor\Services\ManagedReloadCommands.cpp" />
+    <ClCompile Include="..\Editor\Services\ProjectDevelopmentCommands.cpp" />
     <ClCompile Include="..\Editor\Core\EditorApplication.cpp" />
     <ClCompile Include="..\Editor\Core\EditorReinstancing.cpp" />
     <ClCompile Include="..\Editor\Core\EditorSession.cpp" />
@@ -40,6 +42,7 @@
     <ClCompile Include="..\Editor\ImGui\ImGuiStyle.cpp" />
     <ClCompile Include="..\Editor\Runtime\ViewportSession.cpp" />
     <ClCompile Include="..\Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="..\Editor\Services\SourceFileActions.cpp" />
     <ClCompile Include="..\Editor\Services\EditorDocumentService.cpp" />
     <ClCompile Include="..\Editor\Services\EditorSettings.cpp" />
     <ClCompile Include="..\Editor\Services\LocalizationService.cpp" />

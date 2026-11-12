@@ -1,0 +1,8 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Levelを直接含むSource構成が、共通の音声Backendを同じ設定で利用する。 -->
+  <ItemGroup><ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Audio\AudioWorld.cpp" /></ItemGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><AdditionalDependencies>xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+</Project>

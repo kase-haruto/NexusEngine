@@ -15,6 +15,7 @@
 // engine
 #include "Foundation/Error/Result.h"
 #include "WindowDetails.h"
+#include "Foundation/Input/InputFrame.h"
 
 namespace NexusEngine {
 
@@ -61,6 +62,8 @@ namespace NexusEngine {
 		[[nodiscard]] uint32_t						   GetClientWidth() const noexcept;
 		[[nodiscard]] uint32_t						   GetClientHeight() const noexcept;
 		[[nodiscard]] std::optional<WindowResizeEvent> ConsumeResizeEvent() noexcept;
+        /** \brief frame loopが一度だけ消費する。Window寿命に依存しない値コピーを返す */
+        InputFrame ConsumeInput() noexcept;
 		/** \brief Platform非依存な所有者からWin32メッセージ処理を接続する */
 		void SetMessageHandler(MessageHandler handler, void* userData) noexcept;
 		/** \brief 初期描画が準備できたときなどに、所有Windowの表示を切り替える */
@@ -70,6 +73,7 @@ namespace NexusEngine {
 
 	private:
 		int titleBarHeight_ = 0;
+        InputFrame input_; //< Win32 messageが所有threadで更新する。外部handlerが消費しても状態を失わない
 		int titleBarControlsWidth_ = 0;
 		static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
 		LRESULT					HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;

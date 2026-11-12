@@ -47,6 +47,7 @@ namespace NexusEngine {
 		void* messageHandlerUserData = nullptr; //< messageHandlerへ渡す非所有Context
 		std::function<void(FrameworkStartupStage)> startupProgress; //< 起動表示などの任意通知。Graphics型は公開しない
 		bool deferWindowUntilReady = false; //< 最初の描画が成功してからWindowを表示する
+        bool nativeGameModuleReload = false; //< 開発用Standaloneだけが明示する。通常配布Runtimeではfalse
 	};
 
 	/*-----------------------------------------------------------------------------------------

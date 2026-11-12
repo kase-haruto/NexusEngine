@@ -6,6 +6,8 @@
     <NexusWithEditor Condition="'$(NexusWithEditor)'==''">false</NexusWithEditor>
   </PropertyGroup>
   <Import Project="$(NexusEngineRoot)\Build\Nexus.Common.props" />
+  <PropertyGroup><NexusModuleLivePPRole>Host</NexusModuleLivePPRole></PropertyGroup>
+  <Import Project="$(NexusEngineRoot)\Build\Nexus.NativeModuleLivePP.props" />
   <ItemGroup Condition="'$(NexusEngineAssociation)'=='development'">
     <ProjectReference Include="$(NexusEngineRoot)\Build\NexusRuntime.vcxproj" />
     <ProjectReference Include="$(NexusEngineRoot)\Build\NexusEditorSupport.vcxproj" Condition="'$(NexusWithEditor)'=='true'" />

@@ -4,6 +4,8 @@
 #include "Graphics/Viewport/IViewportFrameTransport.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include <functional>
+#include <array>
+#include "Foundation/Input/InputFrame.h"
 
 namespace NexusEngine {
 	/*-----------------------------------------------------------------------------------------
@@ -19,6 +21,19 @@ namespace NexusEngine {
 		bool AttachLocalPreview(UI::ITextureProvider& textures, UI::TextureHandle texture,
 								std::function<bool(uint32_t, uint32_t)> resize);
 		bool IsLocalPreview() const noexcept { return localTextures_ != nullptr; }
+        /** \brief 直前に描画されたGame Viewの入力権限。UI編集・非表示時はfalseにする */
+        bool HasGameInputFocus() const noexcept { return gameInputFocus_; }
+        void SetGameInputFocus(bool focused) noexcept { gameInputFocus_ = focused; }
+        /** \brief Window client座標のGame View範囲を記録し、Runtimeへ渡すmouse位置を相対化する */
+        void SetGameInputRegion(float x,float y,float width,float height) noexcept { inputRegion_={x,y,width,height}; }
+        /** \brief Game View外のクリックはUIのfocus更新前にも遮断する */
+        bool AcceptsGameInput(const InputFrame& input) const noexcept {
+            if(!gameInputFocus_ || !input.focused) return false;
+            const bool outside=input.mouseX<inputRegion_[0] || input.mouseY<inputRegion_[1] ||
+                input.mouseX>=inputRegion_[0]+inputRegion_[2] || input.mouseY>=inputRegion_[1]+inputRegion_[3];
+            return !outside || !(input.pressed[1] || input.pressed[2] || input.pressed[4] || input.pressed[5] || input.pressed[6]);
+        }
+        InputFrame GameInput(InputFrame input) const noexcept { input.mouseX-=inputRegion_[0]; input.mouseY-=inputRegion_[1]; return input; }
 		/** \brief hostが描画開始前に完成frameを取得する */
 		void BeginFrame();
 		/** \brief hostがsampling command提出後に必ず呼ぶ。未提出時はframeを保持する */
@@ -41,6 +56,8 @@ namespace NexusEngine {
 		bool IsCameraPreviewVisible() const noexcept { return cameraPreviewVisible_; }
 
 	private:
+        bool gameInputFocus_ = false; //< 描画から次Updateへの値。Runtime/Managed objectを所有しない
+        std::array<float,4> inputRegion_{}; //< client座標の描画領域。非表示時はfocusを解除する
 		UI::TextureHandle						cameraPreviewTexture_;
 		bool									cameraPreviewVisible_ = false;
 		IPC::IRuntimeConnection*				connection_			  = nullptr; //< host所有

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Moduleは公開APIだけを参照し、Engineの静的libや内部includeをリンク・継承しない。 -->
+  <Import Project="$(MSBuildThisFileDirectory)Nexus.EngineIdentity.props" />
+  <PropertyGroup><NexusModuleLivePPRole>GameModule</NexusModuleLivePPRole></PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)Nexus.NativeModuleLivePP.props" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp23</LanguageStandard><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><ConformanceMode>true</ConformanceMode>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(NexusEngineRoot)\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- EngineとDLLでCRT heapを共有しない。stateは必ず生成元DLLでdeleteする。 -->
+      <RuntimeLibrary Condition="'$(Configuration)'!='Release'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link><GenerateDebugInformation Condition="'$(NexusNativeModuleLivePP)'!='true'">true</GenerateDebugInformation></Link>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateNexusModuleSdk" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(NexusEngineRoot)\Public\Nexus\GameModule.h')" Text="Selected Engine does not provide the Native Game Module public API. Select an updated Engine." />
+  </Target>
+</Project>

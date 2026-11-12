@@ -5,6 +5,7 @@
 #include "Editor/Services/SceneEditService.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/EditorCommandRegistry.h"
+#include "Editor/Gui/Widgets/SourceAttachment.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Foundation/Logging/Logger.h"
 #include "ThirdParty/imgui/imgui.h"
@@ -68,6 +69,7 @@ void OutlinerPanel::Draw(const EditorContext& context) {
     if(visibleDirty_) RebuildVisible();
     std::optional<std::pair<PersistentId,PersistentId>> reparent;
     bool remove = false;
+    std::optional<std::pair<PersistentId, std::string>> attach;
     const auto target = [&](PersistentId parent) {
         if(ImGui::BeginDragDropTarget()) {
             if(const auto* payload = ImGui::AcceptDragDropPayload("NEXUS_ENTITY"))
@@ -110,9 +112,20 @@ void OutlinerPanel::Draw(const EditorContext& context) {
             ImGui::TextUnformatted(row.name.c_str()); ImGui::EndDragDropSource();
         }
         target(row.id);
+        if(auto type = UI::AcceptSourceAttachment(context)) attach = std::make_pair(row.id, std::move(*type));
         if(ImGui::BeginPopupContextItem()) {
             if(!context.selection.Contains(row.id)) { context.properties.Commit(); context.selection.Select(row.id); }
             if(ImGui::MenuItem(context.text.Text("edit.rename").c_str())) context.commands.Execute("focus.details");
+            // Hierarchyからも登録型を選べる。変更は描画終了後、既存の対象ID付きtransactionへ渡す。
+            if(ImGui::BeginMenu(context.text.Text("script.attach").c_str(), !context.session.IsPlaying())) {
+                for(const auto& [typeId, type] : context.types.Types()) {
+                    if(!typeId.starts_with("ManagedScript:") || !type.add) continue;
+                    const bool attached = type.contains(level->FindEntity(row.id));
+                    if(ImGui::MenuItem(context.text.Label(type.labelKey, typeId).c_str(), nullptr, attached, !attached))
+                        attach = std::make_pair(row.id, typeId);
+                }
+                ImGui::EndMenu();
+            }
             PropertyHandle handle{row.id,"PrimitiveRender","enabled"};
             auto value = context.properties.Read(handle);
             const bool supported = value && std::holds_alternative<bool>(*value);
@@ -128,5 +141,12 @@ void OutlinerPanel::Draw(const EditorContext& context) {
     ImGui::Selectable(context.text.Label("outliner.root","root-drop").c_str(),false); target({});
     if(reparent && !context.sceneEdits.Reparent(reparent->first,reparent->second)) NEXUS_LOG_WARNING("Outliner",context.text.Text("edit.rejected"));
     if(remove) context.commands.Execute("edit.delete");
+    if(attach) {
+        const std::array targets{attach->first};
+        const auto* type = context.types.Find(attach->second);
+        if(type && type->contains(level->FindEntity(attach->first))) return;
+        if(!type || !context.sceneEdits.AddComponent(*type, targets))
+            NEXUS_LOG_WARNING("Outliner", context.text.Text("edit.rejected"));
+    }
 }
 }

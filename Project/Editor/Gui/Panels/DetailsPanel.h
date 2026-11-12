@@ -26,6 +26,7 @@ namespace NexusEngine {
 		std::string_view ActiveCategory() const { return categories_.ActiveCategory(); }
 	private:
 		PropertyCategoryView categories_; //< ページ別の表示状態。編集履歴は共通サービスが所有する
+        std::string scriptSearch_; //< Script pickerの表示検索。型やManaged objectは保持しない
 	};
 
 } // namespace NexusEngine

@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations><Platform Name="x64" /></Configurations>
+  <!-- C#の編集・IntelliSenseを同じSolutionへ表示し、生成はHostのUtilityへ委譲する。 -->
+  <Project Path="GameScripts.csproj"><Build Project="false" /></Project>
+  <Project Path="ManagedBootstrap.vcxproj" />
+  <Project Path="GameRuntime.vcxproj" />
+  <Project Path="GameEditor.vcxproj" />
+</Solution>

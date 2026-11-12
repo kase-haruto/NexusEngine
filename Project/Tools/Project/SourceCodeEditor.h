@@ -6,6 +6,7 @@ namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
  * SourceCodeEditor
  * - 開いているGameのSolutionを解決し、Visual Studioへ渡す
+ * - C++ / C#ソース単体をOSの関連付け済みテキストエディタへ渡す
  * - EngineのSolutionやGameのビルド、EditorのWorldは操作しない
  *---------------------------------------------------------------------------------------*/
 class SourceCodeEditor final {
@@ -16,5 +17,7 @@ public:
     [[nodiscard]] static Result<std::filesystem::path> VisualStudio(const ProjectContext& project);
     /** \brief 選択GameのSolutionをIDEへ渡す。空のexecutableはVisual Studioを自動検出する */
     [[nodiscard]] static Result<Process> Open(const ProjectContext& project, const std::filesystem::path& executable = {});
+    /** \brief ソースをOSの関連付け済みEditorで開く。関連付けがない場合はWindowsのNotepadを使う */
+    [[nodiscard]] static Result<void> OpenFile(const std::filesystem::path& file);
 };
 }

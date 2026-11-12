@@ -1,0 +1,39 @@
+#pragma once
+#include "CrowdSimulationSystem.h"
+#include <Nexus/NativeGameBindings.h>
+#include <Nexus/NativeGamePatch.h>
+
+/** \brief 検証済みDTOだけをGame固有の型付きAPIへ変換する。C++例外をDLL外へ出さない */
+inline NexusGameStatus NEXUS_GAME_CALL InvokeCrowdSetTarget(void* system, const NexusNativeValueV1* arguments, uint32_t count, NexusNativeValueV1* result, uint8_t*, uint32_t) noexcept {
+    if(!system || !arguments || count != 2 || !result) return NEXUS_GAME_INVALID_ARGUMENT;
+    *result = {};
+    return static_cast<CrowdSimulationSystem*>(system)->SetTarget(arguments[0].entity, arguments[1].number);
+}
+/** \brief System登録・関数署名宣言・Binding登録を別操作で行う。クラス全体は公開しない */
+inline NexusGameStatus RegisterCrowdBinding(const NexusNativeSystemsRegistrationV2& context) noexcept {
+    const auto& registration = context.registration;
+    if(registration.abiVersion != 2 || registration.structSize != sizeof(context) || context.bindings.abiVersion != 1 || context.bindings.structSize != sizeof(context.bindings) ||
+        registration.systems.abiVersion != 1 || registration.systems.structSize != sizeof(registration.systems) ||
+        registration.publications.abiVersion != 1 || registration.publications.structSize != sizeof(registration.publications)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    const auto descriptor = CrowdSimulationSystem::Descriptor(); uint64_t system = 0;
+    auto status = registration.systems.add(registration.scope, &descriptor, &system); if(status != NEXUS_GAME_OK) return status;
+    const NexusGameApiParameterV1 parameters[]{ {{"entity", 6}, {NEXUS_VALUE_ENTITY, 0, {}}}, {{"target", 6}, {NEXUS_VALUE_VECTOR3, 0, {}}} };
+    const NexusNativeFunctionDescriptorV1 function{sizeof(NexusNativeFunctionDescriptorV1), 1, {"SetTarget", 9}, {NEXUS_VALUE_VOID, 0, {}}, parameters, 2, 1};
+    status = registration.publications.declareFunction(registration.scope, system, &function); if(status != NEXUS_GAME_OK) return status;
+    return context.bindings.bind(registration.scope, system, function.id, function.version, InvokeCrowdSetTarget);
+}
+/** \brief 関数本体パッチの後に既存stateを作り直さず呼出先だけを再登録する */
+inline NexusGameStatus RebindCrowdBinding(const NexusNativeSystemsRegistrationV2& context) noexcept {
+    const auto& registration = context.registration;
+    if(registration.abiVersion != 2 || registration.structSize != sizeof(context) || context.bindings.abiVersion != 1 || context.bindings.structSize != sizeof(context.bindings)) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    uint64_t system = 0; auto status = registration.systems.find(registration.scope, {"CrowdSimulation", 15}, 1, &system);
+    if(status != NEXUS_GAME_OK) return status;
+    return context.bindings.bind(registration.scope, system, {"SetTarget", 9}, 1, InvokeCrowdSetTarget);
+}
+/** \brief schemaは所有権・意味の変更時にも上げる。サイズ一致で任意layout変更を許可しない */
+template<class ModuleState> NexusGameStatus CrowdPatchContract(uint32_t abi, NexusNativePatchContractV1* output) noexcept {
+    if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = {};
+    if(abi != 1) return NEXUS_GAME_INCOMPATIBLE_ABI;
+    *output = {1, sizeof(*output), 1, sizeof(ModuleState), alignof(ModuleState), (static_cast<uint64_t>(sizeof(CrowdSimulationSystem)) << 32) | alignof(CrowdSimulationSystem)};
+    return NEXUS_GAME_OK;
+}

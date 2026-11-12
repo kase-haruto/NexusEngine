@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "hybrid-gameplay",
+  "name": "Hybrid Gameplay (C++ / C#)",
+  "description": "NativeCombatとC# Gameplayが共通World・公開API・値Eventを共有するゲーム。",
+  "moduleLanguages": ["Cpp", "CSharp"],
+  "modules": [
+    {"id":"NativeCombat","name":"NativeCombat","language":"Cpp","path":"@SOURCE@/NativeCombat","type":"Game"},
+    {"id":"Gameplay","name":"Gameplay","language":"CSharp","path":"@SOURCE@/Game","type":"Game","dependencies":["NativeCombat"]}
+  ],
+  "files": [
+    {"source":"NativeModule/NativeMover.h.in","target":"@SOURCE@/NativeCombat/NativeMover.h","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/NativeMover.cpp.in","target":"@SOURCE@/NativeCombat/NativeMover.cpp","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/GameComponents.h.in","target":"@SOURCE@/NativeCombat/GameComponents.h","replace":false,"language":"Cpp"},
+    {"source":"Shared/Directory.Build.props.in","target":"Directory.Build.props","replace":false},
+    {"source":"Hybrid/Host.cpp.in","target":"@SOURCE@/Host/Main.cpp","replace":false},
+    {"source":"Hybrid/NativeCombat.cpp.in","target":"@SOURCE@/NativeCombat/Main.cpp","replace":true,"language":"Cpp"},
+    {"source":"NativeModule/NativePatchHooks.cpp.in","target":"@SOURCE@/NativeCombat/NativePatchHooks.cpp","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/CrowdSimulationSystem.h.in","target":"@SOURCE@/NativeCombat/CrowdSimulationSystem.h","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/CrowdSimulationSystem.cpp.in","target":"@SOURCE@/NativeCombat/CrowdSimulationSystem.cpp","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/CrowdBinding.h.in","target":"@SOURCE@/NativeCombat/CrowdBinding.h","replace":false,"language":"Cpp"},
+    {"source":"Hybrid/NativeCombatState.h.in","target":"@SOURCE@/NativeCombat/NativeCombatState.h","replace":false,"language":"Cpp"},
+    {"source":"Hybrid/CrowdSimulation.cs.in","target":"@SOURCE@/Game/CrowdSimulation.cs","replace":false,"language":"CSharp"},
+    {"source":"Hybrid/EnemyController.cs.in","target":"@SOURCE@/Game/EnemyController.cs","replace":false,"language":"CSharp"},
+    {"source":"Hybrid/PlayerController.cs.in","target":"@SOURCE@/Game/PlayerController.cs","replace":false,"language":"CSharp"},
+    {"source":"Hybrid/GameModule.vcxproj.in","target":"GameModule.vcxproj","replace":true},
+    {"source":"Hybrid/ManagedBootstrap.vcxproj.in","target":"ManagedBootstrap.vcxproj","replace":true},
+    {"source":"ManagedBootstrap/GameRuntime.vcxproj.in","target":"GameRuntime.vcxproj","replace":true},
+    {"source":"ManagedBootstrap/GameEditor.vcxproj.in","target":"GameEditor.vcxproj","replace":true},
+    {"source":"ManagedGameplay/GameScripts.csproj.in","target":"GameScripts.csproj","replace":true},
+    {"source":"Hybrid/Game.slnx.in","target":"Game.slnx","replace":true},
+    {"source":"Hybrid/BuildTargets.json.in","target":"@CONFIG@/BuildTargets.json","replace":false},
+    {"source":"Hybrid/README.md.in","target":"@SOURCE@/README.md","replace":false},
+    {"source":"ManagedGameplay/Startup.level","target":"@LEVELS@/Startup.level","replace":false}
+  ]
+}

@@ -1,6 +1,15 @@
 # Live++・Reflection・Reinstancing
 
+独立Game DLLは[Phase 7-CのModule-only profile](NativeModuleLivePPREADME.md)を使う。通常のEXE Reinstancingと別profileであり、以下の従来設定をGame DLLへ一律適用しない。SDK有効branchのビルド・実パッチは未検証。
+
+改訂仕様の[Phase 7-A：Reload境界と結果通知](HotReloadCoordinationREADME.md)では、Framework経由の従来パッチをInterop World生存中に拒否し、停止後も明示再要求まで保留する。Game DLLの自動パッチ接続は引き続き未実装。
+
 ## Game開発側への提供状況
+
+[Phase 2のNative Game Module](GameModulesREADME.md)は通常のDLLロード・停止・Unloadを提供する。
+このModuleのビルド設定はLivePP.propsをimportせず、Live++の対象Moduleとしても登録しない。
+新しいDLLローダーからLiveCodingAgentを操作したり、実行中DLLを差し替えたりしない。
+既存のLive++対応と独立DLLのReloadを同時に成立させた状態ではない。
 
 Live++をNexusEngine利用者のGameEditorや開発用GameRuntimeから使う構成は技術的に可能。[公式のProject setup](https://liveplusplus.tech/docs/documentation.html)はstatic/shared libraryの混在を認め、[複数プロセスのhot-reload](https://liveplusplus.tech/docs/documentation.html)にも対応している。Game DLL化は必須条件ではない。
 

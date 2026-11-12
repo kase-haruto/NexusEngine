@@ -9,7 +9,7 @@ ReflectionValue EditorApplication::CaptureReinstancing() {
     ReflectionValue::Object result;
     if(workspace_) result.emplace("workspace", workspace_->CaptureForReinstancing());
     ComponentReflection registry;
-    if(const auto registration = session_.GetReflectionRegistration(); registration.components) registration.components(registry);
+    session_.GetReflectionRegistration().RegisterComponents(registry);
     if(auto* level = session_.GetLevel(); level && level->GetScene()) result.emplace("edit", registry.Capture(*level->GetScene()));
     if(auto* level = session_.GetPlayLevel(); level && level->GetScene()) result.emplace("play", registry.Capture(*level->GetScene()));
     return ReflectionValue(std::move(result));
@@ -23,7 +23,7 @@ void EditorApplication::ReleaseReinstancing() noexcept {
 void EditorApplication::RestoreReinstancing(const ReflectionValue& snapshot) {
     // 旧 Registry のメンバ位置や生成関数は持ち越さず、必ず新コードから構築する。
     ComponentReflection registry;
-    if(const auto registration = session_.GetReflectionRegistration(); registration.components) registration.components(registry);
+    session_.GetReflectionRegistration().RegisterComponents(registry);
     const auto& worlds = std::get<ReflectionValue::Object>(snapshot.data);
     for(auto [id, level] : {std::pair{"edit", session_.GetLevel()}, std::pair{"play", session_.GetPlayLevel()}}) {
         if(auto found = worlds.find(id); found != worlds.end()) {

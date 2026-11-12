@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- マシン固有のSDK pack配置はProject共有データへ保存しない。明示propertyまたは環境変数を使う。 -->
+    <NexusDotNetHostPackDir Condition="'$(NexusDotNetHostPackDir)'==''">$(NEXUS_DOTNET_HOST_PACK_DIR)</NexusDotNetHostPackDir>
+    <NexusManagedBuildArguments Condition="'$(NexusManagedRebuild)'=='true'">-t:Rebuild</NexusManagedBuildArguments>
+    <NexusManagedRuntime Condition="'$(NexusManagedRuntime)'==''">CoreCLR</NexusManagedRuntime>
+    <NexusMonoRoot Condition="'$(NexusMonoRoot)'==''">$(NEXUS_MONO_ROOT)</NexusMonoRoot>
+    <NexusMonoRoot Condition="'$(NexusMonoRoot)'=='' and Exists('$(OutDir)Mono/bin/mono.exe')">$(OutDir)Mono</NexusMonoRoot>
+    <NexusManagedFrameworkArguments>-p:NexusManagedRuntime=CoreCLR -p:TargetFramework=net10.0</NexusManagedFrameworkArguments>
+    <NexusManagedFrameworkArguments Condition="'$(NexusManagedRuntime)'=='Mono'">-p:NexusManagedRuntime=Mono -p:TargetFramework=net48 -p:LangVersion=latest -p:GenerateDependencyFile=true</NexusManagedFrameworkArguments>
+  </PropertyGroup>
+  <Target Name="PrepareNexusManagedBootstrap" BeforeTargets="Build">
+    <Error Condition="!Exists('$(NexusEngineRoot)\Managed\Nexus.Managed.Bootstrap\Nexus.Managed.Bootstrap.csproj')" Text="Selected Engine does not provide Managed Bootstrap sources. Select an updated Engine." />
+    <Error Condition="'$(NexusManagedRuntime)'!='Mono' and ('$(NexusDotNetHostPackDir)'=='' or !Exists('$(NexusDotNetHostPackDir)\nethost.dll'))" Text="Set NexusDotNetHostPackDir or NEXUS_DOTNET_HOST_PACK_DIR to the official .NET 10 win-x64 host pack native directory containing nethost.dll." />
+    <Error Condition="'$(NexusManagedRuntime)'=='Mono' and !Exists('$(NexusMonoRoot)/bin/mono-2.0-sgen.dll')" Text="Set NexusMonoRoot or NEXUS_MONO_ROOT to the official Mono x64 SDK root." />
+    <!-- 中間生成物をGameのIntermediateへ限定し、Engine SourceやInstalled SDKをBuild時に書き換えない。 -->
+    <Exec Command="dotnet build &quot;$(NexusEngineRoot)\Managed\Nexus.Managed.Bootstrap\Nexus.Managed.Bootstrap.csproj&quot; $(NexusManagedBuildArguments) $(NexusManagedFrameworkArguments) --configuration &quot;$(Configuration)&quot; --output &quot;$(OutDir)Managed/.&quot; -p:NexusManagedIntermediateRoot=&quot;$(IntDir)ManagedAssemblies/&quot;" />
+    <Copy Condition="'$(NexusManagedRuntime)'!='Mono'" SourceFiles="$(NexusDotNetHostPackDir)\nethost.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Exec Condition="'$(NexusManagedRuntime)'=='Mono'" Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NexusEngineRoot)/Tools/Project/Deploy-MonoRuntime.ps1&quot; -MonoRoot &quot;$(NexusMonoRoot)&quot; -OutputDirectory &quot;$(OutDir)Mono&quot;" />
+  </Target>
+</Project>

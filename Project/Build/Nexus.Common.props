@@ -5,6 +5,8 @@
     <!-- CLIから渡すRootと末尾区切りを揃え、同じEngineのinclude設定が揺れないようにする。 -->
     <NexusEngineRoot Condition="'$(NexusEngineRoot)'==''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</NexusEngineRoot>
     <NexusBuildRoot Condition="'$(NexusBuildRoot)'==''">$(NexusEngineRoot)\..\Generated\Modules\</NexusBuildRoot>
+    <!-- profileごとにEngineのlib / objを分離し、通常版Backendの再利用を防ぐ。 -->
+    <NexusBuildRoot Condition="'$(NexusNativeModuleLivePP)'=='true'">$(NexusBuildRoot)LivePP\</NexusBuildRoot>
     <OutDir>$(NexusBuildRoot)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
     <IntDir>$(NexusBuildRoot)obj\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>

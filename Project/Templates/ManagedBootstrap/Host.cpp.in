@@ -1,0 +1,3 @@
+// 全言語の実行配置は検証済みmanifestから同じRuntimeへ渡す。
+#define NEXUS_PROJECT_MODULE_MANIFEST 1
+#include "Core/Hosting/ProjectHost.inl"

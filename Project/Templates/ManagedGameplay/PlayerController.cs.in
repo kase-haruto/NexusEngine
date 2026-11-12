@@ -1,0 +1,23 @@
+namespace Game;
+/*-----------------------------------------------------------------------------------------
+ * PlayerController
+ * - 既存ECSのCubeのTransformを共通APIで更新する最小Gameplay例
+ * - Native Entity / Componentを所有せず、Local値をコピーして一括更新する
+ *---------------------------------------------------------------------------------------*/
+[global::Nexus.Managed.ScriptTypeAttribute("game.player")]
+public sealed class PlayerController : global::Nexus.Managed.ScriptBehaviour
+{
+    [global::Nexus.Managed.ExposeAttribute(Id = "moveSpeed", Label = "Move Speed")]
+    public float MoveSpeed { get; set; } = 5.0f;
+    protected override void OnCreate() => World.Log("PlayerController.OnCreate");
+    protected override void OnEnable() => World.Log("PlayerController.OnEnable");
+    protected override void OnUpdate(float deltaTime)
+    {
+        // Componentを削除されたEntityでもNative pointerを使わず、現在の値をコピーして取得する。
+        if (!Entity.TryGetTransform(out var transform)) return;
+        transform.Translation.X += MoveSpeed * deltaTime;
+        Entity.Transform = transform;
+    }
+    protected override void OnDisable() => World.Log("PlayerController.OnDisable");
+    protected override void OnDestroy() => World.Log("PlayerController.OnDestroy");
+}

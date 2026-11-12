@@ -15,8 +15,8 @@
 namespace NexusEngine {
 	class Scene;
 
-	/** System構成順とは独立した更新段階。Simulation後に派生Matrixを確定する。 */
-	enum class SystemPhase : uint8_t { Simulation, Transform };
+	/** ゲームロジック、物理の値書戻し、派生Matrix確定の順。公開DLLのphase値とは別のEngine内部enum。 */
+	enum class SystemPhase : uint8_t { Simulation, Physics, Transform };
 
 	/*-----------------------------------------------------------------------------------------
 	 * ComponentAccess
@@ -39,6 +39,8 @@ namespace NexusEngine {
 		[[nodiscard]] virtual SystemPhase GetPhase() const noexcept { return SystemPhase::Simulation; }
 		[[nodiscard]] virtual std::span<const std::type_index> GetReadComponents() const noexcept = 0;
 		[[nodiscard]] virtual std::span<const std::type_index> GetWriteComponents() const noexcept = 0;
+        /** \brief 公開World APIで構造変更も可能なSystemはtrue。アクセス一覧だけで並列安全と判断しない */
+        [[nodiscard]] virtual bool HasUnspecifiedComponentAccess() const noexcept { return false; }
 		[[nodiscard]] virtual Result<void> Update(Scene& scene, float deltaTime) = 0;
 	};
 
@@ -56,12 +58,22 @@ namespace NexusEngine {
 			static_assert(std::is_base_of_v<ISceneSystem, System>);
 			auto system = std::make_unique<System>(std::forward<Arguments>(arguments)...);
 			System& reference = *system;
-			// 同phaseは登録順を維持し、TransformをMovement等のSimulation後へ並べる。
-			auto position = systems_.begin();
-			while(position != systems_.end() && (*position)->GetPhase() <= system->GetPhase()) ++position;
-			systems_.insert(position, std::move(system));
+            AddOwnedSystem(std::move(system));
 			return reference;
 		}
+        /**
+         * \brief Runtime adapterの所有権を既存Schedulerへ移す
+         * \param system Engine側で生成済みのSystem。DLL objectそのものは渡さない
+         * \return phase順・同phase登録順で格納したSystemへの参照
+         */
+        ISceneSystem& AddOwnedSystem(std::unique_ptr<ISceneSystem> system);
+        /**
+         * \brief Module停止時に指定Systemを解除・破棄する
+         * \param system このSchedulerが所有するSystem
+         * \return 実行中または未登録ならfalse。callback終了後のframe境界で呼ぶ
+         */
+        bool RemoveSystem(ISceneSystem& system) noexcept;
+        [[nodiscard]] bool IsExecuting() const noexcept { return executing_; }
 
 		/** \brief 登録順にSystemを実行する \note frame中の一時allocationは行わない */
 		[[nodiscard]] Result<void> Update(Scene& scene, float deltaTime);

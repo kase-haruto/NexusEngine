@@ -9,18 +9,26 @@
 #ifndef NEXUS_PROJECT_STARTUP_LOADER
 #define NEXUS_PROJECT_STARTUP_LOADER(assetRoot) NexusEngine::ModelAssetLibrary::ReloadStartup{}
 #endif
+#if defined(NEXUS_GAME_MODULE_LIVEPP_HOST) && !defined(NEXUS_PROJECT_NATIVE_MODULE) && !defined(NEXUS_PROJECT_MODULE_MANIFEST)
+#error Module-only Live++ requires a Native Game Module host; use the normal profile for CSharp-only projects.
+#endif
 
 // engine
 #include "Core/Framework/NexusFramework.h"
+#include "Platform/Development/LiveCodingAgent.h"
 #include "Core/Hosting/BoundedFrameClient.h"
 #ifndef NEXUS_GAME_HOST
 #include "Editor/Core/EditorApplication.h"
 #include "Editor/Services/StandaloneSession.h"
 #include "Editor/Services/StandaloneCommands.h"
+#include "Editor/Services/ManagedReloadCommands.h"
+#include "Editor/Services/ProjectDevelopmentCommands.h"
 #include "Platform/Window/StartupSplash.h"
 #endif
 #include "Runtime/Application/ProjectSettings.h"
 #include "Runtime/Project/ProjectService.h"
+#include "Runtime/Project/ModuleDeployment.h"
+#include "Runtime/Reflection/NativeComponentMetadata.h"
 #ifndef NEXUS_GAME_HOST
 #include "Tools/Project/ProjectRegistry.h"
 #include "Tools/Project/ProjectBuild.h"
@@ -35,6 +43,7 @@
 
 #include <iostream>
 #include <string_view>
+#include <algorithm>
 
 /*-----------------------------------------------------------------------------------------
  * main
@@ -107,6 +116,9 @@ int wmain(int argc, wchar_t** argv) {
     const auto run = [&](NexusEngine::FrameworkDesc& description, NexusEngine::IFrameworkUpdateClient& client) {
         NexusEngine::BoundedFrameClient bounded(client,frameLimit);
         description.updateClient = &bounded; description.window.visible = !hidden;
+#if defined(NEXUS_GAME_MODULE_LIVEPP_HOST)
+        description.nativeGameModuleReload = true;
+#endif
         NexusEngine::NexusFramework framework;
         const auto code = framework.Run(description);
         if(code != 0 || !frameLimit) return code;
@@ -114,6 +126,17 @@ int wmain(int argc, wchar_t** argv) {
         std::cout << "PASS: completed " << bounded.Frames() << " GPU frames and normal shutdown.\n";
         return 0;
     };
+    // 配布ホストは隣接manifestだけから共有Project / Engineデータを解決する。
+    std::filesystem::path packagedDotnetRoot;
+    {
+        std::wstring image(32768, L'\0'); const auto size = GetModuleFileNameW(nullptr, image.data(), static_cast<DWORD>(image.size()));
+        if(!size || size >= image.size()) return failStartup("Cannot locate package host."); image.resize(size);
+        if(std::filesystem::exists(std::filesystem::path(image).parent_path() / "NexusGame.package.json")) {
+            if(!gameMode || !projectArgument.empty() || !engineArgument.empty() || !levelArgument.empty()) return failStartup("Packaged host requires its fixed deployment arguments.");
+            auto package = NexusEngine::LoadPackageStartup(std::filesystem::path(image), NEXUS_HOST_ENGINE_ID, NEXUS_HOST_ENGINE_VERSION); if(!package) return failStartup(package.error().GetMessageText());
+            projectArgument = package->project; engineArgument = package->engineData; packagedDotnetRoot = package->dotnetRoot;
+        }
+    }
     std::error_code pathError;
     std::shared_ptr<const NexusEngine::ProjectContext> context;
     if(!projectArgument.empty() && !std::filesystem::is_directory(projectArgument, pathError)) {
@@ -122,6 +145,26 @@ int wmain(int argc, wchar_t** argv) {
         auto compatible = NexusEngine::CheckProjectEngine(opened->Descriptor().engine,
             {NEXUS_HOST_ENGINE_ASSOCIATION, NEXUS_HOST_ENGINE_ID, NEXUS_HOST_ENGINE_VERSION});
         if(!compatible) return failStartup(compatible.error().GetMessageText());
+        // 未対応の組合せを黙って無視せず、宣言言語と生成ホストのBackendを照合する。
+        const auto cppCount = std::ranges::count_if(opened->Descriptor().modules, [](const auto& item) { return item.language == NexusEngine::ProjectModuleLanguage::Cpp; });
+        const auto managedCount = std::ranges::count_if(opened->Descriptor().modules, [](const auto& item) { return item.language == NexusEngine::ProjectModuleLanguage::CSharp; });
+        static_cast<void>(cppCount); static_cast<void>(managedCount);
+        auto supportedModules = NexusEngine::CheckProjectRuntimeModules(opened->Descriptor());
+        if(!supportedModules) return failStartup(supportedModules.error().GetMessageText());
+#if !defined(NEXUS_PROJECT_NATIVE_MODULE) && !defined(NEXUS_PROJECT_MODULE_MANIFEST)
+        if(cppCount && managedCount) return failStartup("Hybrid Project requires an explicit Native Game Module host.");
+#endif
+#if !defined(NEXUS_PROJECT_GAME_ASSEMBLY) && !defined(NEXUS_PROJECT_MODULE_MANIFEST)
+        if(cppCount && managedCount) return failStartup("Hybrid Project requires a GameScripts assembly.");
+#endif
+        for(const auto& module : opened->Descriptor().modules) {
+            if(module.language != NexusEngine::ProjectModuleLanguage::Cpp)
+#if !defined(NEXUS_PROJECT_MANAGED_BOOTSTRAP) && !defined(NEXUS_PROJECT_MODULE_MANIFEST)
+                return failStartup("CSharp Module requires a Managed Bootstrap host. This host cannot load it.");
+#else
+                continue;
+#endif
+        }
         context = std::make_shared<const NexusEngine::ProjectContext>(std::move(*opened));
         pathError.clear();
     }
@@ -144,11 +187,90 @@ int wmain(int argc, wchar_t** argv) {
     const DWORD length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
     if(length == 0 || length >= executable.size()) return failStartup("Cannot locate engine executable.");
     executable.resize(length);
+#ifdef NEXUS_PROJECT_NATIVE_MODULE
+    // DLL配置は生成ホストが指定し、Project Root内の実行ファイル隣接配置へ解決する。
+    // Moduleが認識しないProjectを、既定Gameへ置き換えて開始しない。
+    if(!context) return failStartup("Native Module host requires a .nxproject.");
+    const auto nativeDescriptor = std::ranges::find_if(context->Descriptor().modules, [](const auto& module) { return module.language == NexusEngine::ProjectModuleLanguage::Cpp; });
+    if(nativeDescriptor == context->Descriptor().modules.end()) return failStartup("Native Module host requires a declared Cpp Game Module.");
+    auto nativePath = NexusEngine::ResolveProjectPath(context->Root(), std::filesystem::path(executable).parent_path() / NEXUS_PROJECT_NATIVE_MODULE);
+    if(!nativePath) return failStartup(nativePath.error().GetMessageText());
+    NexusEngine::NativeGameModuleSettings nativeModuleSettings{*nativePath, NEXUS_HOST_ENGINE_ID, NEXUS_HOST_ENGINE_VERSION,
+        context->Descriptor().projectId, nativeDescriptor->id};
+#if defined(NEXUS_GAME_MODULE_LIVEPP_HOST)
+    // Project定義のSourceを再利用する。配布用Rootに開発Sourceを要求しないよう明示profileに限定する。
+    auto patchSource = NexusEngine::ResolveProjectPath(context->Root(), std::filesystem::path(NexusEngine::ConvertString(nativeDescriptor->path)));
+    if(!patchSource) return failStartup(patchSource.error().GetMessageText());
+    nativeModuleSettings.patchSourceDirectory = *patchSource;
+    nativeModuleSettings.patchProjectDirectory = context->Root();
+    nativeModuleSettings.livePatch = true;
+    nativeModuleSettings.registerPatchRuntime = NexusEngine::LiveCodingAgent::RegisterGameRuntime;
+    nativeModuleSettings.unregisterPatchRuntime = NexusEngine::LiveCodingAgent::UnregisterGameRuntime;
+#endif
+#endif
+#ifdef NEXUS_PROJECT_MANAGED_BOOTSTRAP
+    if(!context || std::ranges::none_of(context->Descriptor().modules, [](const auto& module) { return module.language == NexusEngine::ProjectModuleLanguage::CSharp; }))
+        return failStartup("Managed Bootstrap host requires a declared CSharp Game Module.");
+    const auto managedDirectory = std::filesystem::path(executable).parent_path();
+    auto bootstrapPath = NexusEngine::ResolveProjectPath(context->Root(), managedDirectory / NEXUS_PROJECT_MANAGED_BOOTSTRAP);
+    auto nethostPath = NexusEngine::ResolveProjectPath(context->Root(), managedDirectory / "nethost.dll");
+    if(!bootstrapPath) return failStartup(bootstrapPath.error().GetMessageText());
+    if(!nethostPath) return failStartup(nethostPath.error().GetMessageText());
+    auto runtimeConfig = *bootstrapPath; runtimeConfig.replace_extension(".runtimeconfig.json");
+    NexusEngine::CSharpRuntimeSettings csharpSettings{*nethostPath, runtimeConfig, *bootstrapPath, {}, {}};
+#ifdef NEXUS_PROJECT_GAME_ASSEMBLY
+    auto gameAssembly = NexusEngine::ResolveProjectPath(context->Root(), managedDirectory / NEXUS_PROJECT_GAME_ASSEMBLY);
+    if(!gameAssembly) return failStartup(gameAssembly.error().GetMessageText());
+    csharpSettings.gameAssembly = *gameAssembly;
+#endif
+#endif
+    std::optional<NexusEngine::ModuleDeployment> deployment;
+    if(context && std::filesystem::exists(std::filesystem::path(executable).parent_path() / "Nexus.modules.json")) {
+        auto loaded = NexusEngine::LoadModuleDeployment(*context, std::filesystem::path(executable), NEXUS_HOST_ENGINE_ID, NEXUS_HOST_ENGINE_VERSION, packagedDotnetRoot);
+        if(!loaded) return failStartup(loaded.error().GetMessageText()); deployment = std::move(*loaded);
+#if defined(NEXUS_GAME_MODULE_LIVEPP_HOST)
+        if(deployment->native.size() != 1) return failStartup("Live++ coordination requires one Native DLL; use Standard for multi-Module gameplay.");
+        auto& settings = deployment->native.front();
+        const auto module = std::ranges::find(context->Descriptor().modules, settings.moduleId, &NexusEngine::ProjectModuleDescriptor::id);
+        auto source = NexusEngine::ResolveProjectPath(context->Root(), std::filesystem::path(NexusEngine::ConvertString(module->path)));
+        if(!source) return failStartup(source.error().GetMessageText());
+        settings.patchSourceDirectory = *source; settings.patchProjectDirectory = context->Root(); settings.livePatch = true;
+        settings.registerPatchRuntime = NexusEngine::LiveCodingAgent::RegisterGameRuntime; settings.unregisterPatchRuntime = NexusEngine::LiveCodingAgent::UnregisterGameRuntime;
+#endif
+    }
+#ifdef NEXUS_PROJECT_MODULE_MANIFEST
+    if(!deployment) return failStartup("Build the Project to generate Nexus.modules.json.");
+#endif
+    if(context && !deployment) {
+        for(const auto language : {NexusEngine::ProjectModuleLanguage::Cpp, NexusEngine::ProjectModuleLanguage::CSharp})
+            if(std::ranges::count(context->Descriptor().modules, language, &NexusEngine::ProjectModuleDescriptor::language) > 1)
+                return failStartup("Multiple Modules require the deployment manifest and an updated Project Host.");
+    }
     auto engineRoot = engineArgument.empty() ? NexusEngine::FindEngineRoot(std::filesystem::path(executable).parent_path())
         : std::optional<std::filesystem::path>{std::filesystem::absolute(engineArgument, pathError)};
     if(pathError || !engineRoot || !std::filesystem::is_directory(*engineRoot / "Shaders"))
         return failStartup("Cannot locate engine Shaders. Specify --engine <root>.");
     const NexusEngine::ApplicationPaths paths{*projectRoot, *engineRoot, context};
+    // Level読込より先にDLLの値Metadataだけを取得する。Editorはゲームobjectを生成・所有しない。
+    auto reflection = NEXUS_PROJECT_REFLECTION;
+    std::vector<NexusEngine::NativeGameModuleSettings> metadataModules;
+    if(deployment) metadataModules = deployment->native;
+#ifdef NEXUS_PROJECT_NATIVE_MODULE
+    else {
+        if(context) {
+            const auto found = std::ranges::find(context->Descriptor().modules, nativeModuleSettings.moduleId, &NexusEngine::ProjectModuleDescriptor::id);
+            if(found != context->Descriptor().modules.end()) {
+                auto source = NexusEngine::ResolveProjectPath(context->Root(), NexusEngine::ProjectJson::Path(found->path));
+                if(!source) return failStartup(source.error().GetMessageText()); nativeModuleSettings.sourceDirectory = *source;
+            }
+        }
+        metadataModules.push_back(nativeModuleSettings);
+    }
+#endif
+    if(!metadataModules.empty()) {
+        auto metadata = NexusEngine::NativeComponentMetadata::Inspect(metadataModules);
+        if(!metadata) return failStartup(metadata.error().GetMessageText()); reflection.nativeComponents = std::move(*metadata);
+    }
     const auto project = NexusEngine::LoadProjectSettings(*projectRoot, context.get());
     if(!project) return failStartup(project.error().GetMessageText());
     const auto assetResult = NexusEngine::ResolveProjectPath(*projectRoot, std::filesystem::path{NexusEngine::ConvertString(project->assetPath)});
@@ -171,8 +293,18 @@ int wmain(int argc, wchar_t** argv) {
             if(!compiled) return failStartup(compiled.error().GetMessageText());
             renderPipeline=std::move(*compiled);
         }
-        NexusEngine::GameApplication game(NEXUS_PROJECT_REFLECTION, paths);
+        NexusEngine::GameApplication game(reflection, paths);
         if(!game.SetGameLevelSetup(NEXUS_PROJECT_SETUP)) return failStartup("Cannot configure game systems.");
+#ifdef NEXUS_PROJECT_NATIVE_MODULE
+        if(!game.SetNativeGameModule(nativeModuleSettings)) return failStartup("Cannot configure Native Game Module.");
+#endif
+#ifdef NEXUS_PROJECT_MANAGED_BOOTSTRAP
+        if(!game.SetCSharpRuntime(csharpSettings)) return failStartup("Cannot configure CSharp Runtime hosting.");
+#endif
+        if(deployment) {
+            if(!game.SetNativeGameModules(deployment->native)) return failStartup("Cannot configure Native deployments.");
+            if(deployment->managed && !game.SetCSharpRuntime(*deployment->managed)) return failStartup("Cannot configure Managed deployment.");
+        }
         auto result = game.Load(levelPath, assetRoot, NEXUS_PROJECT_STARTUP_LOADER(assetRoot));
         if(!result) return failStartup(result.error().GetMessageText());
         if(checkGame) {
@@ -183,6 +315,18 @@ int wmain(int argc, wchar_t** argv) {
             return 0;
         }
         NexusEngine::PrimitiveRenderer renderer;
+        // RuntimeはCPU候補を所有し、Hostだけが既存Graphicsの準備とGPU完了待ちを接続する。
+        game.SetAssetPublisher([&game,&renderer](NexusEngine::GraphicsSystem& graphics,NexusEngine::IGraphicsRenderer& active,
+            const std::shared_ptr<const NexusEngine::ModelAssetData>& asset,const NexusEngine::ModelInstance& pose,
+            const std::function<void()>& commit)->NexusEngine::Result<void> {
+            if(&active!=&renderer) return std::unexpected(NexusEngine::Error(NexusEngine::ErrorCategory::Resource,48,"Unexpected Runtime Renderer."));
+            NexusEngine::PrimitiveRenderer prepared; prepared.SetModelInput(asset.get(),&pose);
+            auto ready=graphics.PrepareModelResources(&prepared,renderer.CaptureModelResources()); if(!ready) return ready;
+            auto idle=graphics.WaitForIdle(); if(!idle) return idle;
+            renderer.CommitPreparedModel(prepared); commit();
+            renderer.SetModelInput(&game.GetModelAsset(),&game.GetModelPose());
+            return {};
+        });
         renderer.SetRenderScene(&game.GetRenderScene());
         renderer.SetModelInput(&game.GetModelAsset(), &game.GetModelPose());
         NexusEngine::FrameworkDesc gameDesc;
@@ -200,21 +344,47 @@ int wmain(int argc, wchar_t** argv) {
     }
 
 #ifndef NEXUS_GAME_HOST
-	NexusEngine::EditorApplication editor(NEXUS_PROJECT_REFLECTION, paths,
+	NexusEngine::EditorApplication editor(reflection, paths,
 	    NEXUS_PROJECT_STARTUP_LOADER(assetRoot));
 	if(!editor.SetGameLevelSetup(NEXUS_PROJECT_SETUP)) return failStartup("Cannot configure game systems.");
+#ifdef NEXUS_PROJECT_NATIVE_MODULE
+    if(!editor.SetNativeGameModule(nativeModuleSettings)) return failStartup("Cannot configure Native Game Module.");
+#endif
+#ifdef NEXUS_PROJECT_MANAGED_BOOTSTRAP
+    if(!editor.SetCSharpRuntime(csharpSettings)) return failStartup("Cannot configure CSharp Runtime hosting.");
+#endif
+    if(deployment) {
+        if(!editor.SetNativeGameModules(deployment->native)) return failStartup("Cannot configure Native deployments.");
+        if(deployment->managed && !editor.SetCSharpRuntime(*deployment->managed)) return failStartup("Cannot configure Managed deployment.");
+    }
 	if(context && (!engineManifestArgument.empty() || std::filesystem::exists(context->Config() / "BuildTargets.json"))) {
-		auto binding = NexusEngine::ProjectBuild::Binding(*context, std::filesystem::path(executable), engineManifestArgument);
+        NexusEngine::ProjectLaunchOptions standaloneOptions;
+#if defined(NEXUS_GAME_MODULE_LIVEPP_HOST)
+        standaloneOptions.build.profile = NexusEngine::ProjectBuildProfile::NativeLivePatch;
+        standaloneOptions.build.livePPDirectory = NEXUS_GAME_MODULE_LIVEPP_DIRECTORY;
+#endif
+		auto binding = NexusEngine::ProjectBuild::Binding(*context, std::filesystem::path(executable), engineManifestArgument, standaloneOptions.build.profile);
 		if(!binding) return failStartup(binding.error().GetMessageText());
 		auto standalone = std::make_shared<NexusEngine::StandaloneSession>(context,*binding);
-		editor.AddEditorExtension([standalone,context](NexusEngine::EditorWorkspace& workspace) {
+		editor.AddEditorExtension([standalone,context,standaloneOptions, engine = *binding](NexusEngine::EditorWorkspace& workspace) {
 			workspace.Commands().Register("project.openVisualStudio", {[context,&workspace] {
 				auto opened = NexusEngine::SourceCodeEditor::Open(*context);
 				if(!opened) workspace.Report(std::unexpected(opened.error()));
 			}});
 			workspace.Menu().RegisterTool({"Open game in Visual Studio", "project.openVisualStudio"});
-			NexusEngine::RegisterStandaloneCommands(workspace,standalone);
+			NexusEngine::RegisterStandaloneCommands(workspace,standalone,standaloneOptions);
+            NexusEngine::RegisterProjectDevelopmentCommands(workspace, context, engine, standaloneOptions.build);
 		});
+        if(deployment && deployment->managed && !deployment->managed->gameAssembly.empty()) {
+            editor.AddEditorExtension([context, engine = *binding, settings = *deployment->managed](NexusEngine::EditorWorkspace& workspace) {
+                NexusEngine::RegisterManagedReloadCommands(workspace, context, engine, settings);
+            });
+        }
+#ifdef NEXUS_PROJECT_GAME_ASSEMBLY
+        if(!deployment) editor.AddEditorExtension([context, engine = *binding, settings = csharpSettings](NexusEngine::EditorWorkspace& workspace) {
+            NexusEngine::RegisterManagedReloadCommands(workspace, context, engine, settings);
+        });
+#endif
 	}
 	NexusEngine::PrimitiveRenderer primitiveRenderer;
 	editor.SetShadowSystem(&primitiveRenderer.GetShadows());

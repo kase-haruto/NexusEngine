@@ -7,6 +7,7 @@
 // engine
 #include "Foundation/Logging/Logger.h"
 #include "Platform/Development/LiveCodingAgent.h"
+#include "Runtime/Gameplay/GameApiBridge.h"
 
 namespace NexusEngine {
 	namespace {
@@ -43,7 +44,7 @@ namespace NexusEngine {
 		Logger::Get().InitializeDefaultSinks();
 
 		try {
-			LiveCodingAgent liveCoding(desc.mode == FrameworkMode::Editor);
+			LiveCodingAgent liveCoding(desc.mode == FrameworkMode::Editor || desc.nativeGameModuleReload);
 			// 初期化エラーは例外に変換せずResultのまま扱い、終了コード1へ統一する。
 			auto initializeResult = Initialize(desc);
 			if(!initializeResult) {
@@ -60,15 +61,32 @@ namespace NexusEngine {
 				// Editor・UI・更新処理から戻ったフレーム境界でのみパッチを適用する。
 				// 将来ワーカーを追加する場合は、移行対象を破棄する前にそちらも停止する。
 				if(liveCoding.WantsReload()) {
-					auto idle = graphicsSystem_.WaitForIdle();
-					if(!idle) {
-						NEXUS_LOG_CRITICAL("Live++", DescribeError(idle.error()));
-						state_ = FrameworkState::Failed;
-						Shutdown();
-						return kRuntimeFailureExitCode;
-					}
-					liveCoding.Reload();
-					previousFrameTime_ = std::chrono::steady_clock::now();
+                    if(liveCoding.IsGameModuleBackend()) {
+                        // 固定EngineのstackからGame DLL専用Backendへ入る。既存EXE Reinstancingは通さない。
+                        auto idle = graphicsSystem_.WaitForIdle();
+                        if(!idle) {
+                            NEXUS_LOG_CRITICAL("Live++", DescribeError(idle.error()));
+                            state_ = FrameworkState::Failed; Shutdown(); return kRuntimeFailureExitCode;
+                        }
+                        liveCoding.ReloadGameModule();
+                        previousFrameTime_ = std::chrono::steady_clock::now();
+                    } else {
+                    // 既存Native ReinstancingはGame DLL / Managed参照を移行しない。release前に拒否する。
+                    if(!GameApiBridge::BeginLegacyPatch()) {
+                        liveCoding.RejectReload();
+                    } else {
+                        struct PatchBoundary { ~PatchBoundary() { GameApiBridge::EndLegacyPatch(); } } patchBoundary;
+                        auto idle = graphicsSystem_.WaitForIdle();
+                        if(!idle) {
+                            NEXUS_LOG_CRITICAL("Live++", DescribeError(idle.error()));
+                            state_ = FrameworkState::Failed;
+                            Shutdown();
+                            return kRuntimeFailureExitCode;
+                        }
+                        liveCoding.Reload();
+                        previousFrameTime_ = std::chrono::steady_clock::now();
+                    }
+                    }
 				}
 				BeginFrame();
 				auto eventResult = ProcessEvents();
@@ -197,6 +215,13 @@ namespace NexusEngine {
 			}
 		}
 		window_.SetMessageHandler(desc.messageHandler, desc.messageHandlerUserData);
+        if(updateClient_) {
+            auto attached=updateClient_->AttachGraphics(graphicsSystem_,desc.renderer);
+            if(!attached) {
+                updateClient_->DetachGraphics(); graphicsSystem_.Shutdown(); window_.Shutdown(); state_=FrameworkState::Failed;
+                return attached;
+            }
+        }
 
 		// 必須サブシステムがすべて成功した時点だけRunningへ遷移させる。
 		// Shader/Asset初期化に要した時間を最初のsimulation deltaへ混ぜない。
@@ -223,6 +248,7 @@ namespace NexusEngine {
 
 		// 依存側から先に破棄する。将来SwapChainを追加する場合もWindowより前に解放する。
 		window_.SetMessageHandler(nullptr, nullptr);
+        if(updateClient_) updateClient_->DetachGraphics();
 		graphicsSystem_.Shutdown();
 		window_.Shutdown();
 		updateClient_ = nullptr;
@@ -253,6 +279,7 @@ namespace NexusEngine {
 	}
 
 	Result<void> NexusFramework::Update() {
+        if(updateClient_) updateClient_->SetFrameInput(window_.ConsumeInput());
 		return updateClient_ != nullptr ? updateClient_->Update(deltaTime_) : Result<void> {};
 	}
 

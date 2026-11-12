@@ -1,4 +1,6 @@
 #include "Runtime/Project/ProjectService.h"
+#include "Runtime/Project/ProjectSerializer.h"
+#include "Runtime/Project/ModuleDeployment.h"
 #include "Runtime/Level/Level.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
@@ -13,10 +15,27 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <iterator>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
 
 namespace {
 std::string Utf8(const std::filesystem::path& path) { const auto value = path.generic_u8string(); return {reinterpret_cast<const char*>(value.data()), value.size()}; }
 int Fail(const NexusEngine::Error& error) { std::cerr << error.GetMessageText() << '\n'; return 1; }
+/** \brief 共通Project Scriptへ値引数を渡す。SDKやGameを直接起動しない */
+int ProjectOperation(const std::wstring& action, const std::filesystem::path& project, const std::filesystem::path& manifest, std::vector<std::wstring> arguments) {
+    using namespace NexusEngine;
+    auto engine = EngineManifest::Load(manifest); if(!engine) return Fail(engine.error());
+    auto opened = ProjectService::Open(project); if(!opened) return Fail(opened.error());
+    auto id = CreateUuid(); if(!id) return Fail(id.error()); const auto log = opened->Root() / "Build/Logs/Project" / (*id + ".log"); std::filesystem::create_directories(log.parent_path());
+    wchar_t system[32768]{}; if(!GetSystemDirectoryW(system, static_cast<UINT>(std::size(system)))) return 1;
+    std::vector<std::wstring> command{L"-NoProfile", L"-ExecutionPolicy", L"Bypass", L"-File", (engine->sdk / "Tools/Project" / (action + L".ps1")).wstring(), L"-ProjectFile", opened->File().wstring(), L"-EngineManifest", engine->manifest.wstring()};
+    command.insert(command.end(), arguments.begin(), arguments.end());
+    auto child = Process::Start(std::filesystem::path(system) / "WindowsPowerShell/v1.0/powershell.exe", command, opened->Root(), true, log, true); if(!child) return Fail(child.error());
+    for(;;) { auto state = child->Poll(); if(!state) return Fail(state.error()); if(*state) { std::cout << "Log: " << Utf8(log) << '\n'; return static_cast<int>(**state); } std::this_thread::sleep_for(std::chrono::milliseconds(30)); }
+}
 }
 
 int RunProjectTool(int argc, wchar_t** argv) {
@@ -24,6 +43,11 @@ int RunProjectTool(int argc, wchar_t** argv) {
     if(argc < 3) {
         std::cout << "NexusProjectTool create <new-root> <name>\n"
                      "NexusProjectTool inspect <file.nxproject>\n"
+                     "NexusProjectTool module-order <file.nxproject>\n"
+                     "NexusProjectTool module-add <project.nxproject> <engine.nxengine> <id> <Cpp|CSharp> [dependency-ids]\n"
+                     "NexusProjectTool source-add <project.nxproject> <engine.nxengine> <module-id> <name>\n"
+                     "NexusProjectTool package <project.nxproject> <engine.nxengine> <new-directory> [private-dotnet-root]\n"
+                     "NexusProjectTool verify-package <package/Bin/GameRuntime.exe>\n"
                      "NexusProjectTool register|remove <file.nxproject> [registry.json]\n"
                      "NexusProjectTool list <registry.json>\n"
                      "NexusProjectTool engine-dev <repository> <configuration> [engine-registry.json]\n"
@@ -35,11 +59,35 @@ int RunProjectTool(int argc, wchar_t** argv) {
                      "NexusProjectTool migration-apply <plan.json> --accept-api-risk\n"
                      "NexusProjectTool migration-restore <project.nxproject> <Recovery.json>\n"
                      "NexusProjectTool template-list <engine.nxengine>\n"
-                     "NexusProjectTool create-template <new-root> <name> <engine.nxengine> <template-id>\n"
-                     "NexusProjectTool build-editor|build-runtime|verify-editor|verify-runtime|open|run|check <file.nxproject> <engine-registry.json> [configuration]\n";
+                     "NexusProjectTool create-template <new-root> <name> <engine.nxengine> <template-id> [Cpp|CSharp]\n"
+                     "NexusProjectTool build-editor|build-runtime|rebuild-editor|rebuild-runtime|verify-editor|verify-runtime|open|run|check <file.nxproject> <engine-registry.json> [configuration] [Standard|NativeLivePatch] [LivePP-directory]\n";
         return 1;
     }
     const std::wstring_view command = argv[1];
+    if(command == L"verify-package" && argc == 3) {
+        auto package = LoadPackageStartup(std::filesystem::absolute(argv[2])); if(!package) return Fail(package.error());
+        std::cout << "Package inventory verified: " << Utf8(package->project) << '\n'; return 0;
+    }
+    if(command == L"module-add" && (argc == 6 || argc == 7)) {
+        std::vector<std::wstring> args{L"-ModuleId", argv[4], L"-Language", argv[5]}; if(argc == 7) { args.push_back(L"-Dependencies"); args.push_back(argv[6]); }
+        return ProjectOperation(L"Add-GameModule", argv[2], argv[3], std::move(args));
+    }
+    if(command == L"source-add" && argc == 6) return ProjectOperation(L"Add-GameSource", argv[2], argv[3], {L"-ModuleId", argv[4], L"-Name", argv[5]});
+    if(command == L"package" && (argc == 5 || argc == 6)) {
+        std::vector<std::wstring> args{L"-OutputDirectory", argv[4]}; if(argc == 6) { args.push_back(L"-DotNetRoot"); args.push_back(argv[5]); }
+        return ProjectOperation(L"Package-Game", argv[2], argv[3], std::move(args));
+    }
+    if(command == L"module-order" && argc == 3) {
+        // metadataだけを読む。Game Module、SDK、Levelを起動せず宣言の計画を確認できる。
+        auto descriptor = ProjectSerializer::Load(argv[2]); if(!descriptor) return Fail(descriptor.error());
+        auto order = ProjectSerializer::DependencyOrder(*descriptor); if(!order) return Fail(order.error());
+        for(const auto index : *order) {
+            const auto& module = descriptor->modules[index];
+            std::cout << module.id << '\t' << (module.language == ProjectModuleLanguage::Cpp ? "Cpp" : "CSharp") << '\t' << module.path << '\n';
+        }
+        auto executable = CheckProjectRuntimeModules(*descriptor);
+        std::cout << (executable ? "Runtime-compatible" : "Declaration-only: " + executable.error().GetMessageText()) << '\n'; return 0;
+    }
     if((command == L"engine-remove" || command == L"engine-default") && (argc == 3 || argc == 4)) {
         auto file = argc == 4 ? Result<std::filesystem::path>{argv[3]} : EngineRegistry::DefaultFile();
         if(!file) return Fail(file.error());
@@ -94,33 +142,47 @@ int RunProjectTool(int argc, wchar_t** argv) {
         for(const auto& item : *templates) std::cout << item.id << '\t' << item.name << '\n';
         return 0;
     }
-    if(command == L"create-template" && argc == 6) {
+    if(command == L"create-template" && (argc == 6 || argc == 7)) {
+        // 省略時は従来のC++生成を維持する。言語はProject全体ではなく最初のModuleへ渡す。
+        const std::wstring_view language = argc == 7 ? argv[6] : L"Cpp";
+        if(language != L"Cpp" && language != L"CSharp") { std::cerr << "Initial Game language must be Cpp or CSharp.\n"; return 1; }
         auto engine = EngineManifest::Load(argv[4]); if(!engine) return Fail(engine.error());
         auto templates = ProjectTemplates::List(engine->templates); if(!templates) return Fail(templates.error());
         for(const auto& item : *templates) if(item.id == ConvertString(std::wstring(argv[5]))) {
             ProjectDescriptor descriptor; descriptor.name = ConvertString(std::wstring(argv[3])); descriptor.engine = engine->identity;
-            auto created = ProjectTemplates::Create(argv[2], std::move(descriptor), item, *engine);
+            auto created = ProjectTemplates::Create(argv[2], std::move(descriptor), item, *engine,
+                language == L"Cpp" ? ProjectModuleLanguage::Cpp : ProjectModuleLanguage::CSharp);
             if(!created) return Fail(created.error()); std::cout << Utf8(created->File()) << '\n'; return 0;
         }
         std::cerr << "Template ID was not found.\n"; return 1;
     }
-    if((command == L"build-editor" || command == L"build-runtime" || command == L"verify-editor" || command == L"verify-runtime" || command == L"open" || command == L"run" || command == L"check") && (argc == 4 || argc == 5)) {
+    if((command == L"build-editor" || command == L"build-runtime" || command == L"rebuild-editor" || command == L"rebuild-runtime" || command == L"verify-editor" || command == L"verify-runtime" || command == L"open" || command == L"run" || command == L"check") && (argc >= 4 && argc <= 7)) {
+        ProjectBuildOptions options;
+        if(argc >= 6) {
+            const std::wstring_view profile = argv[5];
+            if(profile != L"Standard" && profile != L"NativeLivePatch") { std::cerr << "Unknown Build profile.\n"; return 1; }
+            if(profile == L"NativeLivePatch") options.profile = ProjectBuildProfile::NativeLivePatch;
+        }
+        if(argc == 7) options.livePPDirectory = argv[6];
+        if(options.profile == ProjectBuildProfile::Standard && !options.livePPDirectory.empty()) { std::cerr << "Live++ SDK path requires NativeLivePatch.\n"; return 1; }
+        options.rebuild = command == L"rebuild-editor" || command == L"rebuild-runtime";
         auto project = ProjectService::Open(argv[2]); if(!project) return Fail(project.error());
-        auto engine = EngineRegistry(argv[3]).Resolve(project->Descriptor().engine, argc == 5 ? ConvertString(std::wstring(argv[4])) : "Debug");
+        auto engine = EngineRegistry(argv[3]).Resolve(project->Descriptor().engine, argc >= 5 ? ConvertString(std::wstring(argv[4])) : "Debug");
         if(!engine) return Fail(engine.error());
-        const auto kind = command == L"build-editor" || command == L"verify-editor" || command == L"open" ? ProjectHostKind::Editor : ProjectHostKind::Runtime;
+        const auto kind = command == L"build-editor" || command == L"rebuild-editor" || command == L"verify-editor" || command == L"open" ? ProjectHostKind::Editor : ProjectHostKind::Runtime;
         if(command == L"verify-editor" || command == L"verify-runtime") {
-            auto targets = ProjectBuild::Targets(*project, engine->configuration); if(!targets) return Fail(targets.error());
-            auto verified = ProjectBuild::Verify(*project, *engine, kind == ProjectHostKind::Editor ? targets->editorExecutable : targets->runtimeExecutable, kind);
+            auto targets = ProjectBuild::Targets(*project, engine->configuration, options.profile); if(!targets) return Fail(targets.error());
+            auto verified = ProjectBuild::Verify(*project, *engine, kind == ProjectHostKind::Editor ? targets->editorExecutable : targets->runtimeExecutable, kind, options.profile);
             return verified ? 0 : Fail(verified.error());
         }
         if(std::filesystem::exists(project->Config() / "BuildTargets.json")) {
             auto id = CreateUuid(); if(!id) return Fail(id.error());
-            auto built = ProjectBuild::Build(*project, *engine, kind, project->Root() / "Build/Logs" / (*id + ".log"));
+            auto built = ProjectBuild::Build(*project, *engine, kind, project->Root() / "Build/Logs" / (*id + ".log"), {}, options);
             if(!built) return Fail(built.error());
         }
-        if(command == L"build-editor" || command == L"build-runtime") return 0;
-        auto process = ProjectBuild::Launch(*project, *engine, kind, command == L"check"); if(!process) return Fail(process.error());
+        if(command == L"build-editor" || command == L"build-runtime" || options.rebuild) return 0;
+        ProjectLaunchOptions launch; launch.checkOnly = command == L"check"; launch.build = options;
+        auto process = ProjectBuild::Launch(*project, *engine, kind, launch); if(!process) return Fail(process.error());
         if(command != L"check") { std::cout << "Started PID " << process->Id() << '\n'; return 0; }
         for(;;) { auto state = process->Poll(); if(!state) return Fail(state.error()); if(*state) return static_cast<int>(**state); std::this_thread::sleep_for(std::chrono::milliseconds(20)); }
     }

@@ -11,16 +11,19 @@ namespace NexusEngine {
 void RegisterStandaloneCommands(EditorWorkspace& workspace, std::shared_ptr<StandaloneSession> session, ProjectLaunchOptions options) {
     EditorCommandRegistry::Command run{[session,&workspace,options = std::move(options)] {
         workspace.Report(session->RequestStart(options));
-    }, [session] { auto state = session->State(); return state && !state->building && !state->running; }};
+    }, [session,&workspace] {
+        auto state = session->State();
+        return state && !state->building && !state->running && !workspace.Session().IsPlaying() && !workspace.IsProjectOperationActive();
+    }};
     // 取消・終了待ちも含めた継続状態を公開し、実行中に別モードへ切り替えさせない。
     run.isChecked = [session] { auto state = session->State(); return state && (state->building || state->running); };
     workspace.Commands().Register("project.runStandalone",std::move(run));
     workspace.Commands().Register("project.stopStandalone", {[session,&workspace] {
         workspace.Report(session->Stop());
     }, [session] { auto state = session->State(); return state && (state->building || state->running) && !state->stopping; }});
-    workspace.Toolbar().RegisterSection({"project.runtime",200,12,[session,&workspace](const auto& text,const auto& commands) {
-        // 完了したビルドだけをUIスレッドで受け取り、workerからUIやWorldへ触れない。
-        workspace.Report(session->Poll());
+    // 完了処理はNewFrame前に実行する。非表示ToolbarからRuntime起動の進行を切り離す。
+    workspace.AddFramePoller([session,&workspace] { workspace.Report(session->Poll()); });
+    workspace.Toolbar().RegisterSection({"project.runtime",200,12,[session](const auto& text,const auto& commands) {
         auto state = session->State();
         if(state) {
             if(!commands.IsChecked("play.mode.window") && !state->building && !state->running && state->error.empty()) return;

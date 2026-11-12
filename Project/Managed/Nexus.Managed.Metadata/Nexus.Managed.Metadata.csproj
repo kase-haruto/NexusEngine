@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework Condition="'$(NexusManagedRuntime)'!='Mono'">net10.0</TargetFramework><AssemblyName>Nexus.Managed.Metadata</AssemblyName><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><PlatformTarget>x64</PlatformTarget><Configurations>Debug;Develop;Release</Configurations><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Nexus.Managed"><HintPath>$(NexusManagedApiPath)</HintPath><Private>true</Private></Reference>
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(NexusManagedRuntime)'!='Mono'"><Compile Include="../Nexus.Managed.Bootstrap/GameScriptCatalog.cs" Link="GameScriptCatalog.cs" /></ItemGroup>
+  <ItemGroup Condition="'$(NexusManagedRuntime)'=='Mono'"><Compile Include="../Nexus.Managed.Bootstrap/MonoGameScriptCatalog.cs" Link="MonoGameScriptCatalog.cs" /><PackageReference Include="System.Text.Json" Version="10.0.15" /></ItemGroup>
+  <Target Name="RequireBuiltApi" BeforeTargets="ResolveReferences"><Error Condition="!Exists('$(NexusManagedApiPath)')" Text="Metadata exporter requires the built Nexus.Managed.dll." /></Target>
+</Project>

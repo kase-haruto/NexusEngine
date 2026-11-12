@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "native-module",
+  "name": "Native Game Module (C++)",
+  "description": "共通Game APIを使う独立Game.dllとEditor / Runtimeホスト。C++専用の初期生成テンプレート。",
+  "moduleLanguages": ["Cpp"],
+  "files": [
+    {"source":"NativeModule/NativeMover.h.in","target":"@SOURCE@/Game/NativeMover.h","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/NativeMover.cpp.in","target":"@SOURCE@/Game/NativeMover.cpp","replace":false,"language":"Cpp"},
+    {"source":"NativeModule/GameComponents.h.in","target":"@SOURCE@/Game/GameComponents.h","replace":false,"language":"Cpp"},
+    {"source":"Shared/Directory.Build.props.in","target":"Directory.Build.props","replace":false},
+    { "source": "NativeModule/Main.cpp.in", "target": "@SOURCE@/Game/Main.cpp", "replace": true, "language": "Cpp" },
+    { "source": "NativeModule/NativePatchHooks.cpp.in", "target": "@SOURCE@/Game/NativePatchHooks.cpp", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/CrowdSimulationSystem.h.in", "target": "@SOURCE@/Game/CrowdSimulationSystem.h", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/CrowdSimulationSystem.cpp.in", "target": "@SOURCE@/Game/CrowdSimulationSystem.cpp", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/CrowdBinding.h.in", "target": "@SOURCE@/Game/CrowdBinding.h", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/NativeModuleState.h.in", "target": "@SOURCE@/Game/NativeModuleState.h", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/README.md.in", "target": "@SOURCE@/Game/README.md", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/Host.cpp.in", "target": "@SOURCE@/Host/Main.cpp", "replace": false, "language": "Cpp" },
+    { "source": "NativeModule/GameModule.vcxproj.in", "target": "GameModule.vcxproj", "replace": true, "language": "Cpp" },
+    { "source": "NativeModule/GameRuntime.vcxproj.in", "target": "GameRuntime.vcxproj", "replace": true, "language": "Cpp" },
+    { "source": "NativeModule/GameEditor.vcxproj.in", "target": "GameEditor.vcxproj", "replace": true, "language": "Cpp" },
+    { "source": "NativeModule/Game.slnx.in", "target": "Game.slnx", "replace": true, "language": "Cpp" },
+    { "source": "NativeModule/BuildTargets.json.in", "target": "@CONFIG@/BuildTargets.json", "replace": false, "language": "Cpp" },
+    { "source": "Basic3D/Startup.level", "target": "@LEVELS@/Startup.level", "replace": false }
+  ]
+}

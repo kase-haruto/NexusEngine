@@ -1,4 +1,5 @@
 #include "ProjectWindow.h"
+#include "Platform/Input/XInputGamepads.h"
 
 // c++
 #include <limits>
@@ -31,6 +32,11 @@ namespace NexusEngine {
 	ProjectWindow::~ProjectWindow() noexcept {
 		Shutdown();
 	}
+    InputFrame ProjectWindow::ConsumeInput() noexcept {
+        // Windowと同じthreadで採取し、各言語/Systemへ同じframeの値を配布する。
+        PollXInputGamepads(input_);
+        auto frame=input_; input_.ClearTransitions(); return frame;
+    }
 	void ProjectWindow::SetVisible(bool visible) noexcept {
 		if(window_) ShowWindow(window_,visible ? SW_SHOW : SW_HIDE);
 	}
@@ -168,6 +174,8 @@ namespace NexusEngine {
 		resizePending_ = false;
 		messageHandler_ = nullptr;
 		messageHandlerUserData_ = nullptr;
+        // Window再生成で前のdevice/button状態を復活させない。外部deviceの所有権は持たない。
+        input_ = {};
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -271,6 +279,26 @@ namespace NexusEngine {
 				return HTCLIENT;
 			}
 		}
+        // ImGui等の購読側より先にPlatformの値を記録する。ゲームへ渡す可否はApplicationが決める。
+        switch(message) {
+        case WM_SETFOCUS: input_.focused = true; break;
+        case WM_KILLFOCUS: input_.LoseFocus(); break;
+        case WM_KEYDOWN: case WM_SYSKEYDOWN: input_.Key(static_cast<uint32_t>(wParam), true); break;
+        case WM_KEYUP: case WM_SYSKEYUP: input_.Key(static_cast<uint32_t>(wParam), false); break;
+        case WM_LBUTTONDOWN: input_.Key(VK_LBUTTON, true); break;
+        case WM_LBUTTONUP: input_.Key(VK_LBUTTON, false); break;
+        case WM_RBUTTONDOWN: input_.Key(VK_RBUTTON, true); break;
+        case WM_RBUTTONUP: input_.Key(VK_RBUTTON, false); break;
+        case WM_MBUTTONDOWN: input_.Key(VK_MBUTTON, true); break;
+        case WM_MBUTTONUP: input_.Key(VK_MBUTTON, false); break;
+        case WM_XBUTTONDOWN: case WM_XBUTTONUP: input_.Key(GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? VK_XBUTTON1 : VK_XBUTTON2, message == WM_XBUTTONDOWN); break;
+        case WM_MOUSEWHEEL: input_.wheel += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA; break;
+        case WM_MOUSEMOVE: {
+            const auto x = static_cast<float>(GET_X_LPARAM(lParam)), y = static_cast<float>(GET_Y_LPARAM(lParam));
+            input_.deltaX += x - input_.mouseX; input_.deltaY += y - input_.mouseY; input_.mouseX = x; input_.mouseY = y; break;
+        }
+        default: break;
+        }
 		if(messageHandler_ != nullptr && messageHandler_(messageHandlerUserData_, window, message, wParam, lParam)) {
 			// サイズ制約は購読側がMINMAXINFOへ書き込み、Win32の規約どおり0を返す。
 			return message == WM_GETMINMAXINFO ? 0 : 1;

@@ -1,0 +1,29 @@
+using Nexus.Managed;
+namespace Game;
+/*-----------------------------------------------------------------------------------------
+ * PlayerController
+ * - 同じEntityを明示的なNative Public APIへ渡す。NativeCombat内部型へ依存しない
+ * - API呼出しはOnUpdateで行い、ReloadのOnCreate中にDLL内部状態を変更しない
+ *---------------------------------------------------------------------------------------*/
+[ScriptType("game.player")]
+public sealed class PlayerController : ScriptBehaviour
+{
+    [Expose(Id = "impulse")]
+    public float Impulse { get; set; } = 0.25f;
+    [Expose(Id = "target", Label = "Target")]
+    public System.Numerics.Vector3 Target { get; set; } = new(5, 0, 0);
+    private float elapsed;
+    protected override void OnUpdate(float deltaTime)
+    {
+        // 初期LevelのPlayerでも同じ型付き経路を利用する。EnemyControllerも同じAPIだけに依存する。
+        CrowdSimulation.SetTarget(Entity, Target);
+        elapsed += deltaTime;
+        if(elapsed >= 1) {
+            elapsed = 0;
+            _ = World.InvokeNative("combat.impulse", 1, Entity, BitConverter.GetBytes(Impulse));
+            World.PublishEvent("gameplay.pulse", 1, Entity, ReadOnlySpan<byte>.Empty);
+        }
+        for(var count = 0; count < 256 && World.TryPollEvent(out var notification); ++count)
+            if(notification!.Type == "combat.hit") World.Log("Native combat updated the shared Entity.");
+    }
+}

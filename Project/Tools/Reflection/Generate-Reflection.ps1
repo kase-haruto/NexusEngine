@@ -100,7 +100,17 @@ $lines.Add("void $componentFunction(ComponentReflection& registry) {")
 foreach($schema in $schemas | Where-Object Kind -eq 'COMPONENT') { $lines.Add("    registry.Register<$($schema.Type)>();") }
 $lines.Add('}')
 $lines.Add("void $inspectorFunction(TypeRegistry& registry) {")
-foreach($schema in $schemas | Where-Object Kind -eq 'COMPONENT') { $lines.Add("    RegisterReflectedInspector<$($schema.Type)>(registry);") }
+foreach($schema in $schemas | Where-Object Kind -eq 'COMPONENT') {
+    # 宣言headerと同名の実装を共通型情報へ渡す。Editorは使用時に現在Project内か再検証する。
+    $sourceHeader = (Join-Path $scanRoot $schema.Header).Replace('\', '/')
+    $sourceFiles = @($sourceHeader)
+    foreach($extension in @('.cpp', '.cc', '.cxx')) {
+        $implementation = [IO.Path]::ChangeExtension($sourceHeader, $extension)
+        if([IO.File]::Exists($implementation)) { $sourceFiles += $implementation }
+    }
+    $sourceArguments = ($sourceFiles | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ', '
+    $lines.Add("    RegisterReflectedInspector<$($schema.Type)>(registry, {$sourceArguments});")
+}
 $lines.Add('}'); $lines.Add('}')
 $sourceText = ($lines -join "`n") + "`n"
 $schemaText = ConvertTo-Json -InputObject @($schemas | Select-Object Kind, Type, Id) -Depth 4

@@ -2,6 +2,7 @@
 #include "ProjectSerializer.h"
 #include "ProjectJson.h"
 #include "Runtime/Application/ApplicationPaths.h"
+#include <algorithm>
 
 namespace NexusEngine {
 ////////////////////////////
@@ -30,6 +31,12 @@ Result<ProjectContext> ProjectContext::Resolve(const std::filesystem::path& file
     // 起動Levelは設定されたLevel保存先の内側に限定する。
     auto level = ResolveProjectPath(context.levels_, context.startupLevel_);
     if(!level) return std::unexpected(level.error());
+    // 宣言だけのModuleも許可するが、既存symlink経由でRoot外を参照させない。
+    // 実体の作成・ロードはTools / Runtimeの責務なので、ここでは存在を要求しない。
+    for(const auto& module : descriptor.modules) {
+        auto resolved = ResolveProjectPath(context.root_, ProjectJson::Path(module.path));
+        if(!resolved) return std::unexpected(resolved.error());
+    }
     context.descriptor_ = std::move(descriptor);
     return context;
 }
@@ -41,6 +48,15 @@ Result<void> CheckProjectEngine(const ProjectEngineRequirement& requested, const
             " (" + requested.association + "); this host is " + running.id + " " + running.version + " (" + running.association + "). No fallback was used."));
     if(requested.association == "installed" && requested.version.empty())
         return std::unexpected(Error(ErrorCategory::Framework, 163, "Installed Engine requires an exact version."));
+    return {};
+}
+Result<void> CheckProjectRuntimeModules(const ProjectDescriptor& descriptor) {
+    auto valid = ProjectSerializer::Validate(descriptor); if(!valid) return valid;
+    // 現在はNative APIの公開をManaged OnCreateより先に完了する。依存宣言でその順序を逆転させない。
+    for(const auto& module : descriptor.modules) if(module.language == ProjectModuleLanguage::Cpp)
+        for(const auto& dependency : module.dependencies)
+            for(const auto& target : descriptor.modules) if(target.id == dependency && target.language == ProjectModuleLanguage::CSharp)
+                return std::unexpected(Error(ErrorCategory::Framework, 164, "Current Runtime starts Native before Managed; a Native Module cannot depend on Managed initialization."));
     return {};
 }
 } // namespace NexusEngine

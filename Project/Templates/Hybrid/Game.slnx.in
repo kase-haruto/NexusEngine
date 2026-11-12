@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations><Platform Name="x64" /></Configurations>
+  <!-- 安定API準備前の独立Buildを避け、C#生成は共通HostのUtilityへ委譲する。 -->
+  <Project Path="GameScripts.csproj"><Build Project="false" /></Project>
+  <Project Path="GameModule.vcxproj" />
+  <Project Path="ManagedBootstrap.vcxproj" />
+  <Project Path="GameRuntime.vcxproj" />
+  <Project Path="GameEditor.vcxproj" />
+</Solution>

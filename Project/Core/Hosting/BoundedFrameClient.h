@@ -12,6 +12,9 @@ class BoundedFrameClient final : public IFrameworkUpdateClient {
 public:
     /** \brief 対象ApplicationはこのadapterとFrameworkより長く保持する */
     BoundedFrameClient(IFrameworkUpdateClient& client, uint32_t limit) : client_(client), limit_(limit) {}
+    void SetFrameInput(const InputFrame& input) override { client_.SetFrameInput(input); }
+    Result<void> AttachGraphics(GraphicsSystem& graphics,IGraphicsRenderer* renderer) override { return client_.AttachGraphics(graphics,renderer); }
+    void DetachGraphics() noexcept override { client_.DetachGraphics(); }
     [[nodiscard]] Result<void> Update(float deltaTime) override { return client_.Update(deltaTime); }
     [[nodiscard]] Result<void> PrepareRender(uint32_t width, uint32_t height) override {
         auto result = client_.PrepareRender(width,height);

@@ -1,5 +1,6 @@
 #pragma once
 #include "Editor/Gui/Panels/IEditorPanel.h"
+#include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include <string_view>
 
 namespace NexusEngine {
@@ -11,5 +12,5 @@ namespace NexusEngine {
 /** \brief 指定したReflection値を既存のDrawerと編集サービスで描画する
  *  \param primaryOnly trueなら主選択のみ編集する。MaterialのSource Slot対応に使用する */
 void DrawReflectedProperty(const EditorContext& context, std::string_view typeId, std::string_view propertyId,
-    bool primaryOnly = false);
+    bool primaryOnly = false, PersistentId instance = {});
 }

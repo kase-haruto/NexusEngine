@@ -1,0 +1,14 @@
+#pragma once
+#include <Nexus/GameServices.h>
+#include <Nexus/NativeGameSystemApi.h>
+/*-----------------------------------------------------------------------------------------
+ * NativeCombat
+ * - Game DLLのcombat state。固定ヘッダーでlayoutと所有権を明示する
+ * - 関数本体パッチ中は再生成せず、変更時は通常再ビルド・再起動する
+ *---------------------------------------------------------------------------------------*/
+struct NativeCombat {
+    NexusGameApiV1 game{}; //< Engine常駐の値API
+    NexusGameServicesContextV1 services{}; //< World寿命の数値client
+    NexusNativeSystemsRegistrationV1 systems{}; //< Engineが所有するSystemの数値scope。objectは借用callback内だけ
+    uint32_t hits = 0; //< Managedへ直接公開しないゲームstate
+};

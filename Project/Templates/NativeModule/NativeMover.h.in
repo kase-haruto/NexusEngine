@@ -1,0 +1,16 @@
+#pragma once
+#include <Nexus/EntityBehaviourSystem.hpp>
+/*-----------------------------------------------------------------------------------------
+ * NativeMover
+ * - Entityにアタッチされた公開speedに従ってLocal X位置を更新する最小Native Logic
+ * - 値は既存ECS/Levelが所有し、この実行objectはDLL内Systemだけが所有する
+ *---------------------------------------------------------------------------------------*/
+class NativeMover final {
+public:
+    /** \brief Systemが所有するContextを、このinstanceの寿命だけ借用する */
+    explicit NativeMover(NexusGame::EntityBehaviourContext& context) noexcept : context_(context) {}
+    /** \brief 共通Property値を読み、同じWorldのTransformを更新する */
+    NexusGameStatus OnUpdate(float deltaTime) noexcept;
+private:
+    NexusGame::EntityBehaviourContext& context_; //< System所有。Native pointerをEngine/Managedへ公開しない
+};

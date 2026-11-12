@@ -26,7 +26,8 @@
       <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
-  <Target Name="ValidateLivePP" BeforeTargets="PrepareForBuild" Condition="'$(NexusLivePPEnabled)'=='true'">
+  <Target Name="ValidateLivePP" BeforeTargets="PrepareForBuild" Condition="'$(NexusLivePPEnabled)'=='true' or '$(NexusNativeModuleLivePP)'=='true'">
+    <Error Condition="'$(NexusNativeModuleLivePP)'=='true'" Text="Use the generated GameEditor/GameRuntime project for module-only Live++; the legacy Engine EXE profile cannot be combined." />
     <Error Condition="'$(Platform)'!='x64' or ('$(Configuration)'!='Debug' and '$(Configuration)'!='Develop')" Text="Live++ is supported only in Debug/Develop x64. Set NexusLivePPEnabled=false for other configurations." />
     <Error Condition="!Exists('$(NexusLivePPDir)\API\x64\LPP_API_x64_CPP.h')" Text="Live++ SDK is missing. Extract LivePP to Project/ThirdParty/LivePP or set NexusLivePPDir. See Docs/LiveCoding.md." />
   </Target>

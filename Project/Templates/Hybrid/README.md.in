@@ -1,0 +1,40 @@
+# Hybrid Game
+
+ModulesはNativeCombat (C++)とGameplay (C#)です。Level / Assets / Entity / Componentは両言語で共有します。
+初期言語はModule生成順であり、Projectの言語固定ではありません。
+
+新規ProjectのC# BackendはMono / SGenです。.NET SDK、net48参照Assembly、NEXUS_MONO_ROOTで指定する公式Mono x64 SDKを用意してください。
+ScriptはDetailsで選択し、Sourceからdropでも設定できます。1 Entityに1 Scriptです。Open / DetachとUndoは共通Editor経路を使います。
+
+NativeCombatは共通Game APIだけを参照し、combat.impulse v1を明示登録します。
+PlayerControllerはEntity Handleとlittle-endian float32の値だけを渡し、Native内部型へ依存しません。
+combat.hit / gameplay.pulseは同じWorldの有界Event queueを使います。payload上限4096 byte、各client queueは256件です。
+
+CrowdSimulationSystemはNative Module内に実装した別のGame固有Systemで、既存Schedulerが実行します。
+CrowdBinding.hがSetTargetだけを明示公開し、C#のCrowdSimulation.SetTargetが型付きFacadeになります。
+初期LevelのPlayerControllerも同じ経路を呼びます。EnemyControllerを使う場合はScript Typeをgame.enemyに設定してください。
+Targetは[Expose]付きVector3です。共通DetailsのTargetを編集・保存すると、Play時に復元され、同じ値をNative Systemへ渡します。
+このPropertyの所有者はEntityのScriptComponentです。Native System全体の共有設定をEntity Propertyへ偽装したものではありません。
+Managedが渡した目標は次frameのNative System.Updateで処理します。Entity / Transformの別Storageは作りません。
+Module ID=NativeCombat、System ID=CrowdSimulation、System Version=1、Function ID=SetTarget、Function Version=1です。
+Facadeは最小例として毎回解決します。多数の呼出しではNativeFunctionをbehaviour内で保持できますが、停止・再登録後は再解決が必要です。
+NativeFunctionは数値Handleだけを持ち、古いHandleはEngineが拒否します。NativeApiException.Statusで失敗を判別できます。
+Bindingの停止・再登録はNative所有Threadのframe境界だけで行い、Live++ hookから直接呼びません。
+
+Native create → Public API登録 → Managed create → 初期Transform、更新はNative → Managed → 既存Transformです。
+停止はManaged → Native登録失効 → Native destroy / DLL解放 → World失効です。
+
+最初のホストBuildでDLLとManaged成果物の両方を準備します。Reload C#はNative DLLを再Buildしません。
+Reload中の旧cleanupと新OnCreateから、Native API呼出し・Event操作は行えません。OnUpdateへ置いてください。
+Native DLLの内部状態はC# Reloadで再生成しません。Entity / Assetは共通基盤のHandleで操作します。
+
+NativeCombatの永続stateはNativeCombatState.hへ固定しました。Crowdと合わせた固定契約・再Binding exportを提供します。
+Runtimeパッチ契約では非適用なら旧Handleを保持し、適用後に全Bindingが揃った場合だけ新世代を公開します。
+キャッシュしたNativeFunctionはEngineのcallback前専用statusでだけ再解決します。実行後失敗を自動再送しません。
+development EngineのDebug / Develop x64では、MSBuild global property `NexusNativeModuleLivePP=true`と`NexusLivePPDir`を指定する専用profileで、Reload C++を固定stateのDLLパッチ契約へ接続します。
+NativePatchHooks.cppが適用結果・Compile / Link失敗を通知します。Reload C#は既存Backendを使い、Nativeの同期適用中は競合を拒否します。
+通常Build・installed Engineでは有効化しません。固定ヘッダー・Public API・Build設定変更には再ビルド・ホスト再起動が必要です。実SDK動作は未検証です。
+
+Engine SDKの更新やNexus.Managed自体の変更には通常Buildとホスト再起動が必要です。
+保存したScript Versionが現在Metadataより新しい場合、Property編集とPlayを拒否し、保存値は保持します。対応するScript / Metadataを用意してください。
+CPPだけ・C#だけの既存テンプレートも利用できます。既存Projectへの途中追加手順はEngineのHybrid READMEを参照してください。

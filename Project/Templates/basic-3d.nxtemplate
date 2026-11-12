@@ -1,38 +1,52 @@
 {
+  "moduleLanguages": ["Cpp", "CSharp"],
   "files": [
     {
       "replace": false,
+      "target": "@SOURCE@/Game/README.md",
+      "source": "Shared/ManagedModule.README.md.in",
+      "language": "CSharp"
+    },
+    {
+      "replace": false,
       "target": "@SOURCE@/Game/GameModule.h",
+      "language": "Cpp",
       "source": "Shared/GameModule.h.in"
     },
     {
       "replace": false,
       "target": "@SOURCE@/Game/Main.cpp",
+      "language": "Cpp",
       "source": "Shared/Main.cpp.in"
     },
     {
       "replace": false,
       "target": "@SOURCE@/Game/HealthComponent.h",
+      "language": "Cpp",
       "source": "Shared/HealthComponent.h.in"
     },
     {
       "replace": true,
       "target": "GameRuntime.vcxproj",
+      "language": "Cpp",
       "source": "Shared/GameRuntime.vcxproj.in"
     },
     {
       "replace": true,
       "target": "GameEditor.vcxproj",
+      "language": "Cpp",
       "source": "Shared/GameEditor.vcxproj.in"
     },
     {
       "replace": true,
       "target": "Game.slnx",
+      "language": "Cpp",
       "source": "Shared/Game.slnx.in"
     },
     {
       "replace": false,
       "target": "@CONFIG@/BuildTargets.json",
+      "language": "Cpp",
       "source": "Shared/BuildTargets.json.in"
     },
     {
