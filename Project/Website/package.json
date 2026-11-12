@@ -1,0 +1,16 @@
+{
+  "name": "nexus-engine-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "test": "node --test tests/*.test.mjs",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "marked": "^17.0.6",
+    "sanitize-html": "^2.18.2",
+    "wrangler": "4.161.0"
+  }
+}

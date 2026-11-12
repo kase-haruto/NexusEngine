@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "purpose": "AIがNexusEngineの短い公開依頼からリリース作業全体を実施するための継続指示。スケジューラーや自動実行プログラムではない。",
+  "workflow": "RELEASING.md",
+  "triggers": ["新しいバージョンを公開して", "最新版をリリースして", "NexusEngineを<version>として公開して"],
+  "versioning": {
+    "scheme": "semver",
+    "preferUserSpecifiedVersion": true,
+    "whenUnspecified": "最新の実公開版から、修正はpatch、新機能はminor、互換性破壊はmajorを選び、着手時に採用番号を伝える。",
+    "rejectExistingVersionReplacement": true,
+    "developmentManifestVersionIsNotReleaseVersion": true
+  },
+  "platform": { "os": "windows", "architecture": "x64", "configuration": "Release", "engineId": "nexus" },
+  "hosting": {
+    "provider": "cloudflare",
+    "plan": "Workers Free",
+    "mode": "static-assets-only",
+    "workerName": "nexus-engine",
+    "siteOrigin": "https://nexus-engine.nexus-engine-website.workers.dev",
+    "catalogPath": "/releases.json"
+  },
+  "distribution": {
+    "provider": "github-releases",
+    "repository": "kase-haruto/NexusEngine",
+    "preservePreviousVersions": true,
+    "overwriteExistingAssets": false,
+    "rebuildLauncher": "ランチャー本体・同梱ツール・導入設定・配布先URLの変更時。エンジンのみの更新では正常な公開済みsetupを再利用する。"
+  },
+  "cost": {
+    "usageBasedBillingAllowed": false,
+    "paidPlanAllowed": false,
+    "r2Allowed": false,
+    "gitLfsAllowed": false,
+    "ifServiceLimitsChange": "自動的な課金契約や有料プランへの移行を行わず、従量課金なしの代替を調査する。"
+  },
+  "paths": {
+    "website": "Project/Website",
+    "sourceManifestCandidate": "NexusEngine.PackageSource.nxengine",
+    "releaseRoot": "Generated/EngineReleases",
+    "localCatalog": "Generated/EngineReleases/releases.local.json",
+    "releaseNotesPattern": "Project/Docs/Release-<version>.md",
+    "verificationNotesPattern": "Project/Docs/Release-<version>-Verification.md",
+    "installedSdkPublisher": "Project/Tools/Engine/Publish-Engine.ps1",
+    "zipPublisher": "Project/Tools/Project/New-EngineRelease.ps1",
+    "launcherBuilder": "Project/Tools/Project/Build-Distribution.ps1",
+    "websitePublisher": "Project/Website/scripts/Publish-Website.cmd",
+    "publicationState": "Project/Website/deployment-status.json"
+  },
+  "requiredResults": ["現在の変更内容からのリリースノート", "新規Installed SDKとZIP", "SHA-256とサイズの照合", "変更に対応したビルド・動作検証", "旧版を保持したGitHub Releases公開", "サイトとランチャー用カタログの更新", "実公開URLからのファイル取得・整合性検証", "公開記録の更新とURLの報告"],
+  "credentials": "既存のCloudflare CLIとGit Credential Managerの認証を使う。認証情報をこのファイル、ソース、公開物、ログに書かない。"
+}

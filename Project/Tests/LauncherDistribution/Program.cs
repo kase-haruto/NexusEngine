@@ -5,6 +5,20 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+if (args.Length == 1 && args[0] == "--verify-public-download")
+{
+    var catalog = await Distribution.LoadCatalog("https://nexus-engine.nexus-engine-website.workers.dev/releases.json", default);
+    if (catalog.Length != 3) throw new Exception("Public version catalog is incomplete.");
+    var latest = catalog.Single(item => item.Version == "1.1.1");
+    using var response = await Distribution.DownloadHttps(latest.Url, default);
+    response.EnsureSuccessStatusCode();
+    using var body = await response.Content.ReadAsStreamAsync();
+    var sha256 = Convert.ToHexString(await SHA256.HashDataAsync(body));
+    if (!sha256.Equals(latest.Sha256, StringComparison.OrdinalIgnoreCase)) throw new Exception("Public SDK checksum mismatch.");
+    Console.WriteLine("PASS: Launcher loaded three public versions and downloaded verified SDK 1.1.1 through GitHub HTTPS redirects.");
+    return;
+}
+
 // 子プロセス用の代役で引数の扱いを検証し、個人のRegistryには触れない。
 if (args.Length == 3 && args[0] is "engine-register" or "engine-remove")
 {
@@ -53,6 +67,18 @@ try
     {
         try { await action(); } catch (InvalidDataException) { passed++; return; }
         throw new Exception("Expected asynchronous rejection");
+    }
+    using (var redirects = new HttpClient(new RedirectFixtureHandler((request, count) => count == 1
+        ? new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("https://release-assets.githubusercontent.com/signed.zip") } }
+        : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("package") })))
+    {
+        using var response = await Distribution.DownloadHttps("https://github.com/package.zip", default, redirects);
+        if (await response.Content.ReadAsStringAsync() != "package") throw new Exception("HTTPS CDN redirect failed"); passed++;
+    }
+    foreach (var destination in new[] { "http://example.com/package.zip", "https://user:secret@example.com/package.zip", "https://example.com/loop" })
+    {
+        using var redirects = new HttpClient(new RedirectFixtureHandler((request, count) => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri(destination) } }));
+        await RejectAsync(() => Distribution.DownloadHttps("https://github.com/package.zip", default, redirects));
     }
     using var handler = new FixtureHandler();
     using var client = new HttpClient(handler);
@@ -213,4 +239,11 @@ sealed class FixtureHandler : HttpMessageHandler
     public byte[] Content { get; set; } = [];
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Content) });
+}
+
+sealed class RedirectFixtureHandler(Func<HttpRequestMessage, int, HttpResponseMessage> respond) : HttpMessageHandler
+{
+    int calls;
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        => Task.FromResult(respond(request, ++calls));
 }

@@ -34,9 +34,25 @@ public static class Distribution
             throw new InvalidDataException("配布URLには認証情報を含まないHTTPS URLを指定してください。");
         return uri;
     }
+    internal static async Task<HttpResponseMessage> DownloadHttps(string url, CancellationToken token, HttpClient? client = null)
+    {
+        var address = Https(url);
+        for (var redirects = 0; ; redirects++)
+        {
+            var response = await (client ?? Http).GetAsync(address, HttpCompletionOption.ResponseHeadersRead, token);
+            if ((int)response.StatusCode is not (301 or 302 or 303 or 307 or 308)) return response;
+            try
+            {
+                if (redirects >= 5) throw new InvalidDataException("配布URLの転送回数が上限を超えました。");
+                var location = response.Headers.Location ?? throw new InvalidDataException("配布URLの転送先がありません。");
+                address = Https(new Uri(address, location).AbsoluteUri);
+            }
+            finally { response.Dispose(); }
+        }
+    }
     public static async Task<Release[]> LoadCatalog(string url, CancellationToken token, HttpClient? client = null)
     {
-        using var response = await (client ?? Http).GetAsync(Https(url), HttpCompletionOption.ResponseHeadersRead, token);
+        using var response = await DownloadHttps(url, token, client);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(token);
         using var buffer = new MemoryStream();
@@ -117,7 +133,7 @@ public static class Distribution
         var content = Path.Combine(staging, "content");
         try
         {
-            using var response = localCatalogRoot is null ? await (client ?? Http).GetAsync(Https(release.Url), HttpCompletionOption.ResponseHeadersRead, token) : null;
+            using var response = localCatalogRoot is null ? await DownloadHttps(release.Url, token, client) : null;
             response?.EnsureSuccessStatusCode();
             await using (var source = localCatalogRoot is null ? await response!.Content.ReadAsStreamAsync(token) : File.OpenRead(Within(localCatalogRoot, release.Url)))
             await using (var output = new FileStream(archive, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, true))
