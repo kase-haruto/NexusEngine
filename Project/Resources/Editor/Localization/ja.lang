@@ -345,3 +345,5 @@ viewport.expandOverlay "Viewport操作を展開"
 viewport.collapseOverlay "Viewport操作を折り畳む"
 viewport.overlayGuides "ガイド"
 viewport.overlayText "情報表示"
+
+menu.all "すべてのメニュー"

@@ -878,8 +878,17 @@ void CacheAndWorkspaceIntegration() {
         auto* entityTable = ImGui::TableFindByID(rowsWindow->GetID("Entities"));
         assert(entityTable && (entityTable->Flags & ImGuiTableFlags_RowBg));
         bool alternateBackground = false;
-        for(const auto& vertex : rowsWindow->DrawList->VtxBuffer)
-            if(vertex.col == ImGui::GetColorU32(ImGuiCol_TableRowBgAlt)) alternateBackground = true;
+        // Panel側の配色調整にも対応し、固定色でなく実際の行幅を持つ背景Quadを確認する。
+        const auto& rowVertices = rowsWindow->DrawList->VtxBuffer;
+        for(int i = 0; i+3 < rowVertices.Size; ++i) {
+            const auto& a = rowVertices[i]; const auto& b = rowVertices[i+1];
+            const auto& c = rowVertices[i+2]; const auto& d = rowVertices[i+3];
+            const float rowHeight = c.pos.y-a.pos.y;
+            if(a.col == b.col && a.col == c.col && a.col == d.col && (a.col & IM_COL32_A_MASK) &&
+               a.pos.y == b.pos.y && c.pos.y == d.pos.y && a.pos.x == d.pos.x && b.pos.x == c.pos.x &&
+               b.pos.x-a.pos.x > rowsWindow->Size.x*.8f && rowHeight > 0 && rowHeight <= ImGui::GetFrameHeightWithSpacing()*2)
+                alternateBackground = true;
+        }
         assert(alternateBackground);
         // ツールバーの作成ボタンは除き、Hierarchyの行の右クリックから作成・Undoできる。
         assert(!workspace.Toolbar().Unregister("scene.entity"));
@@ -1052,6 +1061,7 @@ int main() {
     RunReflectedComponentTests();
     ExecutionModeRouting();
     EditorToolbarTests();
+    EditorTitleMenuTests();
     EditorToolbarSettingsTests();
     AxisWidgetInteraction();
     ComponentAndAssetEditing();

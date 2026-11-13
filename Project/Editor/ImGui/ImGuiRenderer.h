@@ -65,6 +65,7 @@ namespace NexusEngine {
 		void LoadEditorIcons();
 		std::map<std::string, std::unique_ptr<ImTextureData>> icons_;
 		void DrawTitleBar();
+		void DrawTitleBarCaption();
 		void* nativeWindow_ = nullptr;
 		std::filesystem::path fontDirectory_; //< GameのAsset Rootとは独立したUI資源
 		std::filesystem::path iconDirectory_;

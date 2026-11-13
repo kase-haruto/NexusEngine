@@ -1,4 +1,6 @@
 #include "MainMenuBar.h"
+#include "EditorTitleBarLayout.h"
+#include <algorithm>
 #include <filesystem>
 #include "ThirdParty/imgui/imgui.h"
 
@@ -6,7 +8,19 @@ namespace NexusEngine {
 void MainMenuBar::Draw(const LocalizationService& text, const EditorCommandRegistry& commands, PanelRegistry& panels,
     const std::vector<std::string>& recent, const std::function<void(const std::string&)>& openRecent,
     const std::function<std::vector<std::string>()>& listLevels, const std::string& activeLevel) {
-    if(!ImGui::BeginMainMenuBar()) return;
+    auto* title = EditorTitleBar::Current();
+    const float scale = title ? EditorTitleBar::Scale(title) : 1;
+    float menuStart = 0, menuRight = 0;
+    if(title) {
+        ImGui::Begin(EditorTitleBar::WindowName);
+        title->DC.MenuBarOffset = {52*scale,std::max(0.f,(title->Size.y-ImGui::GetFrameHeight())*.5f)};
+        if(!ImGui::BeginMenuBar()) { ImGui::End(); return; }
+        menuStart = title->Pos.x+52*scale;
+        // ロゴ、メニュー、エンジン名、Window操作の順で領域を予約する。
+        menuRight = std::max(menuStart,title->Pos.x+title->Size.x-138*scale-ImGui::CalcTextSize("NexusEngine").x-32*scale);
+        ImGui::PushClipRect({menuStart,title->Pos.y},{menuRight,title->Pos.y+title->Size.y},true);
+    } else if(!ImGui::BeginMainMenuBar()) return;
+    const auto drawMenus = [&] {
     const auto item = [&](const char* key, const char* id) {
         if(ImGui::MenuItem(text.Label(key, id).c_str(), commands.Shortcut(id), false, commands.CanExecute(id))) commands.Execute(id);
     };
@@ -63,6 +77,22 @@ void MainMenuBar::Draw(const LocalizationService& text, const EditorCommandRegis
     if(ImGui::BeginMenu(text.Label("menu.help", "Help").c_str())) {
         item("help.iconGuide", "help.iconGuide"); item("help.about", "help.about"); ImGui::EndMenu();
     }
-    ImGui::EndMainMenuBar();
+    };
+    if(title) {
+        float required = 0;
+        for(const auto* key : {"menu.file","menu.level","menu.edit","menu.play","menu.window","menu.tools","menu.help"}) {
+            if(std::string_view(key) == "menu.level" && !listLevels) continue;
+            required += ImGui::CalcTextSize(text.Text(key).c_str()).x+ImGui::GetStyle().ItemSpacing.x*2;
+        }
+        if(required <= menuRight-menuStart) drawMenus();
+        else {
+            // 狭い幅でも全メニューを使えるよう、同じ内容を一つのMenu配下へ構成する。
+            if(ImGui::BeginMenu("...###AllMenus")) { drawMenus(); ImGui::EndMenu(); }
+            if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",text.Text("menu.all").c_str());
+        }
+        const float end = std::clamp(ImGui::GetCursorScreenPos().x,menuStart,menuRight);
+        EditorTitleBar::SetMenuBounds(title,{{menuStart,title->Pos.y},{end,title->Pos.y+title->Size.y}});
+        ImGui::PopClipRect(); ImGui::EndMenuBar(); ImGui::End();
+    } else { drawMenus(); ImGui::EndMainMenuBar(); }
 }
 }

@@ -24,6 +24,12 @@ int main() {
         Require(client.right == outer.right - outer.left && client.bottom == outer.bottom - outer.top,
             "Native frame still occupies client space.");
         Require(Hit(handle, 150, 20) == HTCAPTION, "Title cannot drag/double-click.");
+        ProjectWindow::ConfigureTitleBarClientArea(handle,{52,8,400,32});
+        Require(Hit(handle,150,20) == HTCLIENT,"Title menu cannot receive mouse input.");
+        Require(Hit(handle,450,20) == HTCAPTION,"Caption beside the menu cannot drag.");
+        Require(Hit(handle,150,35) == HTCAPTION,"Area outside the menu became client input.");
+        Require(Hit(handle,150,1) == HTTOP,"Menu exclusion broke top-border resizing.");
+        ProjectWindow::ConfigureTitleBarClientArea(handle,{});
         Require(Hit(handle, client.right - 25, 20) == HTCLIENT, "Window controls are not clickable.");
         Require(Hit(handle, 150, 100) == HTCLIENT, "Editor content became a drag area.");
         Require(Hit(handle, 1, 1) == HTTOPLEFT, "Top-left resize failed.");

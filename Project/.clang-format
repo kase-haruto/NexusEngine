@@ -8,10 +8,12 @@ PointerAlignment: Left
 SpaceBeforeParens: Never
 SortIncludes: true
 BreakBeforeBraces: Attach
-AllowShortIfStatementsOnASingleLine: WithoutElse
-AllowShortFunctionsOnASingleLine: true
-AllowShortLoopsOnASingleLine: true
-AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+InsertBraces: true
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
 AlignTrailingComments: true

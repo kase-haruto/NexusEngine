@@ -64,6 +64,12 @@ namespace {
         }
         void BeginFrame() override {
             gui.BeginFrame();
+            auto* title = ImGui::FindWindowByName("###EditorTitleBar");
+            Require(title && title->Active,"Title bar was not drawn.");
+            bool fullTitleClip = false;
+            for(const auto& command : title->DrawList->CmdBuffer)
+                if(command.ElemCount && command.ClipRect.y <= title->Pos.y && command.ClipRect.w >= title->Pos.y+title->Size.y) fullTitleClip = true;
+            Require(fullTitleClip,"Menu-bar clipping hides the logo or native window controls.");
             if(!open) return;
             const auto* main=ImGui::GetMainViewport();
             if(merge) {

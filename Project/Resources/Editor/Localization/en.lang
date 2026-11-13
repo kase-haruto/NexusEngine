@@ -345,3 +345,5 @@ viewport.expandOverlay "Expand viewport controls"
 viewport.collapseOverlay "Collapse viewport controls"
 viewport.overlayGuides "Guides"
 viewport.overlayText "Information"
+
+menu.all "All menus"

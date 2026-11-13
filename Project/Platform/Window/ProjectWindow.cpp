@@ -49,8 +49,15 @@ namespace NexusEngine {
 		const bool changed = (self->titleBarHeight_ > 0) != (height > 0);
 		self->titleBarHeight_ = height;
 		self->titleBarControlsWidth_ = controlsWidth;
+		if(height <= 0) self->titleBarClientArea_ = {};
 		if(changed) SetWindowPos(window, nullptr, 0, 0, 0, 0,
 			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+	}
+
+	void ProjectWindow::ConfigureTitleBarClientArea(HWND window,RECT area) noexcept {
+		if(!window || GetClassLongPtrW(window,GCLP_WNDPROC) != reinterpret_cast<ULONG_PTR>(&ProjectWindow::WindowProcedure)) return;
+		auto* self = reinterpret_cast<ProjectWindow*>(GetWindowLongPtrW(window,GWLP_USERDATA));
+		if(self) self->titleBarClientArea_ = area;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -168,6 +175,7 @@ namespace NexusEngine {
 
 		className_.clear();
 		titleBarHeight_ = titleBarControlsWidth_ = 0;
+		titleBarClientArea_ = {};
 		instance_ = nullptr;
 		clientWidth_ = 0;
 		clientHeight_ = 0;
@@ -275,7 +283,10 @@ namespace NexusEngine {
 					if(left) return HTLEFT;
 					if(right) return HTRIGHT;
 				}
-				if(point.y >= 0 && point.y < titleBarHeight_ && point.x < client.right - titleBarControlsWidth_) return HTCAPTION;
+				if(point.y >= 0 && point.y < titleBarHeight_ && point.x < client.right - titleBarControlsWidth_) {
+					if(PtInRect(&titleBarClientArea_,point)) return HTCLIENT;
+					return HTCAPTION;
+				}
 				return HTCLIENT;
 			}
 		}

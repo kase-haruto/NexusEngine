@@ -1,6 +1,7 @@
 #include "ImGuiRenderer.h"
 #include "ImGuiStyle.h"
 #include "Editor/Gui/Widgets/EditorIconButton.h"
+#include "Editor/Gui/EditorTitleBarLayout.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -22,6 +23,7 @@
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include <cstring>
 #include <fstream>
+#include <algorithm>
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 
@@ -202,16 +204,22 @@ namespace NexusEngine {
 		if(!window) return;
 		auto* viewport = ImGui::GetMainViewport();
 		const float scale = static_cast<float>(GetDpiForWindow(window)) / 96.0f;
-		const float height = 38.0f * scale, buttonWidth = 46.0f * scale;
+		const float height = std::max(38.0f * scale,ImGui::GetFrameHeight()+12*scale), buttonWidth = 46.0f * scale;
 		ProjectWindow::ConfigureCustomTitleBar(window, static_cast<int>(height), static_cast<int>(buttonWidth * 3));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
 		const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+			ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBringToFrontOnFocus;
 		if(ImGui::BeginViewportSideBar("###EditorTitleBar", viewport, ImGuiDir_Up, height, flags)) {
+            auto* title = ImGui::GetCurrentWindow();
+            title->MenuBarHeight = height;
+            title->StateStorage.SetFloat(EditorTitleBar::Key(title,"TitleScale"),scale);
+            EditorTitleBar::SetMenuBounds(title,{});
 			auto* draw = ImGui::GetWindowDrawList();
 			const auto origin = ImGui::GetWindowPos();
 			const float width = ImGui::GetWindowSize().x;
+            // MenuBar追加後もロゴとWindow操作ボタンはタイトルバー全高で描画・Hit判定する。
+            ImGui::PushClipRect(origin,{origin.x+width,origin.y+height},false);
 			const bool focused = GetForegroundWindow() == window;
 			const auto foreground = ImGui::GetColorU32(focused ? ImGuiCol_Text : ImGuiCol_TextDisabled);
 			const auto accent = IM_COL32(242, 125, 46, focused ? 255 : 160);
@@ -224,11 +232,7 @@ namespace NexusEngine {
 			draw->AddPolyline(n, 4, accent, ImDrawFlags_None, logoSize * 13 / 256);
 			draw->AddLine(point(146, 76), point(214, 180), accent, logoSize * 13 / 256);
 			draw->AddLine(point(214, 76), point(146, 180), accent, logoSize * 13 / 256);
-			const auto titleSize = ImGui::CalcTextSize("NexusEngine");
 			const float controlsStart = origin.x + width - buttonWidth * 3;
-			draw->PushClipRect({origin.x + 52 * scale, origin.y}, {controlsStart, origin.y + height}, true);
-			draw->AddText({origin.x + (width - titleSize.x) * .5f, origin.y + (height - titleSize.y) * .5f}, foreground, "NexusEngine");
-			draw->PopClipRect();
 			const bool maximized = IsZoomed(window) != FALSE;
 			const bool resizable = (GetWindowLongPtrW(window, GWL_STYLE) & WS_MAXIMIZEBOX) != 0;
 			const char* ids[]{"###Minimize", "###Maximize", "###Close"};
@@ -261,15 +265,38 @@ namespace NexusEngine {
 				if(clicked) PostMessageW(window, WM_SYSCOMMAND, i == 0 ? SC_MINIMIZE : i == 1 ? (maximized ? SC_RESTORE : SC_MAXIMIZE) : SC_CLOSE, 0);
 			}
 			draw->AddLine({origin.x, origin.y + height - 1}, {origin.x + width, origin.y + height - 1}, ImGui::GetColorU32(ImGuiCol_Border));
+            ImGui::PopClipRect();
 		}
 		ImGui::End();
 		ImGui::PopStyleColor();
 		ImGui::PopStyleVar();
 	}
 
+	void ImGuiRenderer::DrawTitleBarCaption() {
+        auto* title = EditorTitleBar::Current();
+        if(!title || !nativeWindow_) return;
+        const auto menu = EditorTitleBar::MenuBounds(title);
+        const float scale = EditorTitleBar::Scale(title);
+        const auto size = ImGui::CalcTextSize("NexusEngine");
+        const float right = title->Pos.x+title->Size.x-138*scale;
+        const float left = std::max(title->Pos.x+52*scale,menu.Max.x+16*scale);
+        const float x = std::clamp(title->Pos.x+(title->Size.x-size.x)*.5f,left,std::max(left,right-size.x-8*scale));
+        auto* draw = title->DrawList;
+        if(right > left) {
+            draw->PushClipRect({left,title->Pos.y},{right,title->Pos.y+title->Size.y},true);
+            draw->AddText({x,title->Pos.y+(title->Size.y-size.y)*.5f},ImGui::GetColorU32(
+                GetForegroundWindow() == static_cast<HWND>(nativeWindow_) ? ImGuiCol_Text : ImGuiCol_TextDisabled),"NexusEngine");
+            draw->PopClipRect();
+        }
+        const RECT client{static_cast<LONG>(menu.Min.x-title->Pos.x),static_cast<LONG>(menu.Min.y-title->Pos.y),
+            static_cast<LONG>(menu.Max.x-title->Pos.x+1),static_cast<LONG>(menu.Max.y-title->Pos.y+1)};
+        ProjectWindow::ConfigureTitleBarClientArea(static_cast<HWND>(nativeWindow_),menu.GetWidth() > 0 ? client : RECT{});
+	}
+
 	void ImGuiRenderer::Record(GraphicsContext& context) {
 		auto* const commandList = static_cast<ID3D12GraphicsCommandList*>(context.GetNativeCommandList());
 		if(!initialized_ || commandList == nullptr) return;
+		DrawTitleBarCaption();
 		ImGui::Render();
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 	}

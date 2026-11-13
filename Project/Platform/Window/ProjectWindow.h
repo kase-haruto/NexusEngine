@@ -70,11 +70,14 @@ namespace NexusEngine {
 		void SetVisible(bool visible) noexcept;
 		/** Client-drawn chrome; dimensions are physical pixels. Zero restores the native frame. */
 		static void ConfigureCustomTitleBar(HWND window, int height, int controlsWidth) noexcept;
+		/** \brief タイトルバー内の操作UI領域をクライアント入力として扱う。座標はclient基準 */
+		static void ConfigureTitleBarClientArea(HWND window, RECT area) noexcept;
 
 	private:
 		int titleBarHeight_ = 0;
         InputFrame input_; //< Win32 messageが所有threadで更新する。外部handlerが消費しても状態を失わない
 		int titleBarControlsWidth_ = 0;
+		RECT titleBarClientArea_{}; //< メニューなどのクリックをcaptionのドラッグから除外する
 		static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
 		LRESULT					HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
 

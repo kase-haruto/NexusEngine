@@ -10,22 +10,74 @@ namespace NexusEngine {
 	inline void DrawHierarchy(EditorSession& session) {
 		if(ImGui::Begin("Hierarchy")) {
 			if(auto* level = session.GetLevel(); level != nullptr) {
-			if(auto* scene = level->GetScene()) {
-				// ForEach内で別のForEachを行わず、選択要求だけを収集する。
-				PersistentId selection = session.GetSelection();
-				scene->ForEach<NameComponent, PersistentIdComponent>(
-					[&](Entity, NameComponent& name, PersistentIdComponent& persistent) {
-						const auto itemId = std::to_string(persistent.value.high) + ":" + std::to_string(persistent.value.low);
-						ImGui::PushID(itemId.c_str());
-						if(ImGui::Selectable(name.name.c_str(), selection == persistent.value)) selection = persistent.value;
-						ImGui::PopID();
-					});
-				session.Select(selection);
-			}
+				if(auto* scene = level->GetScene()) {
+
+					PersistentId selection = session.GetSelection();
+
+					// Hierarchyの縞模様の配色
+					ImGui::PushStyleColor(
+						ImGuiCol_TableRowBg,
+						IM_COL32(20, 20, 20, 255));
+
+					ImGui::PushStyleColor(
+						ImGuiCol_TableRowBgAlt,
+						IM_COL32(56, 56, 56, 255));
+
+					constexpr ImGuiTableFlags flags =
+						ImGuiTableFlags_RowBg |
+						ImGuiTableFlags_ScrollY |
+						ImGuiTableFlags_NoBordersInBody;
+
+					if(ImGui::BeginTable(
+						   "##HierarchyTable",
+						   1,
+						   flags,
+						   ImVec2(0.0f, 0.0f))) {
+						ImGui::TableSetupColumn(
+							"Entity",
+							ImGuiTableColumnFlags_WidthStretch);
+
+						scene->ForEach<NameComponent, PersistentIdComponent>(
+							[&](Entity,
+								NameComponent&		   name,
+								PersistentIdComponent& persistent) {
+								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+
+								// PersistentIdをImGuiのIDとして使用
+								const auto itemId =
+									std::to_string(persistent.value.high) +
+									":" +
+									std::to_string(persistent.value.low);
+
+								ImGui::PushID(itemId.c_str());
+
+								const bool selected =
+									selection == persistent.value;
+
+								if(ImGui::Selectable(
+									   name.name.c_str(),
+									   selected,
+									   ImGuiSelectableFlags_SpanAllColumns)) {
+									selection = persistent.value;
+								}
+
+								ImGui::PopID();
+							});
+
+						ImGui::EndTable();
+					}
+
+					ImGui::PopStyleColor(2);
+
+					session.Select(selection);
+				}
 			}
 		}
+
 		ImGui::End();
 	}
+
 
 	/** \brief Local Transformを値コピーで編集し、SessionへID付き要求を渡す */
 	inline void DrawTransformInspector(EditorSession& session) {

@@ -1,7 +1,55 @@
 #include "Editor/Gui/EditorChrome.h"
 #include "Editor/Gui/Widgets/EditorIconButton.h"
+#include "Editor/Gui/MainMenuBar.h"
+#include "Editor/Gui/EditorTitleBarLayout.h"
 
 namespace {
+void EditorTitleMenuTests() {
+    MainMenuBar menu; PanelRegistry panels; EditorCommandRegistry commands; LocalizationService text;
+    assert(text.Load("Project/Resources/Editor/Localization")); text.SetLanguage("en");
+    int saves = 0; assert(commands.Register("file.save",{[&] { ++saves; }}));
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60; io.IniFilename = nullptr;
+    unsigned char* pixels; int w,h; io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h); io.Fonts->SetTexID(1);
+    const auto frame = [&](float width) {
+        io.DisplaySize.x = width; ImGui::NewFrame();
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0,0});
+        ImGui::BeginViewportSideBar(EditorTitleBar::WindowName,ImGui::GetMainViewport(),ImGuiDir_Up,38,
+            ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_MenuBar);
+        auto* title = ImGui::GetCurrentWindow(); title->MenuBarHeight = 38;
+        title->StateStorage.SetFloat(EditorTitleBar::Key(title,"TitleScale"),1);
+        EditorTitleBar::SetMenuBounds(title,{});
+        ImGui::End(); ImGui::PopStyleVar();
+        const auto reserved = ImGui::GetCurrentContext()->Viewports[0]->BuildWorkInsetMin.y;
+        menu.Draw(text,commands,panels,{},{});
+        assert(ImGui::GetCurrentContext()->Viewports[0]->BuildWorkInsetMin.y == reserved);
+        const auto bounds = EditorTitleBar::MenuBounds(title);
+        assert(bounds.Min.x >= title->Pos.x+52 && bounds.Max.x < title->Pos.x+title->Size.x-138);
+        ImGui::Render();
+    };
+    frame(1200); frame(1200);
+    auto* title = ImGui::FindWindowByName(EditorTitleBar::WindowName);
+    assert(title && !ImGui::FindWindowByName("##MainMenuBar"));
+    const auto menuSeed = ImHashStr("##MenuBar",0,title->ID);
+    ImGui::FocusWindow(title); ImGui::ActivateItemByID(ImHashStr("###File",0,menuSeed));
+    frame(1200); frame(1200);
+    auto& popups = ImGui::GetCurrentContext()->OpenPopupStack;
+    assert(!popups.empty() && popups.back().Window);
+    ImGui::ActivateItemByID(popups.back().Window->GetID("###file.save")); frame(1200); frame(1200);
+    assert(saves == 1);
+    if(!popups.empty()) ImGui::ClosePopupToLevel(0,true);
+    frame(380); frame(380);
+    ImGui::FocusWindow(title); ImGui::ActivateItemByID(ImHashStr("###AllMenus",0,menuSeed));
+    frame(380); frame(380);
+    assert(!popups.empty() && popups.back().Window);
+    ImGui::ActivateItemByID(popups.back().Window->GetID("###File")); frame(380); frame(380);
+    assert(popups.Size == 2 && popups.back().Window);
+    ImGui::ActivateItemByID(popups.back().Window->GetID("###file.save")); frame(380); frame(380);
+    assert(saves == 2);
+    ImGui::DestroyContext();
+    std::cout << "PASS: title-bar menus, logo/name space, command execution, narrow-window overflow and single reserved row\n";
+}
+
 void EditorToolbarTests() {
     EditorToolbarRegistry toolbar;
     EditorCommandRegistry commands;
