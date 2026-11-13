@@ -16,8 +16,22 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <fstream>
+#include <iterator>
 
 namespace NexusEngine {
+    void EditorIconGuidePanel::Draw(const EditorContext& context) {
+        if(ImGui::Button(context.text.Label("help.reloadGuide", "ReloadGuide").c_str())) loaded_ = false;
+        if(!loaded_) {
+            std::ifstream input(file_, std::ios::binary);
+            contents_.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+            loaded_ = true;
+        }
+        ImGui::SameLine();
+        if(ImGui::Button(context.text.Label("copy", "CopyGuide").c_str())) ImGui::SetClipboardText(contents_.c_str());
+        ImGui::Separator();
+        ImGui::TextWrapped("%s", contents_.empty() ? context.text.Text("help.guideUnavailable").c_str() : contents_.c_str());
+    }
 	namespace {
 		ImVec4 LogColor(LogLevel level) {
 			switch(level) {
@@ -233,7 +247,17 @@ namespace NexusEngine {
 		std::function<void(const std::filesystem::path&, size_t)> tree = [&](const auto& path, size_t depth) {
 			auto id = AssetCatalog::Utf8(path);
 			ImGui::PushID(id.c_str());
-			bool open = ImGui::TreeNodeEx("folder", ImGuiTreeNodeFlags_OpenOnArrow, "%s", AssetCatalog::Utf8(path.filename()).c_str());
+            const bool folderIcon = UI::FindEditorIcon("asset.folder") || UI::FindEditorIcon("asset.folderOpen");
+            const float side = ImGui::GetFontSize();
+            const auto padding = folderIcon ? std::string(static_cast<size_t>((side+ImGui::GetStyle().ItemInnerSpacing.x)/std::max(1.f,ImGui::CalcTextSize(" ").x))+1,' ') : std::string{};
+			bool open = ImGui::TreeNodeEx("folder", ImGuiTreeNodeFlags_OpenOnArrow, "%s%s", padding.c_str(), AssetCatalog::Utf8(path.filename()).c_str());
+            const auto* texture = UI::FindEditorIcon(open ? "asset.folderOpen" : "asset.folder");
+            if(!texture) texture = UI::FindEditorIcon("asset.folder");
+            if(texture) {
+                const auto p = ImGui::GetItemRectMin();
+                const float x = p.x+ImGui::GetTreeNodeToLabelSpacing(), y = p.y+(ImGui::GetItemRectSize().y-side)*.5f;
+                ImGui::GetWindowDrawList()->AddImage(*texture,{x,y},{x+side,y+side},{0,0},{1,1},ImGui::GetColorU32(ImVec4{1,1,1,1}));
+            }
 			if(ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) navigate = path;
 			if(open) {
 				if(depth < 12) {
@@ -262,6 +286,7 @@ namespace NexusEngine {
 				auto		path  = AssetCatalog::Utf8(entry.path);
 				ImGui::PushID(path.c_str());
 				auto label = entry.name + "  [" + context.text.Text(entry.typeKey) + ']';
+                UI::EditorInlineIcon(entry.typeKey);
 				if(ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && ImGui::IsMouseDoubleClicked(0)) {
 					if(entry.directory)
 						navigate = entry.path;
@@ -359,7 +384,7 @@ namespace NexusEngine {
 	void ViewportPanel::Draw(const EditorContext& context) {
 		static constexpr const char* states[] = {"runtime.disconnected", "runtime.starting", "runtime.connected", "runtime.running", "runtime.paused", "runtime.stopping", "runtime.error"};
 		auto						 state	  = static_cast<size_t>(session_.State());
-		// 操作ボタンは共通ツールバーで描画する。Panelは映像とオーバーレイに領域を使う。
+		// ローカルViewportの操作は画像上のオプションから行う。
 		if(!session_.IsLocalPreview()) {
 			ImGui::TextUnformatted(context.text.Text(states[state < 7 ? state : 6]).c_str());
 		}
@@ -377,10 +402,21 @@ namespace NexusEngine {
 			session_.SetGameInputFocus(session_.IsLocalPreview() && ImGui::IsWindowFocused() &&
                 !ImGui::GetIO().WantTextInput && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId));
 			if(session_.IsLocalPreview()) {
+				const auto imageItem = ImGui::GetCurrentContext()->LastItemData;
 				const auto	 imageEnd = ImGui::GetCursorScreenPos();
 				const float	 padding  = ImGui::GetStyle().WindowPadding.x;
 				const float	 line	  = ImGui::GetTextLineHeightWithSpacing();
 				const float	 header	  = ImGui::GetFrameHeightWithSpacing();
+                const auto chromeStyle = UI::CurrentEditorTheme().viewportTools;
+                const float chromeScale = ImGui::GetFontSize()/18, margin = chromeStyle.margin*chromeScale;
+                ImGui::BeginDisabled(context.session.IsPlaying());
+                const auto shelf = toolShelf_.Draw({origin.x+margin,origin.y+margin},
+                    {std::max(1.f,size.x-margin*2),std::max(1.f,size.y-margin*2)},context.text,tools_.ToolRegistry());
+                const float headerWidth = std::max(1.f,std::min(size.x-shelf.size.x-margin*3,
+                    ViewportHeader::Width()));
+                const auto viewportHeader = ViewportHeader::Draw({origin.x+size.x-margin-headerWidth,origin.y+margin},
+                    {headerWidth,std::max(1.f,size.y*.35f)},context.text,[&] { tools_.DrawHeader(context.text); });
+                ImGui::EndDisabled();
 				const float	 requestedWidths[]{220, 320, 480};
 				float		 previewWidth = std::min(requestedWidths[tools_.PreviewSize()] * ImGui::GetFontSize() / 16,
 													 std::min(size.x * .48f, (size.y - header - padding * 4) * 16 / 9));
@@ -408,17 +444,24 @@ namespace NexusEngine {
 					std::stable_sort(messages.begin(), messages.end(), [](const auto& a, const auto& b) { return a.error > b.error; });
 				}
 				const size_t shown			 = std::min<size_t>(4, messages.size());
-				const float	 diagnosticWidth = std::min(size.x - padding * 2, ImGui::GetFontSize() * 38);
-				const ImVec2 diagnosticOrigin{origin.x + padding, origin.y + padding};
+				const float	 diagnosticWidth = std::min(size.x - shelf.size.x - margin - padding * 2, ImGui::GetFontSize() * 38);
+				const ImVec2 diagnosticOrigin{shelf.position.x + shelf.size.x + padding, viewportHeader.position.y + viewportHeader.size.y + padding};
 				const ImVec2 diagnosticSize{diagnosticWidth, line * static_cast<float>(shown) + header + padding * 2};
-				const bool	 showMessages = shown && diagnosticWidth >= 120 && diagnosticSize.y < size.y * .5f;
+				const bool	 showMessages = shown && diagnosticWidth >= 120 && diagnosticSize.y < size.y * .5f &&
+                    diagnosticOrigin.y + diagnosticSize.y <= origin.y + size.y - padding;
 				const auto	 mouse		  = ImGui::GetMousePos();
 				const auto	 inside		  = [&](ImVec2 p, ImVec2 extent) {
 					return mouse.x >= p.x && mouse.y >= p.y && mouse.x < p.x + extent.x && mouse.y < p.y + extent.y;
 				};
 				// 子パネルを描く前に画像のhoverを使い、オーバーレイから背後への入力を遮断する。
+                const bool inputBlocked = shelf.Contains(mouse) || viewportHeader.Contains(mouse) ||
+                    (showPreview && inside(previewOrigin, previewSize)) || (showMessages && inside(diagnosticOrigin, diagnosticSize));
+                session_.SetGameInputFocus(ImGui::IsWindowFocused() && !inputBlocked &&
+                    !ImGui::GetIO().WantTextInput && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId));
+                // 小さな子Windowだけが入力を受ける。画像のItemを戻して、残りの領域は従来のPickingへ渡す。
+                ImGui::GetCurrentContext()->LastItemData = imageItem;
 				tools_.DrawOverlay(origin.x, origin.y, size.x, size.y,
-								   (showPreview && inside(previewOrigin, previewSize)) || (showMessages && inside(diagnosticOrigin, diagnosticSize)));
+                                   inputBlocked);
 				ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(.035f, .045f, .06f, .94f));
 				ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6);
 				const auto flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings;

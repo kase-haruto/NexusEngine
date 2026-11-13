@@ -1,4 +1,5 @@
 #include "EditorChrome.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/imgui_internal.h"
 #include <algorithm>
@@ -43,9 +44,9 @@ namespace NexusEngine {
 		Section	   section;
 		section.id	  = std::move(id);
 		section.order = order;
-		section.draw  = [labelKey = std::move(labelKey), command = std::move(command)](const auto& text, const auto& commands) {
+		section.draw  = [icon = sectionId, labelKey = std::move(labelKey), command = std::move(command)](const auto& text, const auto& commands) {
 			ImGui::BeginDisabled(!commands.CanExecute(command));
-			if(ImGui::Button(text.Label(labelKey, "button").c_str())) {
+			if(UI::EditorIconButton(icon, text.Label(labelKey, "button").c_str())) {
 				commands.Execute(command);
 			}
 			ImGui::EndDisabled();
@@ -90,6 +91,7 @@ namespace NexusEngine {
 
 		// Workspaceの終了・再生成時に、機能側のオブジェクトを借用するコールバックも解除する。
 		entries_.clear();
+		draggingSection_.clear();
 		ResetOffsets();
 		height_ = 0;
 	}
@@ -99,7 +101,7 @@ namespace NexusEngine {
 			return false;
 		}
 		offset = ClampToolbarOffset(offset);
-		if(GetOffset(id) == offset) {
+		if(GetOffset(id) == offset && !placements_.contains(id)) {
 			return true;
 		}
 
@@ -109,6 +111,7 @@ namespace NexusEngine {
 		} else {
 			offsets_[id] = offset;
 		}
+		placements_.erase(id);
 		++layoutRevision_;
 		return true;
 	}
@@ -137,22 +140,31 @@ namespace NexusEngine {
 		}
 	}
 	void EditorToolbarRegistry::ResetOffsets() {
-		if(!offsets_.empty()) {
+		if(!offsets_.empty() || !placements_.empty()) {
 			offsets_.clear();
+			placements_.clear();
 			++layoutRevision_;
 		}
 	}
+    void EditorToolbarRegistry::SetPlacements(const ToolbarPlacements& placements) {
+        ToolbarPlacements normalized;
+        for(const auto& [id,value] : placements) if(!id.empty() && IsValidToolbarPlacement(value)) normalized[id] = value;
+        if(placements_ != normalized) { placements_ = std::move(normalized); ++layoutRevision_; }
+    }
 	void EditorToolbarRegistry::Draw(const LocalizationService& text, const EditorCommandRegistry& commands) {
 		drawing_				  = true;
+        if(!ImGui::IsMouseDown(ImGuiMouseButton_Left)) draggingSection_.clear();
 		const ImVec2 contentStart = ImGui::GetCursorScreenPos();
 		const float	 right		  = contentStart.x + ImGui::GetContentRegionAvail().x;
 		const float	 scale		  = ImGui::GetFontSize() / 18.0f;
 		bool		 first		  = true;
+        float drawnBottom = contentStart.y;
 		for(auto& entry : entries_) {
 			// フォントサイズや言語の変更を毎フレーム反映し、固定ピクセル幅には依存しない。
-			const float width		  = entry.labelKey.empty() ? entry.section.minimumWidthEm * ImGui::GetFontSize() : ImGui::CalcTextSize(text.Text(entry.labelKey).c_str()).x + ImGui::GetStyle().FramePadding.x * 2;
+			const float width		  = entry.labelKey.empty() ? entry.section.minimumWidthEm * ImGui::GetFontSize() :
+                (UI::FindEditorIcon(entry.section.id) ? ImGui::GetFontSize() : ImGui::CalcTextSize(text.Text(entry.labelKey).c_str()).x) + ImGui::GetStyle().FramePadding.x * 2;
 			const auto	offset		  = GetOffset(entry.section.id);
-			const float requiredWidth = width + std::max(0.0f, offset[0] * scale);
+			const float requiredWidth = std::max(width, entry.previousWidth);
 
 			// 次の項目が収まる場合だけ同じ行に置く。収まらない場合は通常の次行位置を使う。
 			if(!first && ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + requiredWidth <= right) {
@@ -162,24 +174,49 @@ namespace NexusEngine {
 			// 自動配置の基準位置を残し、その位置へユーザー指定のオフセットを加える。
 			// 横方向は実寸、縦方向は画面の高さを考慮し、項目が操作不能な位置へ隠れないようにする。
 			const ImVec2 base		  = ImGui::GetCursorScreenPos();
-			const float	 visibleWidth = std::min(std::max(width, entry.previousWidth), right - contentStart.x);
+			const float	 visibleWidth = std::min(entry.previousWidth > 0 ? entry.previousWidth : width, std::max(0.f,right - contentStart.x));
 			const float	 maximumX	  = std::max(contentStart.x, right - visibleWidth);
 			const float	 maximumY	  = contentStart.y + ImGui::GetMainViewport()->Size.y * .4f;
-			const ImVec2 position{
+			ImVec2 position{
 				std::clamp(base.x + offset[0] * scale, contentStart.x, maximumX),
 				std::clamp(base.y + offset[1] * scale, contentStart.y, std::max(contentStart.y, maximumY))};
+            if(const auto found = placements_.find(entry.section.id); found != placements_.end()) {
+                const auto& placement = found->second;
+                position.x = std::clamp(placement[2] == 1 ? right-visibleWidth-placement[0]*scale : contentStart.x+placement[0]*scale,contentStart.x,maximumX);
+                position.y = std::clamp(contentStart.y+placement[1]*scale,contentStart.y,std::max(contentStart.y,maximumY));
+                // 自動配置の行が変わっても、現在の画面に対するオフセットへ再計算する。
+                offsets_[entry.section.id] = {(position.x-base.x)/scale,(position.y-base.y)/scale};
+            }
 			ImGui::SetCursorScreenPos(position);
 
 			// Groupの外接矩形を使い、Popup内部の最後のItemから次項目の配置計算を切り離す。
 			// 機能ごとにIDを分けるため、別セクションに同名ボタンがあっても衝突しない。
 			ImGui::PushID(entry.section.id.c_str());
 			ImGui::BeginGroup();
+            ImGui::BeginDisabled(ImGui::GetIO().KeyAlt || !draggingSection_.empty());
 			entry.section.draw(text, commands);
+            ImGui::EndDisabled();
 			ImGui::EndGroup();
 			const ImVec2 sectionMinimum = ImGui::GetItemRectMin();
 			const ImVec2 sectionMaximum = ImGui::GetItemRectMax();
+            drawnBottom = std::max(drawnBottom,sectionMaximum.y+ImGui::GetStyle().ItemSpacing.y);
 			const ImVec2 sectionSize	= ImGui::GetItemRectSize();
 			entry.previousWidth			= sectionSize.x;
+            if(!placements_.contains(entry.section.id) && offset != ToolbarOffset{}) {
+                const bool fromRight = position.x+sectionSize.x*.5f > (contentStart.x+right)*.5f;
+                placements_[entry.section.id] = {std::max(0.f,(fromRight ? right-position.x-sectionSize.x : position.x-contentStart.x)/scale),
+                    std::max(0.f,(position.y-contentStart.y)/scale),fromRight ? 1.f : 0.f};
+                ++layoutRevision_;
+            }
+            if(draggingSection_.empty() && ImGui::GetIO().KeyAlt &&
+               ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_NoNavOverride) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                draggingSection_ = entry.section.id;
+            if(draggingSection_ == entry.section.id && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                auto moved = GetOffset(entry.section.id);
+                moved[0] += ImGui::GetIO().MouseDelta.x / scale;
+                moved[1] += ImGui::GetIO().MouseDelta.y / scale;
+                SetOffset(entry.section.id, moved);
+            }
 
 			// 無効化されたボタンにも右クリックを許可し、配置変更と機能の実行可否を分離する。
 			// 既存のPopupが開いている場合は、背後のセクションで配置メニューを開かない。
@@ -220,13 +257,14 @@ namespace NexusEngine {
 
 			// 移動先も含む占有領域を通常のItemとして予約し、後続の項目とDockSpaceへ高さを伝える。
 			// 明示的にDummyを置くことで、Cursor移動だけで親Windowの境界を変える処理も避ける。
-			const ImVec2 occupied{
-				std::max(sectionSize.x, position.x - base.x + sectionSize.x),
-				std::max(sectionSize.y, position.y - base.y + sectionSize.y)};
+			const ImVec2 occupied{sectionSize.x, sectionSize.y};
 			ImGui::SetCursorScreenPos(base);
 			ImGui::Dummy(occupied);
 			first = false;
 		}
+        // 手動位置は後続項目の自動折り返しから切り離し、縦方向の占有だけをSidebarへ伝える。
+        const auto end = ImGui::GetCursorScreenPos();
+        ImGui::Dummy({0,std::max(0.f,drawnBottom-end.y)});
 		drawing_ = false;
 	}
 	// ステータス表示を省略してUIを調整する場合も、関数の呼び出し契約は維持する。

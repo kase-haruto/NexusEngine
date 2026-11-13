@@ -13,6 +13,8 @@ ReflectionValue EditorWorkspace::CaptureForReinstancing() {
 
     // 描画コールバックは持ち越さず、セクションIDに対応するオフセット値だけを保存する。
     ReflectionValue::Object toolbarOffsets;
+    ReflectionValue::Object toolbarPlacements;
+    for(const auto& [id,placement] : toolbar_.GetPlacements()) toolbarPlacements.emplace(id,CaptureReflection(placement));
     for(const auto& [id, offset] : toolbar_.GetOffsets()) {
         toolbarOffsets.emplace(id, CaptureReflection(offset));
     }
@@ -20,6 +22,7 @@ ReflectionValue EditorWorkspace::CaptureForReinstancing() {
         {"renderGraph", CaptureReflection(renderGraph_.Serialize())},
         {"graphAutoApply", CaptureReflection(renderGraph_.autoApply)},
         {"toolbarOffsets", ReflectionValue(std::move(toolbarOffsets))},
+        {"toolbarPlacements", ReflectionValue(std::move(toolbarPlacements))},
         {"playInSeparateWindow", CaptureReflection(playMode_ == PlayMode::SeparateWindow)},
         {"dirty", CaptureReflection(documents_.IsDirty())}, {"panels", ReflectionValue(std::move(panels))},
         {"viewport", std::move(viewport)}, {"dpi", CaptureReflection(dpiScale_)},
@@ -65,6 +68,14 @@ void EditorWorkspace::RestoreAfterReinstancing(const ReflectionValue& snapshot) 
         toolbarLayoutRevision_ = toolbar_.LayoutRevision();
     }
     bool dirty = false; RestoreReflection(snapshot.At("dirty"), dirty);
+    if(auto found = fields.find("toolbarPlacements"); found != fields.end()) {
+        ToolbarPlacements placements;
+        for(const auto& [id,value] : std::get<ReflectionValue::Object>(found->second.data)) {
+            ToolbarPlacement placement{}; RestoreReflection(value,placement); placements.emplace(id,placement);
+        }
+        toolbar_.SetPlacements(placements); settings_.user.toolbarPlacements = toolbar_.GetPlacements();
+        toolbarLayoutRevision_ = toolbar_.LayoutRevision();
+    }
     if(dirty) session_.MarkDirty();
     const auto& panels = std::get<ReflectionValue::Object>(snapshot.At("panels").data);
     for(auto& entry : panels_.Entries()) {

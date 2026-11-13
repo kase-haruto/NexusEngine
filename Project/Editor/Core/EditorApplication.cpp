@@ -229,6 +229,7 @@ namespace NexusEngine {
 
 	Result<void> EditorApplication::CreateScene(const std::filesystem::path& assetDirectory, const std::filesystem::path& startupLevel) {
 		imguiRenderer_.SetFontDirectory(paths_.engineRoot / "Resources/Assets/Fonts");
+		imguiRenderer_.SetIconDirectory(paths_.engineRoot / "Resources/Editor/Icons");
 		editPose_.reset();
         reportedAssetErrors_.clear();
 		// Sceneが使用するモデルとClipを選択する。GPU初期化前にもCPUだけで構築できる。

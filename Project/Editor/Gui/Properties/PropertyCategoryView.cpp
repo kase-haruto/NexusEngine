@@ -2,6 +2,7 @@
 #include "Editor/Services/PropertyEditService.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Core/EditorSession.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 #include <algorithm>
 
 namespace NexusEngine {
@@ -34,7 +35,13 @@ void PropertyCategoryView::Draw(const EditorContext& context) {
                     context.properties.Commit(); activeCategoryId_ = category->id;
                 }
                 if(selected) ImGui::PopStyleColor();
-                if(category->drawIcon) category->drawIcon(*ImGui::GetWindowDrawList(), origin, side, ImGui::GetColorU32(ImGuiCol_Text));
+                if(const auto* texture = UI::FindEditorIcon("details." + category->id)) {
+                    const float inset = side * .2f;
+                    ImGui::GetWindowDrawList()->AddImage(*texture,
+                        {origin.x + inset, origin.y + inset}, {origin.x + side - inset, origin.y + side - inset},
+                        {0, 0}, {1, 1}, ImGui::GetColorU32(ImVec4{1, 1, 1, 1}));
+                }
+                else if(category->drawIcon) category->drawIcon(*ImGui::GetWindowDrawList(), origin, side, ImGui::GetColorU32(ImGuiCol_Text));
                 else ImGui::GetWindowDrawList()->AddCircle({origin.x + side / 2, origin.y + side / 2}, side * .22f, ImGui::GetColorU32(ImGuiCol_Text));
                 if(ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) ImGui::SetTooltip("%s", context.text.Text(category->labelKey).c_str());
                 ImGui::PopID();

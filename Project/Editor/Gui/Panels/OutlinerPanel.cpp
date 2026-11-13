@@ -69,6 +69,19 @@ void OutlinerPanel::Draw(const EditorContext& context) {
     if(visibleDirty_) RebuildVisible();
     std::optional<std::pair<PersistentId,PersistentId>> reparent;
     bool remove = false;
+    std::string createCommand;
+    // Sceneの変更は行の走査後に実行する。既存Commandの実行可否とUndoを共用する。
+    const auto createMenu = [&] {
+        if(ImGui::BeginMenu(context.text.Text("edit.create").c_str())) {
+            for(const auto& [label, command] : {
+                std::pair{"edit.create", "scene.entity"}, {"scene.model", "scene.model"},
+                {"scene.camera", "scene.camera"}, {"scene.light", "scene.light"}, {"scene.sky", "scene.sky"}}) {
+                if(ImGui::MenuItem(context.text.Label(label, command).c_str(), nullptr, false, context.commands.CanExecute(command)))
+                    createCommand = command;
+            }
+            ImGui::EndMenu();
+        }
+    };
     std::optional<std::pair<PersistentId, std::string>> attach;
     const auto target = [&](PersistentId parent) {
         if(ImGui::BeginDragDropTarget()) {
@@ -80,65 +93,81 @@ void OutlinerPanel::Draw(const EditorContext& context) {
         }
     };
     ImGui::BeginChild("rows",{0,-ImGui::GetFrameHeightWithSpacing()});
-    ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(visible_.size()),ImGui::GetFrameHeightWithSpacing());
-    while(clipper.Step()) for(int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index) {
-        auto& row = rows_[visible_[index].row];
-        const float indent = static_cast<float>(visible_[index].depth)*ImGui::GetStyle().IndentSpacing;
-        if(indent > 0) ImGui::Indent(indent);
-        ImGui::PushID(row.key.c_str());
-        auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_FramePadding;
-        if(!searchText_.empty() || row.children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
-        if(context.selection.Contains(row.id)) flags |= ImGuiTreeNodeFlags_Selected;
-        ImGui::SetNextItemOpen(row.open,ImGuiCond_Always);
-        const bool expanded = ImGui::TreeNodeEx("entity",flags,"%s",row.name.c_str());
-        if(expanded != row.open) { row.open = expanded; visibleDirty_ = true; }
-        if(ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-            context.properties.Commit();
-            if(ImGui::GetIO().KeyShift && anchor_.IsValid()) {
-                auto anchor = std::find_if(visible_.begin(),visible_.end(),[&](const auto& visible) { return rows_[visible.row].id == anchor_; });
-                if(anchor != visible_.end()) {
-                    const auto first = std::min(static_cast<size_t>(index),static_cast<size_t>(anchor-visible_.begin()));
-                    const auto last = std::max(static_cast<size_t>(index),static_cast<size_t>(anchor-visible_.begin()));
-                    std::vector<PersistentId> ids;
-                    if(ImGui::GetIO().KeyCtrl) ids.assign(context.selection.All().begin(),context.selection.All().end());
-                    for(size_t i = first; i <= last; ++i) ids.push_back(rows_[visible_[i].row].id);
-                    context.selection.Replace(ids);
-                } else context.selection.Select(row.id);
-            } else { context.selection.Select(row.id,ImGui::GetIO().KeyCtrl); anchor_ = row.id; }
-        }
-        if(ImGui::BeginDragDropSource()) {
-            ImGui::SetDragDropPayload("NEXUS_ENTITY",&row.id,sizeof(row.id));
-            ImGui::TextUnformatted(row.name.c_str()); ImGui::EndDragDropSource();
-        }
-        target(row.id);
-        if(auto type = UI::AcceptSourceAttachment(context)) attach = std::make_pair(row.id, std::move(*type));
-        if(ImGui::BeginPopupContextItem()) {
-            if(!context.selection.Contains(row.id)) { context.properties.Commit(); context.selection.Select(row.id); }
-            if(ImGui::MenuItem(context.text.Text("edit.rename").c_str())) context.commands.Execute("focus.details");
-            // Hierarchyからも登録型を選べる。変更は描画終了後、既存の対象ID付きtransactionへ渡す。
-            if(ImGui::BeginMenu(context.text.Text("script.attach").c_str(), !context.session.IsPlaying())) {
-                for(const auto& [typeId, type] : context.types.Types()) {
-                    if(!typeId.starts_with("ManagedScript:") || !type.add) continue;
-                    const bool attached = type.contains(level->FindEntity(row.id));
-                    if(ImGui::MenuItem(context.text.Label(type.labelKey, typeId).c_str(), nullptr, attached, !attached))
-                        attach = std::make_pair(row.id, typeId);
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {ImGui::GetStyle().CellPadding.x, 0});
+    if(ImGui::BeginTable("Entities", 1, ImGuiTableFlags_RowBg | ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableSetupColumn("Name");
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(visible_.size()));
+        while(clipper.Step()) for(int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            auto& row = rows_[visible_[index].row];
+            const float indent = static_cast<float>(visible_[index].depth)*ImGui::GetStyle().IndentSpacing;
+            if(indent > 0) ImGui::Indent(indent);
+            ImGui::PushID(row.key.c_str());
+            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_FramePadding;
+            if(!searchText_.empty() || row.children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
+            if(context.selection.Contains(row.id)) flags |= ImGuiTreeNodeFlags_Selected;
+            ImGui::SetNextItemOpen(row.open,ImGuiCond_Always);
+            const bool expanded = ImGui::TreeNodeEx("entity",flags,"%s",row.name.c_str());
+            if(expanded != row.open) { row.open = expanded; visibleDirty_ = true; }
+            if(ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                context.properties.Commit();
+                if(ImGui::GetIO().KeyShift && anchor_.IsValid()) {
+                    auto anchor = std::find_if(visible_.begin(),visible_.end(),[&](const auto& visible) { return rows_[visible.row].id == anchor_; });
+                    if(anchor != visible_.end()) {
+                        const auto first = std::min(static_cast<size_t>(index),static_cast<size_t>(anchor-visible_.begin()));
+                        const auto last = std::max(static_cast<size_t>(index),static_cast<size_t>(anchor-visible_.begin()));
+                        std::vector<PersistentId> ids;
+                        if(ImGui::GetIO().KeyCtrl) ids.assign(context.selection.All().begin(),context.selection.All().end());
+                        for(size_t i = first; i <= last; ++i) ids.push_back(rows_[visible_[i].row].id);
+                        context.selection.Replace(ids);
+                    } else context.selection.Select(row.id);
+                } else { context.selection.Select(row.id,ImGui::GetIO().KeyCtrl); anchor_ = row.id; }
+            }
+            if(ImGui::BeginDragDropSource()) {
+                ImGui::SetDragDropPayload("NEXUS_ENTITY",&row.id,sizeof(row.id));
+                ImGui::TextUnformatted(row.name.c_str()); ImGui::EndDragDropSource();
+            }
+            target(row.id);
+            if(auto type = UI::AcceptSourceAttachment(context)) attach = std::make_pair(row.id, std::move(*type));
+            if(ImGui::BeginPopupContextItem()) {
+                if(!context.selection.Contains(row.id)) { context.properties.Commit(); context.selection.Select(row.id); }
+                createMenu();
+                ImGui::Separator();
+                if(ImGui::MenuItem(context.text.Text("edit.rename").c_str())) context.commands.Execute("focus.details");
+                // Hierarchyからも登録型を選べる。変更は描画終了後、既存の対象ID付きtransactionへ渡す。
+                if(ImGui::BeginMenu(context.text.Text("script.attach").c_str(), !context.session.IsPlaying())) {
+                    for(const auto& [typeId, type] : context.types.Types()) {
+                        if(!typeId.starts_with("ManagedScript:") || !type.add) continue;
+                        const bool attached = type.contains(level->FindEntity(row.id));
+                        if(ImGui::MenuItem(context.text.Label(type.labelKey, typeId).c_str(), nullptr, attached, !attached))
+                            attach = std::make_pair(row.id, typeId);
+                    }
+                    ImGui::EndMenu();
                 }
-                ImGui::EndMenu();
+                PropertyHandle handle{row.id,"PrimitiveRender","enabled"};
+                auto value = context.properties.Read(handle);
+                const bool supported = value && std::holds_alternative<bool>(*value);
+                if(ImGui::MenuItem(context.text.Text("property.visible").c_str(),nullptr,supported && std::get<bool>(*value),supported)) {
+                    context.properties.Preview(handle,!std::get<bool>(*value)); context.properties.Commit();
+                }
+                if(ImGui::MenuItem(context.text.Text("edit.delete").c_str())) remove = true;
+                ImGui::EndPopup();
             }
-            PropertyHandle handle{row.id,"PrimitiveRender","enabled"};
-            auto value = context.properties.Read(handle);
-            const bool supported = value && std::holds_alternative<bool>(*value);
-            if(ImGui::MenuItem(context.text.Text("property.visible").c_str(),nullptr,supported && std::get<bool>(*value),supported)) {
-                context.properties.Preview(handle,!std::get<bool>(*value)); context.properties.Commit();
-            }
-            if(ImGui::MenuItem(context.text.Text("edit.delete").c_str())) remove = true;
-            ImGui::EndPopup();
+            ImGui::PopID(); if(indent > 0) ImGui::Unindent(indent);
         }
-        ImGui::PopID(); if(indent > 0) ImGui::Unindent(indent);
+        ImGui::EndTable();
+    }
+    ImGui::PopStyleVar();
+    if(ImGui::BeginPopupContextWindow("CreateEntity", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+        createMenu();
+        ImGui::EndPopup();
     }
     ImGui::EndChild();
     ImGui::Selectable(context.text.Label("outliner.root","root-drop").c_str(),false); target({});
+    if(ImGui::BeginPopupContextItem("RootCreate")) { createMenu(); ImGui::EndPopup(); }
+    if(!createCommand.empty()) context.commands.Execute(createCommand);
     if(reparent && !context.sceneEdits.Reparent(reparent->first,reparent->second)) NEXUS_LOG_WARNING("Outliner",context.text.Text("edit.rejected"));
     if(remove) context.commands.Execute("edit.delete");
     if(attach) {

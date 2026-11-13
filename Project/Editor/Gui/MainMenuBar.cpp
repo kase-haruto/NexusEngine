@@ -60,7 +60,9 @@ void MainMenuBar::Draw(const LocalizationService& text, const EditorCommandRegis
         if(tools_.empty()) ImGui::TextDisabled("%s", text.Text("tools.empty").c_str());
         ImGui::EndMenu();
     }
-    if(ImGui::BeginMenu(text.Label("menu.help", "Help").c_str())) { item("help.about", "help.about"); ImGui::EndMenu(); }
+    if(ImGui::BeginMenu(text.Label("menu.help", "Help").c_str())) {
+        item("help.iconGuide", "help.iconGuide"); item("help.about", "help.about"); ImGui::EndMenu();
+    }
     ImGui::EndMainMenuBar();
 }
 }

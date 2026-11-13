@@ -5,10 +5,25 @@
 #include "Editor/Services/EditorSettings.h"
 #include "Editor/Runtime/ViewportSession.h"
 #include "Editor/Gui/ViewportTools.h"
+#include "Editor/Gui/ViewportChrome.h"
 #include "Foundation/Logging/BufferedLogSink.h"
 #include <array>
+#include <filesystem>
 
 namespace NexusEngine {
+// Engine同梱のガイドを表示する。外部アプリやインターネット接続を必要としない。
+class EditorIconGuidePanel final : public IEditorPanel {
+public:
+    explicit EditorIconGuidePanel(std::filesystem::path file) : file_(std::move(file)) {}
+    std::string_view Id() const noexcept override { return "EditorIconGuide"; }
+    std::string_view TitleKey() const noexcept override { return "help.iconGuide"; }
+    std::array<float, 2> InitialSize() const noexcept override { return {760, 640}; }
+    void Draw(const EditorContext& context) override;
+private:
+    std::filesystem::path file_;
+    std::string contents_;
+    bool loaded_ = false;
+};
 /*-----------------------------------------------------------------------------------------
  * OutputLogPanel
  * - 上限付きログsnapshotの表示、検索、copyを担当する
@@ -112,6 +127,7 @@ public:
 private:
     ViewportSession& session_; //< host所有
     ViewportTools& tools_; //< host所有。GPUへ直接アクセスしない
+    ViewportToolShelf toolShelf_; //< Viewport内部の小領域だけを使うTool選択UI
     std::shared_ptr<BufferedLogBuffer> logs_;
     uint64_t logRevision_ = 0;
     std::vector<OwnedLogRecord> records_;

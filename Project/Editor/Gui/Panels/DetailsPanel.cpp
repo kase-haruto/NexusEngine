@@ -6,6 +6,7 @@
 #include "Editor/Gui/ReflectedPropertyEditor.h"
 #include "Editor/Gui/Widgets/SourceAttachment.h"
 #include "Editor/Gui/Widgets/SearchBar.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 #include "Tools/Project/SourceCodeEditor.h"
 #include "ThirdParty/imgui/imgui.h"
 #include <algorithm>
@@ -57,6 +58,7 @@ void DetailsPanel::Draw(const EditorContext& context) {
         const auto slotKey=std::to_string(slot.high)+":"+std::to_string(slot.low);
         ImGui::PushID(slotKey.c_str());
         const auto label=context.text.Text(type.labelKey)+" #"+std::to_string(slotIndex+1);
+        UI::EditorInlineIcon("component.Script");
         ImGui::TextUnformatted(label.c_str()); ImGui::SameLine();
         ImGui::BeginDisabled(context.session.IsPlaying());
         if(ImGui::SmallButton(context.text.Text("script.detach").c_str())) { detachType = typeId; detachInstance=slot; }

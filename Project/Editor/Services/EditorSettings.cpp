@@ -97,6 +97,14 @@ void EditorSettingsStore::Load(const std::filesystem::path& root, const ProjectC
         }
     }
     user.recentLevels.clear();
+    constexpr std::string_view placementPrefix = "toolbar.placement.";
+    for(const auto& [key,value] : u) if(key.starts_with(placementPrefix) && key.size() > placementPrefix.size()) {
+        ToolbarPlacement placement{};
+        std::istringstream stream(value);
+        if(!(stream >> placement[0] >> placement[1] >> placement[2]) || !IsValidToolbarPlacement(placement)) continue;
+        stream >> std::ws;
+        if(stream.eof()) user.toolbarPlacements[key.substr(placementPrefix.size())] = placement;
+    }
     for(size_t i = 0; i < 10; ++i) {
         auto it = u.find("recent." + std::to_string(i));
         if(it != u.end() && !it->second.empty()) user.recentLevels.push_back(it->second);
@@ -119,6 +127,8 @@ bool EditorSettingsStore::SaveUser() const {
         }
         values["toolbar.offset." + id] = std::to_string(normalized[0]) + " " + std::to_string(normalized[1]);
     }
+    for(const auto& [id,value] : user.toolbarPlacements) if(!id.empty() && IsValidToolbarPlacement(value))
+        values["toolbar.placement."+id] = std::to_string(value[0])+" "+std::to_string(value[1])+" "+std::to_string(value[2]);
     return Write(userDirectory_ / "User.settings", values);
 }
 bool EditorSettingsStore::SaveProject() const {

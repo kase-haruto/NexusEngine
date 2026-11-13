@@ -871,6 +871,39 @@ void CacheAndWorkspaceIntegration() {
         for(const auto& entry : workspace.Panels().Entries()) assert(entry.Id() != "Properties");
         assert(detailsWindow->Active);
         auto* outlinerWindow = ImGui::FindWindowByName("###Outliner"); assert(outlinerWindow && outlinerWindow->Active);
+        ImGuiWindow* rowsWindow = nullptr;
+        for(auto* child : outlinerWindow->DC.ChildWindows)
+            if(ImGui::TableFindByID(child->GetID("Entities"))) rowsWindow = child;
+        assert(rowsWindow);
+        auto* entityTable = ImGui::TableFindByID(rowsWindow->GetID("Entities"));
+        assert(entityTable && (entityTable->Flags & ImGuiTableFlags_RowBg));
+        bool alternateBackground = false;
+        for(const auto& vertex : rowsWindow->DrawList->VtxBuffer)
+            if(vertex.col == ImGui::GetColorU32(ImGuiCol_TableRowBgAlt)) alternateBackground = true;
+        assert(alternateBackground);
+        // ツールバーの作成ボタンは除き、Hierarchyの行の右クリックから作成・Undoできる。
+        assert(!workspace.Toolbar().Unregister("scene.entity"));
+        LocalizationService menuText; assert(menuText.Load("Project/Resources/Editor/Localization"));
+        menuText.SetLanguage(legacySettings.user.language);
+        io.AddMousePosEvent(rowsWindow->WorkRect.Min.x + 60, rowsWindow->WorkRect.Min.y + ImGui::GetFrameHeight() * .5f);
+        frame();
+        io.AddMouseButtonEvent(ImGuiMouseButton_Right, true); frame();
+        io.AddMouseButtonEvent(ImGuiMouseButton_Right, false); frame(); frame();
+        auto& popups = ImGui::GetCurrentContext()->OpenPopupStack;
+        assert(!popups.empty() && popups.back().Window);
+        ImGui::ActivateItemByID(popups.back().Window->GetID(menuText.Text("edit.create").c_str()));
+        frame(); frame();
+        assert(popups.Size == 2 && popups.back().Window);
+        ImGui::ActivateItemByID(popups.back().Window->GetID("###scene.entity"));
+        frame(); frame();
+        assert(f.session.GetLevel()->GetScene()->GetEntityCount() == 10001);
+        assert(workspace.Commands().Execute("edit.undo")); frame();
+        assert(f.session.GetLevel()->GetScene()->GetEntityCount() == 10000);
+        assert(!workspace.Toolbar().Unregister("viewport.translate"));
+        assert(workspace.Toolbar().SetOffset("file.save", {24, 12})); frame();
+        EditorSettingsStore savedToolbar; savedToolbar.Load(std::filesystem::absolute("Project"));
+        assert((savedToolbar.user.toolbarOffsets.at("file.save") == ToolbarOffset{24, 12}));
+        assert(workspace.Toolbar().SetOffset("file.save", {})); frame();
         OutlinerPanel* outliner = nullptr;
         for(auto& entry : workspace.Panels().Entries()) if(entry.Id() == "Outliner") outliner = dynamic_cast<OutlinerPanel*>(entry.panel.get());
         assert(outliner); const auto builds = outliner->HierarchyBuilds();

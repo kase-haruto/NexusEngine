@@ -4,6 +4,7 @@
 #include "Editor/Gui/ReflectedPropertyEditor.h"
 #include "Runtime/Reflection/TypeRegistry.h"
 #include "Editor/Services/LocalizationService.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 #include <algorithm>
 #include <initializer_list>
 
@@ -23,6 +24,7 @@ void DrawType(const EditorContext& context, const char* id, std::initializer_lis
             const auto key=std::string(id)+":"+std::to_string(slot.high)+":"+std::to_string(slot.low);
             const auto label=context.text.Text(type->labelKey)+" #"+std::to_string(index+1)+"##"+key;
             ImGui::PushID(key.c_str());
+            UI::EditorInlineIcon(UI::EditorComponentIconKey(id));
             if(ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen))
                 for(const auto& property:type->properties)
                     if(std::ranges::find(excluded,property.id)==excluded.end()) DrawReflectedProperty(context,id,property.id,false,slot);
@@ -30,6 +32,7 @@ void DrawType(const EditorContext& context, const char* id, std::initializer_lis
         }
         return;
     }
+    UI::EditorInlineIcon(UI::EditorComponentIconKey(id));
     if(ImGui::CollapsingHeader(context.text.Label(type->labelKey, id).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
         for(const auto& property : type->properties)
             if(std::ranges::find(excluded, property.id) == excluded.end()) DrawReflectedProperty(context, id, property.id);

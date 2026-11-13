@@ -3,6 +3,12 @@
 #include "GuiTypes.h"
 
 namespace NexusEngine::UI {
+	struct ViewportToolShelfStyle {
+		float button = 28, padding = 4, spacing = 3, margin = 6;
+		float detailArrowWidth = 12, iconScale = .8f;
+		float detailPopupGap = 6; //< Headerの下端と詳細Popupの間の論理ピクセル
+		float groupSpacing = 6, toggleHeight = 18, expandedWidth = 150;
+	};
 	/* Widget実装が共有する意味ベースのTheme。ImGuiCol等のBackend定数は公開しない。 */
 	struct Theme {
 		Color text { 0.90f, 0.90f, 0.90f, 1.00f };
@@ -21,5 +27,6 @@ namespace NexusEngine::UI {
 		Vector2 framePadding { 6.0f, 3.0f };
 		float controlRounding = 4.0f;
 		float disabledOpacity = 0.45f;
+		ViewportToolShelfStyle viewportTools; //< 18pxフォントを基準に描画時にUI倍率へ変換する
 	};
 } // namespace NexusEngine::UI

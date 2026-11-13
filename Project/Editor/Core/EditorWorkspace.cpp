@@ -1,6 +1,7 @@
 #include "EditorWorkspace.h"
 #include "Editor/ImGui/ImGuiStyle.h"
 #include "Editor/Gui/EditorChrome.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
 #include "Editor/Gui/Panels/DetailsPanel.h"
 #include "Editor/Gui/Panels/UtilityPanels.h"
@@ -77,6 +78,10 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     panels_.RegisterFactory("PostProcessGraph", "panel.postProcessGraph", [this] { return std::make_unique<PostProcessGraphPanel>(renderGraph_); }, false);
     commands_.Register("viewport.openLog", {[this] { panels_.Open("OutputLog"); }, {}});
     panels_.RegisterFactory("Terminal", "panel.terminal", [this] { return std::make_unique<TerminalPanel>(console_); });
+    const auto iconGuide = (engineRoot.empty() ? root : engineRoot) / "Resources/Editor/Icons/README.md";
+    panels_.RegisterFactory("EditorIconGuide", "help.iconGuide", [iconGuide] {
+        return std::make_unique<EditorIconGuidePanel>(iconGuide);
+    }, false);
     panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
         return std::make_unique<ContentBrowserPanel>(*assets_, [this](const auto& path) {
             if((path.extension() == ".json" || path.extension() == ".level") && path.parent_path() == levels_->Root()) OpenLevel(path);
@@ -97,6 +102,7 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
 
     // 拡張機能のセクションを登録した後、同じ安定IDへ保存済みの位置調整を適用する。
     toolbar_.SetOffsets(settings_.user.toolbarOffsets);
+    toolbar_.SetPlacements(settings_.user.toolbarPlacements);
     toolbarLayoutRevision_ = toolbar_.LayoutRevision();
     for(auto& entry : panels_.Entries()) {
         auto it = settings_.user.panels.find(std::string(entry.Id()));
@@ -161,7 +167,6 @@ void EditorWorkspace::RegisterToolbar() {
     toolbar_.RegisterButton("file.save", "file.save", "file.save", 10);
     toolbar_.RegisterButton("edit.undo", "edit.undo", "edit.undo", 20);
     toolbar_.RegisterButton("edit.redo", "edit.redo", "edit.redo", 30);
-    toolbar_.RegisterButton("scene.entity", "edit.create", "scene.entity", 40);
     toolbar_.RegisterSection({"play.mode",90,12,[this](const auto& text,const auto&) {
         ImGui::TextDisabled("%s",text.Text(playMode_ == PlayMode::Editor ? "play.mode.editor" : "play.mode.window").c_str());
     }});
@@ -172,7 +177,7 @@ void EditorWorkspace::RegisterToolbar() {
     toolbar_.RegisterSection({"play.pause", 110, 7, [this](const auto& text, const auto& commands) {
         const auto label = session_.IsPaused() ? "play.resume" : "play.pause";
         ImGui::BeginDisabled(!commands.CanExecute("play.pause"));
-        if(ImGui::Button(text.Label(label, "button").c_str())) {
+        if(UI::EditorIconButton(label, text.Label(label, "button").c_str())) {
             commands.Execute("play.pause");
         }
         ImGui::EndDisabled();
@@ -201,13 +206,7 @@ void EditorWorkspace::RegisterToolbar() {
         ImGui::TextDisabled("Native: %s", state);
     }});
 
-    // Viewportの設定UIもPlay/Stopと同じ描画領域へ登録する。
-    // ツールバー自体はViewportToolsの型やカメラ・ギズモの内部状態を参照しない。
-    toolbar_.RegisterSection({"viewport.tools", 300, 24, [this](const auto& text, const auto&) {
-        ImGui::BeginDisabled(!viewport_.IsLocalPreview());
-        viewportTools_.DrawToolbar(text);
-        ImGui::EndDisabled();
-    }});
+    // ギズモ・視点・表示の操作はViewport内のオプションへ配置する。
 }
 
 void EditorWorkspace::RegisterCommands() {
@@ -277,6 +276,7 @@ void EditorWorkspace::RegisterCommands() {
     }
     commands_.Register("viewport.focus", {[this] { viewportTools_.FocusSelection(); }, [this, editing] { return editing() && session_.GetSelectedEntity().IsAlive(); }});
     commands_.Register("help.about", {[this] { showAbout_ = true; }, {}});
+    commands_.Register("help.iconGuide", {[this] { panels_.Open("EditorIconGuide"); }, {}});
     commands_.Bind("file.new", ImGuiKey_N, true, false, false, "Ctrl+N");
     commands_.Bind("file.open", ImGuiKey_O, true, false, false, "Ctrl+O");
     commands_.Bind("file.save", ImGuiKey_S, true, false, false, "Ctrl+S");
@@ -358,8 +358,9 @@ void EditorWorkspace::Draw() {
 
     // ドラッグの途中はメモリ上の位置だけを更新し、操作が終わってから設定を書き込む。
     // 変更番号で判定するため、操作していないフレームではディスクへアクセスしない。
-    if(toolbarLayoutRevision_ != toolbar_.LayoutRevision() && !ImGui::IsAnyItemActive()) {
+    if(toolbarLayoutRevision_ != toolbar_.LayoutRevision() && !ImGui::IsAnyItemActive() && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         settings_.user.toolbarOffsets = toolbar_.GetOffsets();
+        settings_.user.toolbarPlacements = toolbar_.GetPlacements();
         if(!settings_.SaveUser()) {
             notifications_.Push(text_.Text("settings.saveFailed"), true);
         }
@@ -396,6 +397,7 @@ void EditorWorkspace::Shutdown() {
 
     // 編集中に終了した場合も、最後に表示したオフセットを保存対象へ反映する。
     settings_.user.toolbarOffsets = toolbar_.GetOffsets();
+    settings_.user.toolbarPlacements = toolbar_.GetPlacements();
     if(!settings_.SaveUser()) NEXUS_LOG_WARNING("Editor", "Failed to save user settings.");
     layout_.Save(settings_.user.autoSaveLayout);
 

@@ -25,6 +25,7 @@ public:
         std::vector<std::string> recentLevels; //< 個人の最近使ったLevel、最大10件
         // セクションの安定IDをキーとして、個人用のツールバー配置を保存する。
         ToolbarOffsets toolbarOffsets;
+        ToolbarPlacements toolbarPlacements; //< リサイズで自動折返し位置が変わっても手動配置の行と端の距離を保つ
     } user;
     struct Editor {
         std::string giMode = "Off"; //< Off / DDGI / RTGI / Baked

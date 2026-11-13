@@ -1,4 +1,5 @@
 #pragma once
+#include "Editor/Services/ViewportToolRegistry.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/PropertyEditService.h"
@@ -17,7 +18,7 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class ViewportTools final {
 	public:
-		ViewportTools(EditorSession& session, PropertyEditService& properties) : session_(session), properties_(properties), gizmo_(session, properties) {}
+		ViewportTools(EditorSession& session, PropertyEditService& properties);
 		/** \brief CPU Geometryの寿命を借用し、meshの境界を一度だけ計算する */
 		void SetModel(const ModelAssetData& model, const ModelInstance& pose);
 		/** \brief 編集時だけCameraを上書きする。Runtime再生Cameraは保持する */
@@ -28,8 +29,12 @@ namespace NexusEngine {
 		void FocusSelection();
 		/** \brief 主選択の表示形状の中心とEntityの軸/scaleからGizmo行列を作る。形状がなければEntity原点 */
 		std::optional<Matrix4x4> GetSelectionPivot() const;
-		/** 共通ツールバーに登録するViewport操作UIを描画する。配置領域はWorkspaceが用意する。 */
-		void DrawToolbar(const LocalizationService& text);
+		/** \brief Toolの記述と既存Commandの登録先。拡張側もPanelを変更せず追加できる */
+		ViewportToolRegistry& ToolRegistry() noexcept { return toolRegistry_; }
+		/** \brief 独自Toolを登録する。選択確定・ギズモ停止はControllerが行い、その後activateを呼ぶ */
+		bool RegisterTool(ViewportToolDescriptor tool, std::function<void()> activate = {});
+		/** \brief 座標系・Snap・視点・表示だけをHeaderへ描画する */
+		void DrawHeader(const LocalizationService& text);
 		/** Viewport画像の後に、入力処理・ガイド・ギズモを描画する。 */
 		void DrawOverlay(float x, float y, float width, float height, bool inputBlocked = false);
 		int	 PreviewSize() const noexcept { return previewSize_; }
@@ -43,6 +48,10 @@ namespace NexusEngine {
 		void			RestoreAfterReinstancing(const ReflectionValue& snapshot);
 
 	private:
+		void DrawSetting(const LocalizationService& text, int item);
+		void ActivateTool(const std::string& id, int transformMode);
+		ViewportToolRegistry toolRegistry_;
+		std::string activeTool_ = "viewport.translate"; //< Tool選択とTransformモードの対応はControllerが管理する
 		struct CameraGuide {
 			EntityId			   entity;
 			Matrix4x4			   world;

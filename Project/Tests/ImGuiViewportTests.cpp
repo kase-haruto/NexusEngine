@@ -5,8 +5,10 @@
 #include <array>
 #include <cstring>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 #include "Editor/ImGui/ImGuiRenderer.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 #include "Graphics/Renderer/GraphicsSystem.h"
 #include "Graphics/Renderer/GraphicsContext.h"
 #include "Foundation/Logging/Logger.h"
@@ -41,7 +43,18 @@ namespace {
                 info->AddStorageFilterEntries(&filter);
             }
             gui.SetFontDirectory(std::filesystem::absolute(L"Project/Resources/Assets/Fonts"));
+            const auto icons = std::filesystem::absolute("Generated/ImGuiIcons");
+            std::filesystem::create_directories(icons);
+            // 実際に配置されたPNGもWICで読み込み、GPU登録と終了時の解放まで検証する。
+            for(const auto& entry : std::filesystem::directory_iterator("Project/Resources/Editor/Icons"))
+                if(entry.path().extension() == ".png") std::filesystem::copy_file(entry.path(),icons / entry.path().filename(),std::filesystem::copy_options::overwrite_existing);
+            std::filesystem::copy_file("Project/Resources/Assets/Models/Sponza/white.png", icons / "test.action.png", std::filesystem::copy_options::overwrite_existing);
+            std::ofstream(icons / "invalid.png", std::ios::trunc) << "invalid PNG";
+            gui.SetIconDirectory(icons);
             auto initialized=gui.Initialize(context); if(!initialized) return initialized;
+            Require(UI::FindEditorIcon("test.action") != nullptr, "Editor PNG icon was not loaded.");
+            Require(UI::FindEditorIcon("file.save") && UI::FindEditorIcon("viewport.translate") && UI::FindEditorIcon("details.Material"), "Configured editor PNGs were not loaded.");
+            Require(UI::FindEditorIcon("invalid") == nullptr, "Invalid PNG should use a text fallback.");
             Require((ImGui::GetIO().ConfigFlags&ImGuiConfigFlags_ViewportsEnable)!=0,"Viewports are disabled.");
             Require(ImGui::GetPlatformIO().Renderer_RenderWindow && ImGui::GetPlatformIO().Platform_CreateWindow,"Platform backends are missing.");
             ImGui::GetIO().IniFilename=nullptr;
@@ -62,6 +75,8 @@ namespace {
                 ImGui::PushFont(nullptr,ImGui::GetStyle().FontSizeBase*canvasFontScale);
                 if(focusInput) { ImGui::SetKeyboardFocusHere(); focusInput=false; }
                 ImGui::InputText("Keyboard",input.data(),input.size());
+                UI::EditorIconButton("test.action", "Icon###test");
+                UI::EditorIconButton("invalid", "Fallback###fallback");
                 const auto image=graphics->GetSceneViewportImage();
                 ImGui::Image(ImTextureRef(image.backendReference),{190,120});
                 detached=ImGui::GetWindowViewport()->ID;
@@ -127,6 +142,7 @@ namespace {
         graphics.Shutdown();
         Require(!IsWindow(shutdownWindow),"Application shutdown leaked a detached platform HWND.");
         Require(ImGui::GetCurrentContext()==nullptr,"ImGui context survived shutdown.");
+        Require(UI::editorIcons.empty(), "Editor icon references survived shutdown.");
         if(info) for(UINT64 i=0;i<info->GetNumStoredMessages();++i) {
             SIZE_T bytes=0; info->GetMessage(i,nullptr,&bytes); std::vector<uint8_t> storage(bytes);
             auto* message=reinterpret_cast<D3D12_MESSAGE*>(storage.data()); info->GetMessage(i,message,&bytes);

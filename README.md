@@ -189,6 +189,10 @@ EditorのPlayとゲーム単体起動で共通のSystemを動かす方法は、[
 
 エディタの起動、編集操作、拡張方法、検証と制限は[Editor利用ガイド](Project/Docs/EditorUserGuide.md)を参照してください。
 
+ボタン画像の配置名、Detailsタブの画像化、ツールバー配置の編集・保存は[エディタのアイコンと配置ガイド](Project/Resources/Editor/Icons/README.md)を参照してください。エディタ内の「ヘルプ → エディタのアイコンと配置ガイド」からも閲覧できます。
+
+左側のTool Shelf、設定Header、Tool登録・Command・入力の分離とリサイズ補正は[Viewport Tool Shelf](Project/Docs/ViewportToolShelf.md)にまとめています。
+
 Live++ の導入・操作、Reflection の自動生成と Reinstancing による状態移行は
 [ライブコーディング](Project/Docs/LiveCoding.md)を参照してください。
 

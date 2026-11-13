@@ -1,5 +1,6 @@
 #include "ImGuiRenderer.h"
 #include "ImGuiStyle.h"
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -27,6 +28,35 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
 namespace NexusEngine {
+    void ImGuiRenderer::LoadEditorIcons() {
+        // engineRoot/Resources/Editor/Icons。Game側のAssetやthumbnail上限とは独立させる。
+        if(iconDirectory_.empty()) return;
+        std::error_code error;
+        std::filesystem::directory_iterator files(iconDirectory_, error), end;
+        for(; !error && files != end && icons_.size() < 128; files.increment(error)) {
+            const auto path = files->path();
+            if(path.extension() != ".png") continue;
+            std::ifstream input(path, std::ios::binary | std::ios::ate);
+            if(!input) continue;
+            const auto size = input.tellg();
+            if(size <= 0 || size > 4 * 1024 * 1024) continue;
+            std::vector<uint8_t> bytes(static_cast<size_t>(size));
+            input.seekg(0); input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            if(!input) continue;
+            auto image = WicImageDecoder{}.Decode(bytes);
+            if(!image || !image->width || !image->height || image->width > 1024 || image->height > 1024) {
+                NEXUS_LOG_WARNING("Editor", "Invalid editor icon: " + path.filename().string());
+                continue;
+            }
+            auto texture = std::make_unique<ImTextureData>();
+            texture->Create(ImTextureFormat_RGBA32, static_cast<int>(image->width), static_cast<int>(image->height));
+            std::memcpy(texture->Pixels, image->rgbaPixels.data(), image->rgbaPixels.size());
+            ImGui::RegisterUserTexture(texture.get());
+            const auto key = path.stem().string();
+            UI::SetEditorIcon(key, texture->GetTexRef());
+            icons_.emplace(key, std::move(texture));
+        }
+    }
     ImTextureRef ImGuiRenderer::FindPreview(const std::string& key) const {
         auto found = previews_.find(key);
         return found == previews_.end() ? ImTextureRef{} : found->second->GetTexRef();
@@ -143,6 +173,7 @@ namespace NexusEngine {
 			MulDiv(38, static_cast<int>(GetDpiForWindow(static_cast<HWND>(nativeWindow_))), 96),
 			MulDiv(138, static_cast<int>(GetDpiForWindow(static_cast<HWND>(nativeWindow_))), 96));
 		graphicsSystem_ = context.graphicsSystem;
+		LoadEditorIcons();
 		return {};
 	}
 
@@ -254,6 +285,10 @@ namespace NexusEngine {
 		nativeWindow_ = nullptr;
 		graphicsSystem_ = nullptr;
 		if(initialized_) {
+            for(auto& [key, texture] : icons_) {
+                static_cast<void>(key);
+                if(!ImGui::GetPlatformIO().Textures.contains(texture.get())) ImGui::GetPlatformIO().Textures.push_back(texture.get());
+            }
             // NewFrame前に作られた画像もBackendの停止対象へ含める。
             for(auto& [key, texture] : previews_) {
                 static_cast<void>(key);
@@ -264,6 +299,9 @@ namespace NexusEngine {
 			initialized_ = false;
 		}
         if(ImGui::GetCurrentContext() != nullptr) {
+            UI::ClearEditorIcons();
+            for(auto& [key, texture] : icons_) { static_cast<void>(key); ImGui::UnregisterUserTexture(texture.get()); }
+            icons_.clear();
             for(auto& [key, texture] : previews_) { static_cast<void>(key); ImGui::UnregisterUserTexture(texture.get()); }
             previews_.clear();
             ImGui::DestroyContext();

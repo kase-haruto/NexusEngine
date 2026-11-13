@@ -1,3 +1,4 @@
+#include "Editor/Gui/Widgets/EditorIconButton.h"
 // EditorServicesTests.cppのFixtureと同じ編集サービスを使用する統合検証。
 void DetailsCategoryIntegration() {
     Fixture f;
@@ -54,7 +55,17 @@ void DetailsCategoryIntegration() {
         assert(panel.ActiveCategory() == category);
     };
     frame(); frame(); assert(panel.ActiveCategory() == "Object");
+    // 一部のタブだけに画像を割り当てても、既存の操作IDと他のタブを維持する。
+    UI::SetEditorIcon("details.Object", ImTextureRef(static_cast<ImTextureID>(71)));
+    frame();
+    bool categoryImage = false;
+    for(const auto& draw : child("CategoryNavigation")->DrawList->CmdBuffer)
+        if(draw.GetTexID() == 71 && draw.ElemCount > 0) categoryImage = true;
+    assert(categoryImage);
     choose("Rendering");
+    choose("Object");
+    UI::ClearEditorIcons();
+    frame();
     choose("Material");
     auto* page = child("PropertyPage");
     ImGui::FocusWindow(page);

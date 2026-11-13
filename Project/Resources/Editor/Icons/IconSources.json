@@ -1,0 +1,234 @@
+[
+  {
+    "source": "save_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "file.save.png",
+    "usage": "保存",
+    "width": 24,
+    "height": 24,
+    "sha256": "8c109bdd93fddbc9d3a775bc718af58e13603f3256f9b5e8ced6376cb8aeb5c3"
+  },
+  {
+    "source": "play_arrow_24dp_9DC384_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "play.start.png",
+    "usage": "再生",
+    "width": 24,
+    "height": 24,
+    "sha256": "112ff4f30d4f955b8a055e776f1e4dff0b6491ea5959bd25d51bc62281d6d14d"
+  },
+  {
+    "source": "play_arrow_24dp_9DC384_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "play.resume.png",
+    "usage": "再開",
+    "width": 24,
+    "height": 24,
+    "sha256": "112ff4f30d4f955b8a055e776f1e4dff0b6491ea5959bd25d51bc62281d6d14d"
+  },
+  {
+    "source": "pause_24dp_F9DB78_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "play.pause.png",
+    "usage": "一時停止",
+    "width": 24,
+    "height": 24,
+    "sha256": "273bbadd41c3c62b6eb58f9813852b752a670c2cfe932768e83ebe5c7f0e3b86"
+  },
+  {
+    "source": "stop_24dp_789DE5_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "play.stop.png",
+    "usage": "停止",
+    "width": 24,
+    "height": 24,
+    "sha256": "695027646b6bea3cab59533654eaff6093f4e26266adbfebd5c743dba49fc5e3"
+  },
+  {
+    "source": "undo_24dp_789DE5_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "edit.undo.png",
+    "usage": "Undo",
+    "width": 24,
+    "height": 24,
+    "sha256": "088eab4a9d851be601e32293afa5cd75e72b95cfb275db2730493beae5be493a"
+  },
+  {
+    "source": "redo_24dp_789DE5_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "edit.redo.png",
+    "usage": "Redo",
+    "width": 24,
+    "height": 24,
+    "sha256": "2fcef885f97152067630f2eebc06e3950fc96a676169233dec5e05d3845be421"
+  },
+  {
+    "source": "reload.png",
+    "target": "project.reloadCpp.png",
+    "usage": "C++ Reload",
+    "width": 24,
+    "height": 24,
+    "sha256": "3d514d9aa21a007570329de34d9d531793647cb4dd0e9c25f8ad17ffa63cf0bb"
+  },
+  {
+    "source": "highlight_mouse_cursor_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "viewport.select.png",
+    "usage": "選択",
+    "width": 24,
+    "height": 24,
+    "sha256": "a676df195def76d05bc6219ec80b1214f5a66dac1f170c506cea3911ea1d460a"
+  },
+  {
+    "source": "translate.png",
+    "target": "viewport.translate.png",
+    "usage": "移動",
+    "width": 24,
+    "height": 24,
+    "sha256": "c2d19e2010239169ed3a0882c9f3871acac6b92a7300a041efaf6a7c27e360ea"
+  },
+  {
+    "source": "rotate.png",
+    "target": "viewport.rotate.png",
+    "usage": "回転",
+    "width": 24,
+    "height": 24,
+    "sha256": "b588a7d10e7930aa2b5cd92671eb2e5e0d2e1f704603411d3b3ef7ed983d4de0"
+  },
+  {
+    "source": "scale.png",
+    "target": "viewport.scale.png",
+    "usage": "拡縮",
+    "width": 24,
+    "height": 24,
+    "sha256": "f709887ff1f821b1cd95547e6a97f6131582a1358986bec3e8265c7b25e18e6b"
+  },
+  {
+    "source": "deployed_code_24dp_F9DB78_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "viewport.local.png",
+    "usage": "ローカル座標（オブジェクト）",
+    "width": 24,
+    "height": 24,
+    "sha256": "df453c39630488e8a9cf2a2f088a39d8648e848590669247301e024767b77225"
+  },
+  {
+    "source": "earth.png",
+    "target": "viewport.world.png",
+    "usage": "ワールド座標",
+    "width": 24,
+    "height": 24,
+    "sha256": "ae6f50c8f571695490c35c27ac6c8faf5e5c8b5510f55cb2354ce28f3609b2bb"
+  },
+  {
+    "source": "snap_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "viewport.snap.png",
+    "usage": "スナップ",
+    "width": 24,
+    "height": 24,
+    "sha256": "1ed5dd0daad9446862310d3f419e952b706681520dc2666ffc550a6a193c73a6"
+  },
+  {
+    "source": "camera.png",
+    "target": "viewport.cameraTools.png",
+    "usage": "視点",
+    "width": 24,
+    "height": 24,
+    "sha256": "0c2a7ff1224d7196fb22cfe3c363991aff082bc9b3afe96ba01a1b2d078f7ddf"
+  },
+  {
+    "source": "view.png",
+    "target": "viewport.show.png",
+    "usage": "表示",
+    "width": 24,
+    "height": 24,
+    "sha256": "d40754ef6f8228e7f84ee89857dfebea55f3192c2f4a5eaaa131d32d9b19a09e"
+  },
+  {
+    "source": "object.png",
+    "target": "details.Object.png",
+    "usage": "Details: オブジェクト",
+    "width": 24,
+    "height": 24,
+    "sha256": "65c99bbde47e394d5de2383eedeb0331df8e9e10da1929e39c7e5b8c1bb47a4b"
+  },
+  {
+    "source": "rendering.png",
+    "target": "details.Rendering.png",
+    "usage": "Details: レンダリング",
+    "width": 24,
+    "height": 24,
+    "sha256": "b21745cd64caeb095738f4c39765e27631f879b5bb254de1acd731b016b4455b"
+  },
+  {
+    "source": "material.png",
+    "target": "details.Material.png",
+    "usage": "Details: マテリアル",
+    "width": 24,
+    "height": 24,
+    "sha256": "b737553cca58bdcc53c2548864a13bafb74f81c7db9182bd125ce7a0d4028a40"
+  },
+  {
+    "source": "cameraComponent.png",
+    "target": "details.Camera.png",
+    "usage": "Details: カメラ",
+    "width": 24,
+    "height": 24,
+    "sha256": "7fbbef3691afae1d4a36e2fc71e8fb75cec3788108a471bba95f675b4ae61c95"
+  },
+  {
+    "source": "light.png",
+    "target": "details.Light.png",
+    "usage": "Details: ライト",
+    "width": 24,
+    "height": 24,
+    "sha256": "9f3c26920abb77910c2cb79591b3f9adc580df3e6a711b6d0710638cddf6e41f"
+  },
+  {
+    "source": "othercomponent.png",
+    "target": "details.Other.png",
+    "usage": "Details: その他",
+    "width": 24,
+    "height": 24,
+    "sha256": "b55b77b8ab2fcf0d426085c2510acfacf4d0e6d2d4848e618f21f4dc265718be"
+  },
+  {
+    "source": "physics.png",
+    "target": "component.Physics.png",
+    "usage": "物理コンポーネント見出し",
+    "width": 24,
+    "height": 24,
+    "sha256": "61f22ea9f2e30e924bef93d9b9ca42c07e6ba6aaca9663379a220159ccf9534a"
+  },
+  {
+    "source": "sqriptcomponent.png",
+    "target": "component.Script.png",
+    "usage": "スクリプトコンポーネント表示",
+    "width": 24,
+    "height": 24,
+    "sha256": "d229de697a7bbd12c2df63544e273914b6703d1a5d2b55ee1a8b34e974dccad4"
+  },
+  {
+    "source": "folder_24dp_F9DB78_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "asset.folder.png",
+    "usage": "フォルダ",
+    "width": 24,
+    "height": 24,
+    "sha256": "4af0ac182408f61211ac7263bb6166841c34cafb0bec222c4db33f118f17bc13"
+  },
+  {
+    "source": "folder_open_24dp_F9DB78_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "asset.folderOpen.png",
+    "usage": "展開中フォルダ",
+    "width": 24,
+    "height": 24,
+    "sha256": "d0e437e86b208b130df14491556fefa8a8fdcd0589ee7974723dd1d37417f5e1"
+  },
+  {
+    "source": "deployed_code_24dp_F9DB78_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "asset.model.png",
+    "usage": "モデル",
+    "width": 24,
+    "height": 24,
+    "sha256": "df453c39630488e8a9cf2a2f088a39d8648e848590669247301e024767b77225"
+  },
+  {
+    "source": "image_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.png",
+    "target": "asset.texture.png",
+    "usage": "画像・テクスチャ",
+    "width": 24,
+    "height": 24,
+    "sha256": "9edd94c4b170e36f304dfc5687191b6dbc85a6ae91a6127d34bf6d20d0105ee6"
+  }
+]

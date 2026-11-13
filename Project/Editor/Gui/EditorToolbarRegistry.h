@@ -34,6 +34,9 @@ namespace NexusEngine {
 			return offsets_;
 		}
 		void   ResetOffsets();
+		/** \brief 手動配置の端からの距離と行を復元する。小さい画面への一時クランプでは保存値を変更しない */
+		void SetPlacements(const ToolbarPlacements& placements);
+		const ToolbarPlacements& GetPlacements() const noexcept { return placements_; }
 		size_t LayoutRevision() const noexcept {
 			return layoutRevision_;
 		}
@@ -55,6 +58,8 @@ namespace NexusEngine {
 		};
 		std::vector<Entry> entries_;
 		ToolbarOffsets	   offsets_;
+		ToolbarPlacements placements_;
+		std::string draggingSection_;
 		size_t			   layoutRevision_ = 0;
 		bool			   drawing_		   = false;
 		float			   height_		   = 0; //< 折り返し後の高さを次フレームの作業領域予約へ反映する
