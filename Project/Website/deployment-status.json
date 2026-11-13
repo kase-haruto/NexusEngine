@@ -1,13 +1,28 @@
 {
   "site_url": "https://nexus-engine.nexus-engine-website.workers.dev",
   "worker_name": "nexus-engine",
-  "deployment_version": "9ffdb315-a037-4627-8a50-d890fcb1e35a",
-  "site_verified": true,
+  "deployment_version": null,
+  "site_verified": false,
   "downloads_published": true,
   "hosting": "Cloudflare Workers Free static assets only",
   "distribution": "GitHub Releases",
-  "release_url": "https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-aab3af7f3cf0",
+  "release_url": "https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-93667918dc43",
+  "source_commit": "e81007f",
   "r2_used": false,
-  "verified_versions": ["1.1.1", "1.1.0", "1.0.0"],
-  "installer": "Generated/LauncherDistribution/Website-Public-20261113-002/Setup/launcherSetup.exe"
+  "verified_versions": [
+    "1.2.1",
+    "1.2.0",
+    "1.1.1",
+    "1.1.0",
+    "1.0.0"
+  ],
+  "verified_github_assets": 6,
+  "site_catalog_versions": [
+    "1.2.0",
+    "1.1.1",
+    "1.1.0",
+    "1.0.0"
+  ],
+  "catalog_update_status": "awaiting-cloudflare-authentication",
+  "installer": "Generated/LauncherDistribution/Reuse121/Setup/launcherSetup.exe"
 }

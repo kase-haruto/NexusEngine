@@ -1,22 +1,32 @@
 {
+  "engines/nexus-1.2.1-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/nexus-1.2.1-Release.zip",
+    "bytes": 165928742,
+    "sha256": "099e37f3a00a1c654a39f6bdead9588554021b298dd07fae9d6e34876476ad14"
+  },
+  "engines/nexus-1.2.0-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/nexus-1.2.0-Release.zip",
+    "bytes": 109079692,
+    "sha256": "865cc5fb58199067518c61541447325cfa1bb64a831ec35ea1651e438ec46416"
+  },
   "engines/nexus-1.1.1-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-aab3af7f3cf0/nexus-1.1.1-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/nexus-1.1.1-Release.zip",
     "bytes": 107321912,
     "sha256": "0a67419a1fa772126d6f19884d4297a16ec68246160af8ade336f55e67427e77"
   },
   "engines/nexus-1.1.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-aab3af7f3cf0/nexus-1.1.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/nexus-1.1.0-Release.zip",
     "bytes": 107137056,
     "sha256": "8979163e81f241fe49afb6bea37144e7c3616e171d109d9cb2ee015d1945c6d2"
   },
   "engines/nexus-1.0.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-aab3af7f3cf0/nexus-1.0.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/nexus-1.0.0-Release.zip",
     "bytes": 76096459,
     "sha256": "12125680e59a7afc410d364634824502b8b63ecbd9c63f43f5494d2bfef478c8"
   },
-  "launcher/ecf30093b544428bb1fc688197c338409915077fa3cf3069852b4854e014c64f/launcherSetup.exe": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-aab3af7f3cf0/launcherSetup.exe",
-    "bytes": 175052966,
-    "sha256": "ecf30093b544428bb1fc688197c338409915077fa3cf3069852b4854e014c64f"
+  "launcher/dffe159ef2b582bbe1d4bfbe0ad227d395c1f722499b0f02962c49ed275b9d2f/launcherSetup.exe": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/launcherSetup.exe",
+    "bytes": 175081638,
+    "sha256": "dffe159ef2b582bbe1d4bfbe0ad227d395c1f722499b0f02962c49ed275b9d2f"
   }
 }

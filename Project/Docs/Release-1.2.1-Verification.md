@@ -23,6 +23,14 @@
 
 SDK buildIdは `2581922f-55c2-49fb-a2ca-af54c3870e6d`。発行時にはMono GACの長い名前でWindows PowerShell 5.1のMAX_PATH制約が発生し、inventory hashと所有stagingのcleanupに拡張長pathを使う修正後、発行・Host起動が成功した。
 
-既存公開4版と本番Launcher setupを公開URLから取得し、全て既存カタログのサイズとSHA-256に一致。Launcherはエンジンのみの更新のため再利用する。GitHub / Cloudflare公開後の結果は追記する。
+既存公開4版と本番Launcher setupを公開URLから取得し、全て既存カタログのサイズとSHA-256に一致。Launcherはエンジンのみの更新のため再利用した。
+
+## 公開結果
+
+GitHub Releases: https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-93667918dc43
+
+配布タグは修正ソース `e81007f` を指す。新旧SDK5版と既存本番Launcher setupを添付し、GitHub APIのサイズ・SHA-256照合後に公開した。1.2.1は公開ダウンロードURLから実際に取得し、165,928,742 bytesと上記SHA-256に一致。実ZIPの展開と1,841ファイルのinventory登録も成功。既存のReleaseやファイルは削除・置換していない。
+
+CloudflareのCLI認証がこの環境に存在しないため、サイトとLauncherカタログの更新は認証待ち。ローカルには5版のカタログと公開サイトassetsを生成済みだが、サイトでの1.2.1公開完了とは扱わない。公開後の記録は認証・デプロイ・取得確認後に更新する。
 
 全GPU・DPI・解像度・周辺機器での手動操作、開発SDKが一切ないクリーンPCでの検証は行っていない。
