@@ -41,7 +41,7 @@ public sealed class LauncherForm : Form
     readonly TextBox location = new() { Width = 600, Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexusEngine", "Versions") };
     readonly TextBox catalog = new() { Width = 720 };
     readonly ComboBox engines = new() { Width = 720, DropDownStyle = ComboBoxStyle.DropDownList };
-    readonly ListBox projects = new() { Width = 760, Height = 220, HorizontalScrollbar = true };
+    readonly ProjectBrowser projects = new();
     readonly List<Installed> installed = [];
     readonly List<ProjectEntry> entries = [];
     string? localCatalogRoot;
@@ -94,22 +94,22 @@ public sealed class LauncherForm : Form
             RefreshLocal();
         }));
         var workspace = Page("プロジェクト", "WORKSPACE / PROJECTS");
-        Add(workspace, "登録済みのプロジェクト", projects);
-        Button(workspace, "既存プロジェクトを追加", () =>
+        var workspacePage = workspace.Parent!;
+        workspacePage.Controls.Remove(workspace); workspace.Dispose(); workspacePage.Controls.Add(projects);
+        projects.AddProject += () =>
         {
             using var dialog = new OpenFileDialog { Filter = "Nexus project|*.nxproject" };
             if (dialog.ShowDialog() == DialogResult.OK) Work(async token => { EnsureTool(); await Distribution.Run(Tool, ["register", dialog.FileName], token); RefreshLocal(); });
-        });
-        var configuration = new ComboBox { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-        configuration.Items.AddRange(["Release", "Develop", "Debug"]); configuration.SelectedIndex = 0;
-        Add(workspace, "起動構成（登録したエンジンと一致させる）", configuration);
-        projects.SelectedIndexChanged += (_, _) => { if (projects.SelectedItem is ProjectEntry p) configuration.SelectedItem = p.Configuration; };
-        Button(workspace, "選択したプロジェクトを開く", () => Work(async token =>
+        };
+        projects.OpenProject += () => Work(async token =>
         {
-            EnsureTool(); var p = projects.SelectedItem as ProjectEntry ?? throw new IOException("プロジェクトを選択してください。");
-            await Distribution.Run(Tool, ["open", p.File, EngineRegistry, configuration.Text], token);
-        }));
-        Button(workspace, "一覧を更新", () => Work(_ => { RefreshLocal(); return Task.CompletedTask; }));
+            EnsureTool(); var p = projects.Selected ?? throw new IOException("プロジェクトを選択してください。");
+            await Distribution.Run(Tool, ["open", p.File, EngineRegistry, projects.Configuration], token);
+        });
+        projects.RefreshProjects += () => Work(_ => { RefreshLocal(); return Task.CompletedTask; });
+        projects.RemoveProject += () => RemoveSelectedProject(false);
+        projects.DeleteProject += () => RemoveSelectedProject(true);
+        projects.CreateProject += () => SelectPage(pages[2].Page);
         var create = Page("新規プロジェクト", "WORKSPACE / CREATE");
         Add(create, "使用するエンジン", engines);
         var name = new TextBox { Width = 400 }; var parent = new TextBox { Width = 600, Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
@@ -192,6 +192,7 @@ public sealed class LauncherForm : Form
             _ => (item.ToString() ?? "", "")
         };
         LauncherTheme.Apply(this);
+        projects.ApplyAccents();
         navigation.BackColor = LauncherTheme.Panel;
         foreach (Control child in navigation.Controls) child.BackColor = LauncherTheme.Panel;
         SelectPage(pages[1].Page);
@@ -208,12 +209,42 @@ public sealed class LauncherForm : Form
         {
             releases.Items.Add(new Release("nexus", "1.0.0", "Release", "プロジェクトブラウザーとエンジン配布の改善\r\n複数バージョンを個別にインストールできます。", "https://downloads.example.com/nexus-1.0.0.zip", new string('a', 64), 512 * 1048576L));
             releases.SelectedIndex = 0;
-            projects.Items.Add(new ProjectEntry(@"D:\NexusProjects\サンプル\サンプル.nxproject", "サンプルプロジェクト", "0.1.5", "Release"));
-            projects.SelectedIndex = 0;
+            projects.SetProjects([
+                new ProjectEntry(@"D:\NexusProjects\SampleGame\SampleGame.nxproject", "Sample Game", "1.1.1", "Release"),
+                new ProjectEntry(@"D:\NexusProjects\サンプル\サンプル.nxproject", "サンプルプロジェクト", "1.0.0", "Release"),
+                new ProjectEntry(@"D:\NexusProjects\Prototype\Prototype.nxproject", "Action Prototype", "1.1.0", "Develop")]);
             var sample = new Installed(@"D:\NexusEngines\nexus-0.1.5-Release\NexusEngine.nxengine", "nexus", "0.1.5", "Release");
             inventory.Items.Add(sample); engines.Items.Add(sample); engines.SelectedIndex = 0;
             status.Text = "UIプレビュー · サンプルデータ";
         }
+    }
+    void RemoveSelectedProject(bool recycle)
+    {
+        var project = projects.Selected;
+        if (project == null) return;
+        try
+        {
+            EnsureTool();
+            var protectedPaths = installed.Select(i => Path.GetDirectoryName(i.Manifest)!).Append(AppContext.BaseDirectory).ToArray();
+            var root = recycle ? ProjectRemoval.Validate(project, entries, protectedPaths) : null;
+            var message = recycle
+                ? $"「{project.Name}」のフォルダー全体をごみ箱へ移動しますか？\r\n\r\n{root}\r\n\r\nソース・アセット・生成ファイルを含みます。登録も一覧から外します。"
+                : $"「{project.Name}」を一覧から外しますか？\r\n\r\n{project.File}\r\n\r\nプロジェクト本体は残ります。「既存を追加」から再登録できます。";
+            if (MessageBox.Show(this, message, recycle ? "プロジェクトをごみ箱へ移動" : "プロジェクトの登録解除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            Work(async token =>
+            {
+                if (recycle)
+                {
+                    root = ProjectRemoval.Validate(project, entries, protectedPaths);
+                    Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(root, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin, Microsoft.VisualBasic.FileIO.UICancelOption.ThrowException);
+                }
+                try { await Distribution.Run(Tool, ["remove", project.File, ProjectRegistry], CancellationToken.None); }
+                catch (Exception ex) when (recycle) { throw new IOException("ごみ箱への移動は完了しましたが、登録解除に失敗しました。「一覧から外す」で再試行してください。\r\n" + ex.Message, ex); }
+                finally { RefreshLocal(); }
+                status.Text = recycle ? "プロジェクトをごみ箱へ移動しました。" : "プロジェクトを一覧から外しました。";
+            });
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "プロジェクトを変更できません", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
     static string ProjectTarget(string parent, string name)
     {
@@ -226,7 +257,7 @@ public sealed class LauncherForm : Form
     void EnsureTool() { if (!File.Exists(Tool)) throw new IOException("配布パッケージにTools/NexusProjectTool.exeがありません。Build-Distribution.ps1で作成してください。"); }
     void RefreshLocal()
     {
-        installed.Clear(); entries.Clear(); engines.Items.Clear(); projects.Items.Clear();
+        installed.Clear(); entries.Clear(); engines.Items.Clear();
         if (File.Exists(EngineRegistry))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(EngineRegistry));
@@ -245,7 +276,7 @@ public sealed class LauncherForm : Form
         }
         inventory.Items.Clear(); inventory.Items.AddRange(installed.Cast<object>().ToArray());
         engines.Items.AddRange(installed.Cast<object>().ToArray()); if (installed.Count > 0) engines.SelectedIndex = 0;
-        projects.Items.AddRange(entries.Cast<object>().ToArray());
+        projects.SetProjects(entries);
     }
     async void Work(Func<CancellationToken, Task> action)
     {

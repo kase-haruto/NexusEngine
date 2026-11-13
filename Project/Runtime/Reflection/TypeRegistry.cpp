@@ -4,6 +4,9 @@
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
 #include "Graphics/Color/ColorSpace.h"
 #include <cmath>
 
@@ -38,7 +41,53 @@ PropertyDescriptor MaterialProperty(const char* id, const char* label, PropertyK
         });
 }
 }
+template<class C>
+void RegisterEnvironmentType(TypeRegistry& registry, const char* id, const char* label) {
+    auto type = Type<C>(id, label);
+    type.add = [](Entity entity) {
+        bool exists = false;
+        entity.GetScene()->ForEach<C>([&](Entity, const auto&) { exists = true; });
+        return !exists && entity.AddComponent<C>() != nullptr;
+    };
+    type.properties.push_back(Property<C, bool>("enabled", "property.enabled", PropertyKind::Bool,
+        [](const auto& c) { return c.enabled; }, [](auto& c, bool v) { c.enabled = v; return true; }));
+    const auto scalar = [&]<class Owner>(const char* key, float Owner::*member) {
+        type.properties.push_back(Property<C, float>(key, std::string("atmosphere.") + key, PropertyKind::Float,
+            [member](const auto& c) { return c.*member; }, [member](auto& c, float v) {
+                auto next = c; next.*member = v;
+                if(!next.IsValid()) return false;
+                c = next; return true;
+            }));
+    };
+    const auto flag = [&]<class Owner>(const char* key, bool Owner::*member) {
+        type.properties.push_back(Property<C, bool>(key, std::string("atmosphere.") + key, PropertyKind::Bool,
+            [member](const auto& c) { return c.*member; }, [member](auto& c, bool v) { c.*member = v; return true; }));
+    };
+    if constexpr(std::is_same_v<C, SkyAtmosphereComponent>) {
+        scalar("timeOfDay", &C::timeOfDay); scalar("sunAzimuth", &C::sunAzimuth);
+        scalar("sunIntensity", &C::sunIntensity); scalar("skyIntensity", &C::skyIntensity);
+        scalar("rayleighScale", &C::rayleighScale); scalar("mieScale", &C::mieScale);
+        scalar("mieAnisotropy", &C::mieAnisotropy); scalar("nightIntensity", &C::nightIntensity);
+        flag("driveSun", &C::driveSun);
+    } else if constexpr(std::is_same_v<C, SkyLightComponent>) {
+        scalar("intensity", &C::intensity); flag("useAtmosphere", &C::useAtmosphere);
+    } else {
+        scalar("density", &C::density); scalar("heightFalloff", &C::heightFalloff);
+        scalar("heightOffset", &C::heightOffset); scalar("startDistance", &C::startDistance);
+        scalar("maxOpacity", &C::maxOpacity); scalar("cutoffDistance", &C::cutoffDistance);
+        scalar("atmosphereContribution", &C::atmosphereContribution);
+        type.properties.push_back(Property<C, std::array<float, 3>>("color", "fog.color", PropertyKind::Vector3,
+            [](const auto& c) { return c.color; }, [](auto& c, const auto& v) {
+                auto next = c; next.color = v; if(!next.IsValid()) return false; c = next; return true;
+            }));
+    }
+    registry.Register(std::move(type));
+}
 void RegisterSceneTypes(TypeRegistry& registry) {
+    RegisterEnvironmentType<SkyAtmosphereComponent>(registry, "SkyAtmosphere", "component.skyAtmosphere");
+    RegisterEnvironmentType<SkyLightComponent>(registry, "SkyLight", "component.skyLight");
+    RegisterEnvironmentType<ExponentialHeightFogComponent>(registry, "ExponentialHeightFog", "component.heightFog");
+
     auto name = Type<NameComponent>("Name", "component.name");
     name.properties.push_back(Property<NameComponent, std::string>("name", "property.name", PropertyKind::String,
         [](const auto& c) { return c.name; }, [](auto& c, const std::string& v) {

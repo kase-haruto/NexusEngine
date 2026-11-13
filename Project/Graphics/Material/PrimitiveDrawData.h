@@ -41,6 +41,8 @@ namespace NexusEngine {
 		uint32_t metallicRoughnessTextureIndex = 0, metallicRoughnessSamplerIndex = 0;
 		std::array<float, 4> fogColorEnabled {};
 		std::array<float, 4> fogDistances {8, 40, 0, 0};
+        std::array<float, 4> fogHeight {};
+        std::array<float, 4> fogLimits {};
 		std::array<float, 4> emissiveOcclusion {0, 0, 0, 1};
 		std::array<uint32_t, 4> extraMaps {}; //< emissive/sampler/AO/sampler
 		EnvironmentDrawData environment;
@@ -48,5 +50,5 @@ namespace NexusEngine {
 		DDGIDrawData ddgi;
 	};
 
-	static_assert(sizeof(PrimitiveDrawData) == 4720);
+	static_assert(sizeof(PrimitiveDrawData) == 4800);
 } // namespace NexusEngine

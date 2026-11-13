@@ -23,7 +23,7 @@ namespace NexusEngine {
     }
     Result<void> EnvironmentLighting::Prepare(const EnvironmentLightingData& settings) {
         if(!impl_) return std::unexpected(Error(ErrorCategory::Graphics, 90, "EnvironmentLighting not initialized."));
-        if(!settings.enabled || settings.imagePath.empty()) return {};
+        if(!settings.enabled || settings.atmosphere.enabled || settings.imagePath.empty()) return {};
         if(impl_->attempted && impl_->attemptedPath == settings.imagePath && impl_->attemptedRevision == settings.revision) return {};
         // Failed requests are cached too: invalid files must not stall/log every frame.
         impl_->attempted = true; impl_->attemptedPath = settings.imagePath; impl_->attemptedRevision = settings.revision;
@@ -40,6 +40,8 @@ namespace NexusEngine {
         result.options[1] = result.options[1] && valid && settings.enabled && !settings.imagePath.empty();
         result.options[2] = static_cast<uint32_t>(settings.debugMode);
         result.options[3] = settings.legacyHalfLambert ? 1 : 0;
+        result.atmosphere = settings.atmosphere.GetDrawData();
+        if(settings.atmosphere.enabled) result.options[1] = valid && settings.enabled && settings.atmosphere.IsValid() ? 2 : 0;
         return result;
     }
     void EnvironmentLighting::Shutdown() noexcept { if(impl_) impl_->processor.Shutdown(); impl_.reset(); }

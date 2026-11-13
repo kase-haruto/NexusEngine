@@ -397,14 +397,16 @@ namespace NexusEngine {
 		const Matrix4x4 projection	= renderScene_->camera->viewProjectionMatrix;
 		const auto cameraWorld = TryInverse(renderScene_->camera->viewMatrix);
 		if(!cameraWorld) return;
-		auto environmentStatus = environment_.Prepare(renderScene_->environment);
+		const auto environmentSettings = renderScene_->GetEnvironmentLighting();
+		auto environmentStatus = environment_.Prepare(environmentSettings);
 		if(!environmentStatus) NEXUS_LOG_ERROR("Environment", environmentStatus.error().GetMessageText());
-		drawData_.environment = environment_.GetDrawData(renderScene_->environment);
+		drawData_.environment = environment_.GetDrawData(environmentSettings);
 		// GI用の強い空を、GIオフ時に未遮蔽の環境光としてそのまま注入しない。
 		const bool giRequested = renderScene_->ddgi.enabled || renderScene_->bakedLighting.enabled || renderScene_->globalIllumination.enabled;
-		const float fallbackIntensity = giRequested ? 1.0f :
+		const float fallbackIntensity = (giRequested || renderScene_->skyLight.has_value()) ? 1.0f :
 			(std::isfinite(renderScene_->fallbackEnvironmentIntensity) ? std::clamp(renderScene_->fallbackEnvironmentIntensity, 0.0f, 1.0f) : 0.0f);
 		auto ambientIrradiance = renderScene_->ambientIrradiance;
+        if(renderScene_->skyLight) ambientIrradiance = {};
 		for(auto& channel : ambientIrradiance) channel *= fallbackIntensity;
 		drawData_.environment.parameters[0] *= fallbackIntensity;
 		const bool dynamicGI=renderScene_->ddgi.enabled && resources_->GetCapabilities().SupportsRayTracing();
@@ -424,6 +426,8 @@ namespace NexusEngine {
 			: std::array<float, 4>{};
 		drawData_.fogDistances = validFog ? std::array<float, 4>{fog.startDistance, fog.endDistance, 0, 0}
 			: std::array<float, 4>{0, 1, 0, 0};
+        drawData_.fogHeight = validFog ? std::array<float, 4>{fog.density, fog.heightFalloff, fog.height, fog.exponentialHeight ? 1.0f : 0.0f} : std::array<float, 4>{};
+        drawData_.fogLimits = validFog ? std::array<float, 4>{fog.maxOpacity, fog.cutoffDistance, 0, 0} : std::array<float, 4>{};
 		// Extract Geometry from the already available draw snapshot, never walk Scene/ECS
 		// again. Static meshes are shared by all Instances, while transforms remain per-instance.
 		shadowDraws_.clear();

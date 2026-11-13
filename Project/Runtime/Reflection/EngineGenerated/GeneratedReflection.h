@@ -9,6 +9,7 @@
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/ColliderComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/NameComponent.h"
@@ -16,6 +17,8 @@
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/RigidBodyComponent.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/EntityId.h"
@@ -82,6 +85,21 @@ template<> struct ReflectionTraits<EntityId> {
     template<class Visitor> static void Visit(Visitor&& visitor) {
         visitor("index", &EntityId::index);
         visitor("generation", &EntityId::generation);
+    }
+};
+template<> struct ReflectionTraits<ExponentialHeightFogComponent> {
+    static constexpr const char* Id = "ExponentialHeightFog";
+    static constexpr const char* Label = "component.heightFog";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &ExponentialHeightFogComponent::enabled);
+        visitor("density", &ExponentialHeightFogComponent::density);
+        visitor("heightFalloff", &ExponentialHeightFogComponent::heightFalloff);
+        visitor("heightOffset", &ExponentialHeightFogComponent::heightOffset);
+        visitor("startDistance", &ExponentialHeightFogComponent::startDistance);
+        visitor("maxOpacity", &ExponentialHeightFogComponent::maxOpacity);
+        visitor("cutoffDistance", &ExponentialHeightFogComponent::cutoffDistance);
+        visitor("color", &ExponentialHeightFogComponent::color);
+        visitor("atmosphereContribution", &ExponentialHeightFogComponent::atmosphereContribution);
     }
 };
 template<> struct ReflectionTraits<FogComponent> {
@@ -190,6 +208,31 @@ template<> struct ReflectionTraits<ScriptComponent> {
         visitor("propertyState", &ScriptComponent::propertyState);
         visitor("additional", &ScriptComponent::additional);
         visitor("slotId", &ScriptComponent::slotId);
+    }
+};
+template<> struct ReflectionTraits<SkyAtmosphereComponent> {
+    static constexpr const char* Id = "SkyAtmosphere";
+    static constexpr const char* Label = "component.skyAtmosphere";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &SkyAtmosphereComponent::enabled);
+        visitor("timeOfDay", &SkyAtmosphereComponent::timeOfDay);
+        visitor("sunAzimuth", &SkyAtmosphereComponent::sunAzimuth);
+        visitor("sunIntensity", &SkyAtmosphereComponent::sunIntensity);
+        visitor("skyIntensity", &SkyAtmosphereComponent::skyIntensity);
+        visitor("rayleighScale", &SkyAtmosphereComponent::rayleighScale);
+        visitor("mieScale", &SkyAtmosphereComponent::mieScale);
+        visitor("mieAnisotropy", &SkyAtmosphereComponent::mieAnisotropy);
+        visitor("nightIntensity", &SkyAtmosphereComponent::nightIntensity);
+        visitor("driveSun", &SkyAtmosphereComponent::driveSun);
+    }
+};
+template<> struct ReflectionTraits<SkyLightComponent> {
+    static constexpr const char* Id = "SkyLight";
+    static constexpr const char* Label = "component.skyLight";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("enabled", &SkyLightComponent::enabled);
+        visitor("useAtmosphere", &SkyLightComponent::useAtmosphere);
+        visitor("intensity", &SkyLightComponent::intensity);
     }
 };
 template<> struct ReflectionTraits<SkyRendererComponent> {

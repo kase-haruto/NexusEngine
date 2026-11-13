@@ -37,6 +37,7 @@ var root = Path.Combine(AppContext.BaseDirectory, "TestRuns", Guid.NewGuid().ToS
 Directory.CreateDirectory(root);
 try
 {
+    passed += ProjectRemovalTests.Run(root);
     Reject(() => Distribution.Https("http://example.com/releases.json"));
     Reject(() => Distribution.Https("https://user:secret@example.com/releases.json"));
     Reject(() => Distribution.Within(root, "../escape.txt"));
@@ -159,7 +160,7 @@ try
     Reject(() => Distribution.Validate(downloadable, localFolder));
     handler.Content = Encoding.UTF8.GetBytes("{\"schemaVersion\":1,\"releases\":[null]}");
     await RejectAsync(() => Distribution.LoadCatalog("https://example.com/releases.json", default, client));
-    if (args.Length >= 1)
+    if (args.Length >= 1 && args[0] != "--native-only")
     {
         var assembly = System.Reflection.Assembly.LoadFile(Path.GetFullPath(args[0]));
         using var payload = assembly.GetManifestResourceStream("payload.zip") ?? throw new Exception("Setup payload missing");
@@ -187,6 +188,14 @@ try
         passed++;
         var inspected = await Distribution.Run(native, ["inspect", projectFile], default);
         if (!inspected.Contains("日本語プロジェクト")) throw new Exception("Native UTF-8 output corrupted"); passed++;
+        var entry = new ProjectEntry(projectFile, "日本語プロジェクト", "", "Release");
+        ProjectRemoval.Validate(entry, [entry], []); passed++;
+        // ごみ箱移動後と同じくdescriptorが元の場所にない状態で、登録解除を検証する。
+        var moved = Path.Combine(root, "MovedProject"); Directory.Move(newProject, moved);
+        await Distribution.Run(native, ["remove", projectFile, recent], default);
+        using (var removed = JsonDocument.Parse(File.ReadAllText(recent)))
+            if (removed.RootElement.GetProperty("projects").GetArrayLength() != 0 || !File.Exists(Path.Combine(moved, Path.GetFileName(projectFile)))) throw new Exception("Project unregister after relocation failed");
+        passed++;
         handler.Content = engineBytes;
         var nativeRegistry = Path.Combine(root, "NativeEngines.json");
         var invalidRoot = Path.Combine(root, "native-inventory");

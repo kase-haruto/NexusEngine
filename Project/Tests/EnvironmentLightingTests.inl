@@ -53,7 +53,7 @@ void EnvironmentLightingIntegration() {
     Require(original.options[1]!=0,"IBL did not publish generated textures.");
     Check(lighting.Prepare(settings)); Require(lighting.GetDrawData(settings).textures==original.textures,"Unchanged environment was rebuilt.");
     D3D12_ROOT_PARAMETER parameters[2] {};
-    parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; parameters[0].Constants={0,0,12};
+    parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; parameters[0].Constants={0,0,24};
     parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV; parameters[1].Descriptor.ShaderRegister=0;
     D3D12_ROOT_SIGNATURE_DESC rd {2,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED|D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED};
     ComPtr<ID3DBlob> serialized,errors; Native(D3D12SerializeRootSignature(&rd,D3D_ROOT_SIGNATURE_VERSION_1,&serialized,&errors));
@@ -71,7 +71,7 @@ void EnvironmentLightingIntegration() {
         Native(test.allocator->Reset()); Native(test.commands->Reset(test.allocator.Get(),nullptr));
         auto data=lighting.GetDrawData(settings); test.bindless.Bind(test.commands.Get());
         test.commands->SetComputeRootSignature(root.Get()); test.commands->SetPipelineState(pipeline.Get());
-        test.commands->SetComputeRoot32BitConstants(0,12,&data,0); test.commands->SetComputeRootUnorderedAccessView(1,output->GetGPUVirtualAddress());
+        test.commands->SetComputeRoot32BitConstants(0,24,&data,0); test.commands->SetComputeRootUnorderedAccessView(1,output->GetGPUVirtualAddress());
         D3D12_RESOURCE_BARRIER begin {}; begin.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         begin.Transition={output.Get(),D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_UNORDERED_ACCESS};
         test.commands->ResourceBarrier(1,&begin); test.commands->Dispatch(1,1,1);
@@ -123,6 +123,21 @@ void EnvironmentLightingIntegration() {
     Require(lighting.GetDrawData(settings).textures==stable.textures,"Failed reload destroyed previous valid environment.");
     Check(lighting.Prepare(settings)); settings.enabled=false;
     Require(lighting.GetDrawData(settings).options[1]==0,"IBL disable ignored.");
+    settings = {}; settings.atmosphere.enabled = true;
+    constexpr std::array<std::array<float, 3>, 6> axes {{{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}}};
+    for(float hour : {0.0f, 6.0f, 12.0f, 17.5f, 18.0f, 24.0f}) {
+        settings.atmosphere.timeOfDay = hour;
+        values = evaluate();
+        for(size_t axis = 0; axis < axes.size(); ++axis) {
+            const auto expected = settings.atmosphere.Radiance(axes[axis]);
+            for(size_t c = 0; c < 3; ++c)
+                Require(std::abs(values[axis][c]-expected[c]) < .0001f, "CPU bake and GPU atmosphere disagree.");
+        }
+    }
+    settings.atmosphere.timeOfDay = 12; values = evaluate();
+    auto daylight = values;
+    settings.atmosphere.timeOfDay = 0; values = evaluate();
+    Require(daylight[8][2] > values[8][2], "Sky Light diffuse did not follow the fixed sky time.");
     Check(test.queue.WaitForIdle()); lighting.Shutdown(); test.Validate();
     std::cout << "IBL HDR/raw/RLE, cube/irradiance/prefilter/LUT, rotation/intensity, AO/emissive, reload/lifetime passed.\n";
 }

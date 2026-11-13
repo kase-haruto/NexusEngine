@@ -203,10 +203,15 @@ namespace NexusEngine {
 			Geometry					 geometry;
 			std::vector<Material>		 materials;
 			HdrImage					 environment;
+            EnvironmentLightingData environmentSettings;
 			const RenderScene*			 scene	  = nullptr;
 			const BakedLightingSettings* settings = nullptr;
 			V							 Environment(V d) const {
-				const auto& e = scene->environment;
+				const auto& e = environmentSettings;
+                if(e.enabled && e.atmosphere.enabled) {
+                    const auto color = e.atmosphere.Radiance({d.x, d.y, d.z});
+                    return From(color.data()) * e.intensity;
+                }
 				if(!environment.pixels.empty() && e.enabled) {
 					float s = std::sin(e.rotation), c = std::cos(e.rotation);
 					d		   = {c * d.x - s * d.z, d.y, s * d.x + c * d.z};
@@ -214,7 +219,7 @@ namespace NexusEngine {
 					uint32_t x = std::min(static_cast<uint32_t>(u * environment.width), environment.width - 1), y = std::min(static_cast<uint32_t>(v * environment.height), environment.height - 1);
 					return From(environment.pixels[size_t(y) * environment.width + x].data()) * e.intensity;
 				}
-				return From(scene->ambientIrradiance.data()) / pi;
+				return scene->skyLight ? V{} : From(scene->ambientIrradiance.data()) / pi;
 			}
 			V Radiance(V origin, V direction, uint32_t sample) const {
 				V sum{}, throughput = V::One();
@@ -352,16 +357,20 @@ namespace NexusEngine {
 		add(scene.directionalLight.color);
 		add(scene.directionalLight.intensity);
 		add(scene.ambientIrradiance);
-		add(scene.environment.enabled);
-		add(scene.environment.intensity);
-		add(scene.environment.rotation);
-		auto path = scene.environment.imagePath.u8string();
+        const auto environmentSettings = scene.GetEnvironmentLighting();
+		add(environmentSettings.enabled);
+		add(environmentSettings.intensity);
+		add(environmentSettings.rotation);
+        add(environmentSettings.atmosphere.enabled);
+        const auto atmosphere = environmentSettings.atmosphere.GetDrawData();
+        add(atmosphere.sun); add(atmosphere.scattering); add(atmosphere.ground);
+		auto path = environmentSettings.imagePath.u8string();
 		for(auto c : path) {
 			hash ^= static_cast<uint8_t>(c);
 			hash *= 1099511628211ull;
 		}
 		// HDRの同名差し替えも検知する。照合は読み込み要求時だけで毎フレームは行わない。
-		std::ifstream environment(scene.environment.imagePath, std::ios::binary);
+		std::ifstream environment(environmentSettings.imagePath, std::ios::binary);
 		char		  buffer[4096];
 		while(environment.read(buffer, sizeof(buffer)) || environment.gcount())
 			for(std::streamsize i = 0; i < environment.gcount(); ++i) {
@@ -376,8 +385,9 @@ namespace NexusEngine {
 		Integrator integrator;
 		integrator.scene	= &scene;
 		integrator.settings = &settings;
-		if(scene.environment.enabled && !scene.environment.imagePath.empty()) {
-			auto image = LoadHdrImage(scene.environment.imagePath);
+        integrator.environmentSettings = scene.GetEnvironmentLighting();
+		if(integrator.environmentSettings.enabled && !integrator.environmentSettings.atmosphere.enabled && !integrator.environmentSettings.imagePath.empty()) {
+			auto image = LoadHdrImage(integrator.environmentSettings.imagePath);
 			if(!image) return std::unexpected(std::move(image.error()));
 			integrator.environment = std::move(*image);
 		}

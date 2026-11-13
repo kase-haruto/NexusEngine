@@ -31,6 +31,11 @@
     },
     {
         "Kind":  "COMPONENT",
+        "Type":  "ExponentialHeightFogComponent",
+        "Id":  "\"ExponentialHeightFog\""
+    },
+    {
+        "Kind":  "COMPONENT",
         "Type":  "FogComponent",
         "Id":  "\"Fog\""
     },
@@ -78,6 +83,16 @@
         "Kind":  "COMPONENT",
         "Type":  "ScriptComponent",
         "Id":  "\"Script\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "SkyAtmosphereComponent",
+        "Id":  "\"SkyAtmosphere\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "SkyLightComponent",
+        "Id":  "\"SkyLight\""
     },
     {
         "Kind":  "COMPONENT",

@@ -78,6 +78,20 @@ namespace NexusEngine {
         std::vector<ScreenEffect> screenEffects;
         GridSettings grid;
         std::optional<float> skyIntensity; //< Present only when an enabled SkyRenderer component was extracted.
+        AtmosphereSettings atmosphere;
+        std::optional<SkyLightSettings> skyLight;
+        [[nodiscard]] EnvironmentLightingData GetEnvironmentLighting() const {
+            auto settings = environment;
+            if(skyLight) {
+                settings.enabled = skyLight->enabled;
+                settings.intensity = skyLight->intensity;
+                if(skyLight->useAtmosphere) {
+                    settings.atmosphere = atmosphere;
+                    if(!atmosphere.enabled) settings.enabled = false;
+                }
+            }
+            return settings;
+        }
 		DirectionalLightData directionalLight; //< API非依存Lightingと影の共通入力
 		std::array<float, 3> ambientIrradiance {0.03f, 0.03f, 0.03f};
 		float fallbackEnvironmentIntensity = .05f; //< Editor・Runtime共通。GI未選択時の未遮蔽環境光倍率

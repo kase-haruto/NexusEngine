@@ -1,7 +1,7 @@
 #ifndef NEXUS_PRIMITIVE_DRAW_DATA_HLSLI
 #define NEXUS_PRIMITIVE_DRAW_DATA_HLSLI
 
-// CPU側PrimitiveDrawDataと同じ4720byte配置。行列はrow-vector規約。
+// CPU側PrimitiveDrawDataと同じ4800byte配置。行列はrow-vector規約。
 #include "../Common/IndirectLighting.hlsli"
 #include "../Common/BakedLighting.hlsli"
 #include "../Common/DDGI.hlsli"
@@ -30,6 +30,8 @@ cbuffer PrimitiveDrawData : register(b0)
     uint metallicRoughnessTextureIndex; uint metallicRoughnessSamplerIndex;
     float4 fogColorEnabled;
     float4 fogDistances;
+    float4 fogHeight;
+    float4 fogLimits;
     float4 emissiveOcclusion;
     uint4 extraMaps;
     EnvironmentData environment;

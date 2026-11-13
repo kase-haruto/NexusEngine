@@ -163,6 +163,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Runtime\Gameplay\NativeGameSystemScope.cpp" />
     <ClCompile Include="Runtime\Gameplay\NativeGameApiMetadata.cpp" />
     <ClCompile Include="Runtime\Scripting\DotNetHost.cpp" />
+    <ClCompile Include="Runtime\Scripting\MonoHost.cpp" />
     <ClCompile Include="Runtime\Scripting\NativeManagedBridge.cpp" />
     <ClCompile Include="Runtime\Scripting\CSharpRuntime.cpp" />
     <ClCompile Include="Runtime\Scripting\ScriptSystem.cpp" />
@@ -374,6 +375,10 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClInclude Include="Runtime\Scene\Components\CameraComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\DirectionalLightComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\FogComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\SkyAtmosphereComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\SkyLightComponent.h" />
+    <ClInclude Include="Runtime\Scene\Components\ExponentialHeightFogComponent.h" />
+    <ClInclude Include="Graphics\Sky\AtmosphereSettings.h" />
     <ClInclude Include="Runtime\Scene\Components\PrimitiveRenderComponent.h" />
     <ClInclude Include="Runtime\Scene\Components\PersistentIdComponent.h" />
     <ClInclude Include="Runtime\Scene\Entity.h" />
@@ -410,6 +415,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <None Include="Shaders\Common\PBR.hlsli" />
     <None Include="Shaders\Common\ColorSpace.hlsli" />
     <None Include="Shaders\Common\Fog.hlsli" />
+    <None Include="Shaders\Common\Atmosphere.hlsli" />
     <None Include="Docs\Lighting.md" />
     <None Include="Docs\Fog.md" />
     <None Include="Shaders\PostProcess\ACES-LICENSE.txt" />
@@ -618,6 +624,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Tools\Project\ProjectRegistry.cpp" />
     <ClCompile Include="Tools\Project\ProjectBuild.cpp" />
     <ClCompile Include="Tools\Project\SourceCodeEditor.cpp" />
+    <ClCompile Include="Editor\Services\SourceFileActions.cpp" />
     <ClCompile Include="Editor\Services\StandaloneSession.cpp" />
     <ClCompile Include="Editor\Services\StandaloneCommands.cpp" />
     <ClCompile Include="Editor\Services\ManagedReloadCommands.cpp" />

@@ -3,6 +3,11 @@
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
+#include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/FogComponent.h"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -67,17 +72,49 @@ void GuideLine(ImDrawList& draw, Vector3 a, Vector3 b, const Matrix4x4& vp,
         ca.z+(cb.z-ca.z)*t,ca.w+(cb.w-ca.w)*t}; };
     draw.AddLine(Screen(at(low),x,y,width,height),Screen(at(high),x,y,width,height),color,1.5f);
 }
-struct SceneIcon { Entity entity; ClipPoint clip; bool camera, enabled; };
+enum class SceneIconKind { Camera, DirectionalLight, Atmosphere, SkyLight, HeightFog, Sky, Fog };
+struct SceneIcon { Entity entity; ClipPoint clip; SceneIconKind kind; bool enabled; };
+const char* IconName(SceneIconKind kind) {
+    switch(kind) {
+    case SceneIconKind::Camera: return "Camera";
+    case SceneIconKind::DirectionalLight: return "Directional Light";
+    case SceneIconKind::Atmosphere: return "Sky Atmosphere";
+    case SceneIconKind::SkyLight: return "Sky Light";
+    case SceneIconKind::HeightFog: return "Exponential Height Fog";
+    case SceneIconKind::Sky: return "Sky Renderer";
+    case SceneIconKind::Fog: return "Distance Fog";
+    }
+    return "";
+}
+ImU32 IconColor(SceneIconKind kind) {
+    switch(kind) {
+    case SceneIconKind::Camera: return IM_COL32(100,205,255,220);
+    case SceneIconKind::DirectionalLight: return IM_COL32(255,225,110,220);
+    case SceneIconKind::Atmosphere: case SceneIconKind::Sky: return IM_COL32(110,185,255,220);
+    case SceneIconKind::SkyLight: return IM_COL32(150,235,225,220);
+    case SceneIconKind::HeightFog: case SceneIconKind::Fog: return IM_COL32(195,180,235,220);
+    }
+    return IM_COL32_WHITE;
+}
 std::vector<SceneIcon> SceneIcons(Scene& scene, const Matrix4x4& vp) {
     std::vector<SceneIcon> icons;
     scene.ForEach<TransformComponent>([&](Entity entity, TransformComponent& transform) {
-        const auto* camera=entity.GetComponent<CameraComponent>();
-        const auto* light=entity.GetComponent<DirectionalLightComponent>();
-        if(!camera && !light) return;
+        // One representative icon per Entity, including the combined Create Sky setup.
+        // Picking the Entity exposes all of its components in Properties.
+        SceneIconKind kind;
+        bool enabled;
+        if(const auto* camera=entity.GetComponent<CameraComponent>()) { kind=SceneIconKind::Camera; enabled=camera->enabled; }
+        else if(const auto* light=entity.GetComponent<DirectionalLightComponent>()) { kind=SceneIconKind::DirectionalLight; enabled=light->enabled; }
+        else if(const auto* atmosphere=entity.GetComponent<SkyAtmosphereComponent>()) { kind=SceneIconKind::Atmosphere; enabled=atmosphere->enabled; }
+        else if(const auto* skyLight=entity.GetComponent<SkyLightComponent>()) { kind=SceneIconKind::SkyLight; enabled=skyLight->enabled; }
+        else if(const auto* heightFog=entity.GetComponent<ExponentialHeightFogComponent>()) { kind=SceneIconKind::HeightFog; enabled=heightFog->enabled; }
+        else if(const auto* sky=entity.GetComponent<SkyRendererComponent>()) { kind=SceneIconKind::Sky; enabled=sky->enabled; }
+        else if(const auto* fog=entity.GetComponent<FogComponent>()) { kind=SceneIconKind::Fog; enabled=fog->enabled; }
+        else return;
         const auto clip=ToClip({transform.worldMatrix.At(3,0),transform.worldMatrix.At(3,1),transform.worldMatrix.At(3,2)},vp);
         if(!Finite(clip) || clip.w<=1e-5f || clip.z<0 || clip.z>clip.w ||
             std::abs(clip.x)>clip.w || std::abs(clip.y)>clip.w) return;
-        icons.push_back({entity,clip,camera!=nullptr,camera ? camera->enabled : light->enabled});
+        icons.push_back({entity,clip,kind,enabled});
     });
     std::stable_sort(icons.begin(),icons.end(),[](const auto& a,const auto& b) { return a.clip.z/a.clip.w>b.clip.z/b.clip.w; });
     return icons;
@@ -498,17 +535,40 @@ void ViewportTools::DrawSceneGuides(float x, float y, float width, float height)
     auto icons=SceneIcons(scene,vp);
     for(const auto& icon : icons) {
         const auto p=Screen(icon.clip,x,y,width,height);
-        const auto color=colorFor(icon.entity,icon.camera,icon.enabled);
+        const auto color=selected(icon.entity) ? IM_COL32(255,170,55,255) :
+            !icon.enabled ? IM_COL32(150,150,150,180) : IconColor(icon.kind);
         draw.AddCircleFilled(p,kIconRadius,IM_COL32(22,27,34,230),24);
         draw.AddCircle(p,kIconRadius,color,24,selected(icon.entity) ? 2.5f : 1.0f);
-        if(icon.camera) {
+        if(icon.kind==SceneIconKind::Camera) {
             draw.AddRect({p.x-8,p.y-5},{p.x+3,p.y+5},color,1.0f,2.0f);
             draw.AddQuad({p.x+3,p.y-2},{p.x+9,p.y-6},{p.x+9,p.y+6},{p.x+3,p.y+2},color,2);
-        } else {
+        } else if(icon.kind==SceneIconKind::DirectionalLight) {
             draw.AddCircle(p,4,color,16,2);
             for(int i=0;i<8;++i) {
                 const float a=static_cast<float>(i)*.7853981634f;
                 draw.AddLine({p.x+std::cos(a)*7,p.y+std::sin(a)*7},{p.x+std::cos(a)*10,p.y+std::sin(a)*10},color,2);
+            }
+        } else if(icon.kind==SceneIconKind::Atmosphere || icon.kind==SceneIconKind::Sky) {
+            // A planet with layered atmosphere arcs.
+            draw.AddCircle({p.x,p.y+2},5,color,20,1.5f);
+            draw.PathArcTo({p.x,p.y+2},9,3.14159265f,6.28318531f,20); draw.PathStroke(color,0,1.5f);
+            draw.AddLine({p.x-10,p.y+8},{p.x+10,p.y+8},color,1.5f);
+        } else if(icon.kind==SceneIconKind::SkyLight) {
+            // Sky dome and downward incident illumination.
+            draw.PathArcTo({p.x,p.y},8,3.14159265f,6.28318531f,16); draw.PathStroke(color,0,1.5f);
+            draw.AddLine({p.x-8,p.y},{p.x+8,p.y},color,1.5f);
+            for(float offset : {-5.0f,0.0f,5.0f}) {
+                const float sx=p.x+offset;
+                draw.AddLine({sx,p.y+3},{sx,p.y+9},color,1.5f);
+                draw.AddLine({sx-2,p.y+7},{sx,p.y+9},color,1.5f);
+                draw.AddLine({sx+2,p.y+7},{sx,p.y+9},color,1.5f);
+            }
+        } else {
+            // Fog bands, denser near the ground.
+            for(int i=0;i<3;++i) {
+                const float halfWidth=5.0f+static_cast<float>(i)*2;
+                const float sy=p.y-6+static_cast<float>(i)*6;
+                draw.AddLine({p.x-halfWidth,sy},{p.x+halfWidth,sy},color,2);
             }
         }
     }
@@ -519,7 +579,7 @@ void ViewportTools::DrawSceneGuides(float x, float y, float width, float height)
             const auto p=Screen(it->clip,x,y,width,height);
             if((mouse.x-p.x)*(mouse.x-p.x)+(mouse.y-p.y)*(mouse.y-p.y)>kIconRadius*kIconRadius) continue;
             const auto* name=it->entity.GetComponent<NameComponent>();
-            ImGui::SetTooltip("%s (%s)",name ? name->name.c_str() : "",it->camera ? "Camera" : "Directional Light");
+            ImGui::SetTooltip("%s (%s)",name ? name->name.c_str() : "",IconName(it->kind));
             break;
         }
     }

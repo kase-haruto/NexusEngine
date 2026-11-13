@@ -1,4 +1,90 @@
 namespace {
+void EnvironmentViewportIconsTests() {
+    Fixture f;
+    auto* level=f.session.GetLevel();
+    std::array<Entity,5> entities;
+    for(size_t i=0;i<entities.size();++i) {
+        entities[i]=level->CreateEntity("Environment icon");
+        entities[i].GetComponent<TransformComponent>()->translation={-4.0f+static_cast<float>(i)*2,0,10};
+    }
+    assert(entities[0].AddComponent<SkyAtmosphereComponent>());
+    assert(entities[1].AddComponent<SkyLightComponent>());
+    assert(entities[2].AddComponent<ExponentialHeightFogComponent>());
+    assert(entities[3].AddComponent<SkyRendererComponent>());
+    assert(entities[4].AddComponent<FogComponent>());
+    assert(level->Update(0));
+    RenderScene render; render.camera=RenderCamera{};
+    ViewportTools tools(f.session,f.properties); tools.SetGizmoVisible(false);
+    tools.Prepare(render,4.0f/3);
+    ImGui::CreateContext();
+    auto& io=ImGui::GetIO(); io.DisplaySize={800,600}; io.DeltaTime=1.0f/60; io.IniFilename=nullptr;
+    unsigned char* pixels; int w,h; io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h); io.Fonts->SetTexID(1);
+    const auto position=[&](Entity entity) {
+        const auto& world=entity.GetComponent<TransformComponent>()->worldMatrix;
+        const auto& m=render.camera->viewProjectionMatrix;
+        const float x=world.At(3,0),y=world.At(3,1),z=world.At(3,2);
+        const float cw=x*m.At(0,3)+y*m.At(1,3)+z*m.At(2,3)+m.At(3,3);
+        return ImVec2{(x*m.At(0,0)+y*m.At(1,0)+z*m.At(2,0)+m.At(3,0))/cw*.5f+.5f,
+            .5f-(x*m.At(0,1)+y*m.At(1,1)+z*m.At(2,1)+m.At(3,1))/cw*.5f};
+    };
+    std::vector<ImDrawVert> vertices;
+    const auto frame=[&](ImVec2 mouse,bool down,float width=400) {
+        tools.Prepare(render,4.0f/3);
+        io.AddMousePosEvent(mouse.x,mouse.y); io.AddMouseButtonEvent(0,down);
+        ImGui::NewFrame(); ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext()); ImGuizmo::BeginFrame();
+        ImGui::SetNextWindowPos({0,0}); ImGui::SetNextWindowSize({800,600});
+        ImGui::Begin("Environment icons",nullptr,ImGuiWindowFlags_NoSavedSettings);
+        ImGui::SetCursorScreenPos({100,100}); ImGui::Dummy({width,300});
+        auto* draw=ImGui::GetWindowDrawList(); const int first=draw->VtxBuffer.Size;
+        tools.DrawOverlay(100,100,width,300);
+        vertices.assign(draw->VtxBuffer.begin()+first,draw->VtxBuffer.end());
+        for(const auto& vertex:vertices) assert(std::isfinite(vertex.pos.x) && std::isfinite(vertex.pos.y));
+        ImGui::End(); ImGui::Render();
+    };
+    frame({110,110},false); frame({110,110},false);
+    assert(!vertices.empty());
+    // The actual overlay path selects each new component as well as legacy sky/fog, without a mesh.
+    for(auto entity:entities) {
+        const auto p=position(entity);
+        frame({100+p.x*400,100+p.y*300},true);
+        assert(f.session.GetSelection()==Id(entity));
+        frame({110,110},false);
+    }
+    const auto a=position(entities[0]), b=position(entities[1]);
+    assert(tools.Pick(a.x,a.y,false));
+    assert(tools.Pick(b.x,b.y,true) && f.session.Selection().All().size()==2);
+    assert(tools.Pick(a.x,a.y,true) && !f.session.Selection().Contains(Id(entities[0])));
+    // Disabled environment components stay visible and selectable in the editor.
+    entities[0].GetComponent<SkyAtmosphereComponent>()->enabled=false;
+    entities[1].GetComponent<SkyLightComponent>()->enabled=false;
+    entities[2].GetComponent<ExponentialHeightFogComponent>()->enabled=false;
+    f.session.Selection().Clear(); frame({110,110},false);
+    assert(std::ranges::any_of(vertices,[](const auto& v) { return v.col==IM_COL32(150,150,150,180); }));
+    for(size_t i=0;i<3;++i) {
+        const auto p=position(entities[i]); assert(tools.Pick(p.x,p.y,false) && f.session.GetSelection()==Id(entities[i]));
+    }
+    // Resizing preserves the 14-pixel hit area.
+    f.session.Selection().Clear(); frame({110,110},false,600);
+    assert(tools.Pick(a.x+10.0f/600,a.y,false) && f.session.GetSelection()==Id(entities[0]));
+    assert(!tools.Pick(a.x+18.0f/600,a.y,false));
+    // A grouped sky has one icon, rather than three overlapping hit targets.
+    f.session.Selection().Clear(); frame({110,110},false);
+    const auto singleCount=vertices.size();
+    assert(entities[0].AddComponent<SkyLightComponent>());
+    assert(entities[0].AddComponent<ExponentialHeightFogComponent>());
+    frame({110,110},false); assert(vertices.size()==singleCount);
+    // Hidden/behind-eye origins cannot be picked; overlapping icons resolve to the nearer Entity.
+    entities[4].GetComponent<TransformComponent>()->translation={0,5,-10};
+    assert(level->Update(0)); frame({110,110},false);
+    const auto behind=position(entities[4]); assert(!tools.Pick(behind.x,behind.y,false));
+    entities[4].GetComponent<TransformComponent>()->translation={-2,0,5};
+    assert(level->Update(0)); frame({110,110},false);
+    assert(tools.Pick(a.x,a.y,false) && f.session.GetSelection()==Id(entities[4]));
+    assert(f.session.StartPlay()); frame({110,110},false);
+    assert(vertices.empty() && !tools.Pick(a.x,a.y,false));
+    f.session.StopPlay(); ImGui::DestroyContext();
+    std::cout << "PASS: environment viewport icons, overlay clicks, disabled selection, multi-selection, fixed pixel targets, grouping, clipping and play isolation.\n";
+}
 void ViewportSceneGuidesTests() {
     Fixture f;
     auto* level=f.session.GetLevel();

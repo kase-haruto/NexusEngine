@@ -2,12 +2,14 @@
 #define NEXUS_INDIRECT_LIGHTING
 #include "SurfaceData.hlsli"
 #include "BRDF.hlsli"
-struct EnvironmentData { uint4 textures; float4 parameters; uint4 options; };
+#include "Atmosphere.hlsli"
+struct EnvironmentData { uint4 textures; float4 parameters; uint4 options; AtmosphereData atmosphere; };
 float3 EnvironmentDirection(float3 d, EnvironmentData e) {
     return float3(e.parameters.z * d.x - e.parameters.y * d.z, d.y, e.parameters.y * d.x + e.parameters.z * d.z);
 }
 float3 SampleEnvironment(float3 direction, EnvironmentData e) {
     if(e.options.y == 0) return 0;
+    if(e.options.y == 2) return AtmosphereRadiance(direction, e.atmosphere) * e.parameters.x;
     TextureCube<float4> map = ResourceDescriptorHeap[e.textures.x];
     SamplerState sampleState = SamplerDescriptorHeap[e.options.x];
     return map.SampleLevel(sampleState, EnvironmentDirection(direction, e), 0).rgb * e.parameters.x;
@@ -23,7 +25,7 @@ float2 FallbackEnvironmentBRDF(float nv, float roughness) {
 float4 ApplyDiffuseIrradiance(float4 irradiance,SurfaceData s,float3 v,EnvironmentData e,float intensity) {
     if(irradiance.a<.5) return 0;
     float3 fresnel=.04;
-    if(e.options.y!=0) {
+    if(e.options.y==1) {
         Texture2D<float2> lut=ResourceDescriptorHeap[e.textures.w];SamplerState state=SamplerDescriptorHeap[e.options.x];
         float2 ab=lut.SampleLevel(state,float2(saturate(dot(s.normal,v)),s.roughness),0);
         fresnel=saturate(lerp(.04.xxx,s.baseColor,s.metallic)*ab.x+ab.y);
@@ -35,6 +37,19 @@ IndirectLighting EvaluateIndirectLighting(SurfaceData s, float3 v, EnvironmentDa
     // alpha=0は未計算、1～2は有効なGIと鏡面環境の可視率を表す。
     // 拡散IBL表示は比較のため置換前の結果を維持する。
     const bool useGI = tracedDiffuse.a > 0.5 && e.options.z != 3;
+    if(e.options.y == 2) {
+        float nv = saturate(dot(s.normal, v));
+        float2 ab = FallbackEnvironmentBRDF(nv, s.roughness);
+        float3 f = saturate(lerp(.04.xxx, s.baseColor, s.metallic) * ab.x + ab.y);
+        float3 diffuse = AtmosphereDiffuse(s.normal, e.atmosphere);
+        result.diffuse = useGI ? tracedDiffuse.rgb : diffuse * e.parameters.x * (1-f) * (1-s.metallic) * s.baseColor * s.ambientOcclusion;
+        float3 reflected = AtmosphereRadiance(reflect(-v, s.normal), e.atmosphere, false);
+        // Broad lobes approach hemisphere radiance; no sharp solar disk is added to IBL.
+        float3 prefiltered = lerp(reflected, diffuse, s.roughness * s.roughness);
+        float specularAO = saturate(pow(nv + s.ambientOcclusion, exp2(-16*s.roughness-1))-1+s.ambientOcclusion);
+        result.specular = prefiltered * e.parameters.x * f * specularAO * (useGI ? saturate(tracedDiffuse.a-1) : 1);
+        return result;
+    }
     if(e.options.y == 0) {
         float nv = saturate(dot(s.normal, v));
         float2 ab = FallbackEnvironmentBRDF(nv, s.roughness);

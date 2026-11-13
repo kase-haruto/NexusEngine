@@ -4,6 +4,10 @@
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
+
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
 #include <algorithm>
@@ -156,6 +160,15 @@ bool SceneEditService::Create(std::string_view kind, std::string_view name) {
             level.GetScene()->ForEach<SkyRendererComponent>([&](Entity other, const auto& existing) {
                 if(other.GetId() != entity.GetId() && existing.enabled) sky->enabled = false;
             });
+        }
+        if(kind == "Sky") {
+            bool hasAtmosphere = false, hasSkyLight = false, hasHeightFog = false;
+            level.GetScene()->ForEach<SkyAtmosphereComponent>([&](Entity, const auto&) { hasAtmosphere = true; });
+            level.GetScene()->ForEach<SkyLightComponent>([&](Entity, const auto&) { hasSkyLight = true; });
+            level.GetScene()->ForEach<ExponentialHeightFogComponent>([&](Entity, const auto&) { hasHeightFog = true; });
+            if(!hasAtmosphere && !entity.AddComponent<SkyAtmosphereComponent>()) return false;
+            if(!hasSkyLight && !entity.AddComponent<SkyLightComponent>()) return false;
+            if(!hasHeightFog && !entity.AddComponent<ExponentialHeightFogComponent>()) return false;
         }
         if(kind == "DirectionalLight") {
             auto* light = entity.AddComponent<DirectionalLightComponent>();

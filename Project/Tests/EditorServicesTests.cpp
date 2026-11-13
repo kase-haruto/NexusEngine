@@ -19,6 +19,10 @@
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
+
 #include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
 #include "Editor/Core/EditorWorkspace.h"
@@ -87,8 +91,25 @@ void SkyEntityEditing() {
     assert(!scene.skyIntensity);
     assert(f.properties.Undo());
     assert(RenderSceneExtractor{}.ExtractInto(*f.session.GetLevel()->GetScene(), 1, scene));
-    assert(scene.skyIntensity == 0.4f);
+    assert(scene.skyIntensity == 1.0f && scene.atmosphere.enabled);
     std::cout << "PASS: sky entity creation, properties, uniqueness, save/load, PIE, deletion and undo.\n";
+}
+void FixedAtmosphereEditing() {
+    Fixture f; assert(f.edits.Create("Sky"));
+    const auto id = f.session.GetSelection();
+    assert(f.session.GetSelectedEntity().HasComponent<SkyAtmosphereComponent>());
+    assert(f.session.GetSelectedEntity().HasComponent<SkyLightComponent>());
+    assert(f.session.GetSelectedEntity().HasComponent<ExponentialHeightFogComponent>());
+    const PropertyHandle time{id, "SkyAtmosphere", "timeOfDay"};
+    assert(f.properties.Preview(time, 17.5f)); f.properties.Commit();
+    assert(!f.properties.Preview(time, 25.0f));
+    assert(f.properties.Undo()); assert(std::get<float>(*f.properties.Read(time)) == 12);
+    assert(f.properties.Redo());
+    assert(f.session.StartPlay()); assert(f.session.UpdatePreview(120));
+    assert(f.session.GetPlayLevel()->FindEntity(id).GetComponent<SkyAtmosphereComponent>()->timeOfDay == 17.5f);
+    f.session.StopPlay();
+    auto* fog = f.types.Find("ExponentialHeightFog"); assert(fog);
+    assert(f.edits.Create("Entity")); assert(!f.edits.AddComponent(*fog));
 }
 void AnimationPlayerEditing() {
     Fixture f;
@@ -1002,6 +1023,7 @@ int main() {
     AxisWidgetInteraction();
     ComponentAndAssetEditing();
     SkyEntityEditing(); AnimationPlayerEditing();
+    FixedAtmosphereEditing();
     FogComponentEditing();
     EntityConsoleTests();
     TerminalSuggestionTests();
@@ -1014,6 +1036,7 @@ int main() {
     PropertyTransactions(); StructuralHistory(); DocumentsAndPlay(); HistoryBoundsAndCommands(); LazyPanelLifecycle();
     ViewportPickingAndValidation();
     ViewportSceneGuidesTests();
+    EnvironmentViewportIconsTests();
     ViewportPreviewTests(); ViewportPreviewOverlayTests();
     CameraFarPlaneWorldProjectionTests();
     ScriptDetachTransactions(); SourceAttachmentTransactions(); CacheAndWorkspaceIntegration();

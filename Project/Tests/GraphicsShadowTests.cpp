@@ -887,6 +887,31 @@ namespace {
 			}
 			scene.fog.endDistance = scene.fog.startDistance;
 			Require(render(ShadowMode::Auto, false) == off, "Invalid fog range was not safely disabled.");
+            scene.fog.endDistance = 2;
+            scene.fog.exponentialHeight = true; scene.fog.density = .8f; scene.fog.heightFalloff = 0;
+            const auto homogeneous = render(ShadowMode::Auto, false);
+            const float opticalDepth = .8f * std::sqrt(x*x + y*y + .7f*.7f);
+            const float opacity = 1 - std::exp(-opticalDepth);
+            for(size_t channel = 0; channel < 3; ++channel) {
+                const float expected = off[pixel+channel]*(1-opacity) + scene.fog.color[channel]*255*opacity;
+                Require(std::abs(int(homogeneous[pixel+channel])-int(std::lround(expected))) <= 2, "Height fog failed Beer-Lambert integration.");
+            }
+            scene.fog.density = 0;
+            Require(render(ShadowMode::Auto, false) == off, "Zero density height fog changed geometry.");
+            scene.fog.density = .8f; scene.fog.heightFalloff = .5f; scene.fog.height = 100;
+            scene.fog.maxOpacity = .25f;
+            const auto capped = render(ShadowMode::Auto, false);
+            for(size_t channel = 0; channel < 3; ++channel) {
+                const float expected = off[pixel+channel]*.75f + scene.fog.color[channel]*255*.25f;
+                Require(std::abs(int(capped[pixel+channel])-int(std::lround(expected))) <= 2, "Height fog ignored max opacity.");
+            }
+            scene.fog.cutoffDistance = .01f;
+            Require(render(ShadowMode::Auto, false) == off, "Height fog ignored cutoff.");
+            scene.fog.cutoffDistance = 0; scene.fog.startDistance = 100;
+            Require(render(ShadowMode::Auto, false) == off, "Height fog ignored start distance.");
+            scene.fog.startDistance = 0; scene.fog.height = -100; scene.fog.maxOpacity = 1;
+            Require(render(ShadowMode::Auto, false) == off, "High geometry retained dense low-lying fog.");
+            scene.fog.exponentialHeight = false;
 			scene.fog.endDistance = 2; scene.fog.enabled = false;
 			Require(render(ShadowMode::Auto, false) == off, "Disabling fog did not restore lighting.");
 			std::cout << "Distance fog start/end/interpolation/alpha/disable passed; mesh=" << (pbrVariant == 7) << '\n';
@@ -1110,6 +1135,13 @@ int main(int argc, char** argv) {
 			ForwardIntegration(false,false,false,0,false,false,0,0,4,2);
 			return 0;
 		}
+        if(argc == 2 && std::strcmp(argv[1], "--atmosphere") == 0) {
+            SkyRenderingTests();
+            EnvironmentLightingIntegration();
+            ForwardIntegration(false, false, false, 0, true);
+            ForwardIntegration(false, false, false, 7, true);
+            return 0;
+        }
 		if(argc == 2 && std::strcmp(argv[1], "--ibl") == 0) {
 			EnvironmentLightingIntegration();
 			const auto diffuse = ForwardIntegration(false, false, false, 0, false, true);

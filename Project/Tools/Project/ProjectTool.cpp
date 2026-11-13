@@ -4,6 +4,10 @@
 #include "Runtime/Level/Level.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
+
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ProjectRegistry.h"
 #include "Tools/Engine/EngineRegistry.h"
@@ -196,7 +200,11 @@ int RunProjectTool(int argc, wchar_t** argv) {
             auto loaded = level.LoadEmpty(); if(!loaded) return loaded;
             if(!level.CreateEntity("Camera").AddComponent<CameraComponent>())
                 return std::unexpected(Error(ErrorCategory::Scene, 166, "Cannot create initial Camera."));
-            if(!level.CreateEntity("Sky").AddComponent<NexusEngine::SkyRendererComponent>())
+            auto sky = level.CreateEntity("Sky");
+            if(!sky.AddComponent<NexusEngine::SkyAtmosphereComponent>() ||
+                !sky.AddComponent<NexusEngine::SkyLightComponent>() ||
+                !sky.AddComponent<NexusEngine::ExponentialHeightFogComponent>() ||
+                !sky.AddComponent<NexusEngine::SkyRendererComponent>())
                 return std::unexpected(Error(ErrorCategory::Scene, 167, "Cannot create initial Sky."));
             return level.Save(context.StartupLevel());
         });

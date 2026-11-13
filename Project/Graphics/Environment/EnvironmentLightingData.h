@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include "Graphics/Sky/AtmosphereSettings.h"
 namespace NexusEngine {
     /** HLSLのデバッグモードと同順序。 */
     enum class LightingDebugMode : uint32_t {
@@ -19,12 +20,14 @@ namespace NexusEngine {
         uint64_t revision = 0; //< 同一pathの再読み込み要求
         LightingDebugMode debugMode = LightingDebugMode::Final;
         bool legacyHalfLambert = false;
+        AtmosphereSettings atmosphere;
     };
-    /** Graphics内部の転送値。Scene/Runtimeは保持しない。HLSLと48byte一致。 */
+    /** Graphics内部の転送値。Scene/Runtimeは保持しない。HLSLと96byte一致。 */
     struct EnvironmentDrawData {
         std::array<uint32_t, 4> textures {}; //< radiance/irradiance/prefilter/LUT
         std::array<float, 4> parameters {0, 0, 1, 0}; //< intensity/sin(yaw)/cos(yaw)/maxMip
         std::array<uint32_t, 4> options {}; //< sampler/enabled/debug/legacy
+        AtmosphereDrawData atmosphere;
     };
-    static_assert(sizeof(EnvironmentDrawData) == 48);
+    static_assert(sizeof(EnvironmentDrawData) == 96);
 }

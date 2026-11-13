@@ -736,5 +736,9 @@
     <ClInclude Include="Platform\Development\LiveCodingAgent.h"><Filter>Platform\Development</Filter></ClInclude>
     <None Include="LivePP.props" />
     <None Include="Docs\LiveCoding.md"><Filter>Docs</Filter></None>
+    <ClCompile Include="Runtime\Scripting\MonoHost.cpp"><Filter>Runtime\Scripting</Filter></ClCompile>
+    <ClInclude Include="Runtime\Scripting\MonoHost.h"><Filter>Runtime\Scripting</Filter></ClInclude>
+    <ClCompile Include="Editor\Services\SourceFileActions.cpp"><Filter>Editor\Services</Filter></ClCompile>
+    <ClInclude Include="Editor\Services\SourceFileActions.h"><Filter>Editor\Services</Filter></ClInclude>
   </ItemGroup>
 </Project>

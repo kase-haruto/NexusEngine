@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Launcher/Standalone/Distribution.cs" Link="Distribution.cs" />
+    <Compile Include="../../Launcher/Standalone/ProjectRemoval.cs" Link="ProjectRemoval.cs" />
     <Compile Include="../../Launcher/Standalone/OwnedInstallation.cs" Link="OwnedInstallation.cs" />
     <Compile Include="../../Launcher/Standalone/LauncherInstallation.cs" Link="LauncherInstallation.cs" />
     <Content Include="../../Launcher/Standalone/Remove-Launcher.ps1" Link="Remove-Launcher.ps1" CopyToOutputDirectory="PreserveNewest" />

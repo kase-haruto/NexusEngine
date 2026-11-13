@@ -11,6 +11,10 @@
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
+
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
@@ -44,6 +48,8 @@ namespace NexusEngine {
 		// clearはcapacityを保持するので、安定したEntity数なら毎frameの再確保は発生しない。
 		result.primitives.clear();
 		result.camera.reset();
+        result.atmosphere = {};
+        result.skyLight.reset();
         result.fog = {};
         bool invalidFog = false;
         scene.ForEach<FogComponent>([&](Entity, const FogComponent& fog) {
@@ -86,6 +92,45 @@ namespace NexusEngine {
 				for(float& value : result.directionalLight.direction) value /= std::sqrt(lengthSquared);
 			});
 		if(lightError) return std::unexpected(std::move(*lightError));
+        bool invalidEnvironment = false;
+        scene.ForEach<SkyAtmosphereComponent>([&](Entity, const auto& sky) {
+            if(!sky.enabled) return;
+            if(!sky.IsValid() || result.atmosphere.enabled) { invalidEnvironment = true; return; }
+            result.atmosphere = sky;
+        });
+        // Sky Atmosphere takes precedence over the legacy background without changing saved entities.
+        if(result.atmosphere.enabled) {
+            result.skyIntensity = 1.0f;
+            if(!result.atmosphere.driveSun && lightFound) result.atmosphere.sunDirectionOverride = result.directionalLight.direction;
+            if(result.atmosphere.driveSun) {
+                result.directionalLight.direction = result.atmosphere.SunDirection();
+                result.directionalLight.color = result.atmosphere.SunTransmittance();
+                result.directionalLight.intensity = result.atmosphere.sunIntensity;
+            }
+        }
+        scene.ForEach<SkyLightComponent>([&](Entity, const auto& sky) {
+            if(!sky.IsValid() || result.skyLight.has_value()) { invalidEnvironment = true; return; }
+            result.skyLight = sky;
+        });
+        bool heightFogFound = false;
+        scene.ForEach<TransformComponent, ExponentialHeightFogComponent>([&](Entity, const auto& transform, const auto& fog) {
+            if(!fog.enabled) return;
+            if(!fog.IsValid() || heightFogFound) { invalidEnvironment = true; return; }
+            heightFogFound = true;
+            // Height fog replaces legacy distance fog when both exist in an old level.
+            result.fog = fog.GetSettings(transform.worldMatrix.At(3, 1));
+            if(!result.fog.IsValid()) { invalidEnvironment = true; return; }
+            if(result.atmosphere.enabled && fog.atmosphereContribution > 0) {
+                auto sun = result.atmosphere.SunTransmittance();
+                const float elevation = result.atmosphere.SunDirection()[1];
+                const float daylight = std::clamp((elevation + .12f) / .3f, 0.0f, 1.0f);
+                for(size_t i = 0; i < 3; ++i) result.fog.color[i] *=
+                    fog.atmosphereContribution * (daylight * (.15f + sun[i]) + result.atmosphere.nightIntensity);
+            }
+        });
+        if(invalidEnvironment) return std::unexpected(Error(ErrorCategory::Scene, 18,
+            "Expected valid, unique Sky Atmosphere, Sky Light and Exponential Height Fog components."));
+
 		scene.ForEach<TransformComponent, PrimitiveRenderComponent>(
 			[&](Entity entity, TransformComponent& transform, PrimitiveRenderComponent& primitive) {
 				if(primitive.enabled) {

@@ -63,7 +63,7 @@ namespace NexusEngine {
 			std::array<uint32_t,4> probeTrace {}; //< レイUAV・方向位相・フィードバック有効・予約
 			std::array<uint32_t,4> reflectionTargets {}; //< Specular UAV, guide UAV, reserved
 		};
-		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 144 && sizeof(Constants) == 416);
+		static_assert(sizeof(InstanceData) == 80 && sizeof(GeometryData) == 144 && sizeof(Constants) == 464);
 		[[nodiscard]] Result<void> CreatePipeline();
 		[[nodiscard]] Result<void> CreateReflectionFilter();
 		[[nodiscard]] Result<void> InitializeTimings(uint32_t frames);

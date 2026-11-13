@@ -4,6 +4,12 @@ RWStructuredBuffer<float4> results : register(u0);
 [numthreads(64,1,1)]
 void main(uint id : SV_DispatchThreadID) {
     float3 axes[6] = {float3(1,0,0),float3(-1,0,0),float3(0,1,0),float3(0,-1,0),float3(0,0,1),float3(0,0,-1)};
+    if(environment.options.y == 2) {
+        float3 color = id < 6 ? AtmosphereRadiance(axes[id % 6], environment.atmosphere, false) :
+            AtmosphereDiffuse(axes[id % 6], environment.atmosphere);
+        results[id] = float4(color * environment.parameters.x, 1);
+        return;
+    }
     float3 value = 0;
     if(id < 6) value = SampleEnvironment(axes[id], environment);
     else if(id < 12) {

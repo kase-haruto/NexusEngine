@@ -20,6 +20,10 @@
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
+#include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
+#include "Runtime/Scene/Components/SkyLightComponent.h"
+#include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
+
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
 
@@ -47,6 +51,54 @@ namespace NexusEngine::Tests {
 	 * \note 専用Test runner導入後に自動実行へ接続する。Runtime本体からは呼び出さない
 	 */
 	void RunEcsTests() {
+        {
+            Level level("Fixed atmosphere"); assert(level.LoadEmpty());
+            auto entity = level.CreateEntity("Environment");
+            const auto id = entity.GetComponent<PersistentIdComponent>()->value;
+            assert(entity.AddComponent<SkyAtmosphereComponent>());
+            assert(entity.AddComponent<SkyLightComponent>());
+            assert(entity.AddComponent<ExponentialHeightFogComponent>());
+            assert(level.Update(0));
+            RenderScene frame; RenderSceneExtractor extractor;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(frame.atmosphere.enabled && frame.skyLight && frame.fog.exponentialHeight);
+            assert(frame.directionalLight.direction[1] > .999f);
+            assert(frame.GetEnvironmentLighting().atmosphere.enabled);
+            auto* atmosphere = entity.GetComponent<SkyAtmosphereComponent>();
+            atmosphere->timeOfDay = 18;
+            assert(level.Update(3600)); // Time is a saved setting: elapsed time must never advance it.
+            assert(atmosphere->timeOfDay == 18);
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(std::abs(frame.directionalLight.direction[1]) < .001f);
+            assert(frame.directionalLight.color[0] > frame.directionalLight.color[2]);
+            auto sunset = frame.fog.color;
+            atmosphere->timeOfDay = 0;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert((frame.directionalLight.color == std::array<float, 3>{}));
+            assert(frame.fog.color[0] < sunset[0]);
+            atmosphere->timeOfDay = 17.5f;
+            entity.GetComponent<ExponentialHeightFogComponent>()->startDistance = 100;
+            const auto path = std::filesystem::path("Generated/Atmosphere.level");
+            std::filesystem::create_directories(path.parent_path()); assert(level.Save(path));
+            Level restored; assert(restored.Load(path));
+            assert(restored.FindEntity(id).GetComponent<SkyAtmosphereComponent>()->timeOfDay == 17.5f);
+            assert(extractor.ExtractInto(*restored.GetScene(), 1, frame));
+            assert(frame.fog.startDistance == 100);
+            auto copy = restored.GetScene()->Clone(); assert(copy);
+            assert(extractor.ExtractInto(*copy, 1, frame) && frame.atmosphere.timeOfDay == 17.5f);
+            atmosphere->timeOfDay = 25; assert(!level.Save(path));
+            assert(!extractor.ExtractInto(*level.GetScene(), 1, frame));
+            atmosphere->timeOfDay = 12;
+            entity.GetComponent<SkyLightComponent>()->enabled = false;
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(!frame.GetEnvironmentLighting().enabled && frame.atmosphere.enabled);
+            assert(entity.RemoveComponent<SkyAtmosphereComponent>());
+            assert(entity.RemoveComponent<SkyLightComponent>());
+            assert(entity.RemoveComponent<ExponentialHeightFogComponent>());
+            assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
+            assert(!frame.atmosphere.enabled && !frame.skyLight && !frame.fog.enabled && !frame.skyIntensity);
+        }
+
         {
             Level level("Animation players"); assert(level.LoadEmpty());
             auto first = level.CreateEntity("First");
