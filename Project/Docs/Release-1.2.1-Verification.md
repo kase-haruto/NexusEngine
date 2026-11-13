@@ -31,6 +31,6 @@ GitHub Releases: https://github.com/kase-haruto/NexusEngine/releases/tag/distrib
 
 配布タグは修正ソース `e81007f` を指す。新旧SDK5版と既存本番Launcher setupを添付し、GitHub APIのサイズ・SHA-256照合後に公開した。1.2.1は公開ダウンロードURLから実際に取得し、165,928,742 bytesと上記SHA-256に一致。実ZIPの展開と1,841ファイルのinventory登録も成功。既存のReleaseやファイルは削除・置換していない。
 
-CloudflareのCLI認証がこの環境に存在しないため、サイトとLauncherカタログの更新は認証待ち。ローカルには5版のカタログと公開サイトassetsを生成済みだが、サイトでの1.2.1公開完了とは扱わない。公開後の記録は認証・デプロイ・取得確認後に更新する。
+Cloudflareの本人認証を完了し、既存Workers Freeの静的サイトへ公開した。公開URLは https://nexus-engine.nexus-engine-website.workers.dev/ 。`/releases.json` と `/data/catalog.json` のSDK5版について、版・構成・URL・サイズ・SHA-256の一致を確認。SDK5版と本番Launcher setupの全6ファイルを公開URLから再取得し、サイズ・SHA-256を照合した。`Publish-Website.authenticated.log` に結果を保存した。既存の旧版Releaseを保持し、R2・有料プラン・従量課金サービスは追加していない。
 
 全GPU・DPI・解像度・周辺機器での手動操作、開発SDKが一切ないクリーンPCでの検証は行っていない。
