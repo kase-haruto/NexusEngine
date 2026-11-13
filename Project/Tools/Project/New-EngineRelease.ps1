@@ -12,6 +12,14 @@ $manifest = Get-Content -LiteralPath (Join-Path $root 'NexusEngine.nxengine') -R
 if($manifest.association -ne 'installed') { throw 'Publish an Installed Engine SDK first; do not package a development repository.' }
 foreach($value in @($manifest.id, $manifest.version)) { if($value -notmatch '\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}\z') { throw 'Invalid identity.' } }
 if($manifest.configuration -notin @('Debug','Develop','Release')) { throw 'Invalid configuration.' }
+# Mono templates must work without the publisher's machine-specific SDK path.
+$monoDeployment = Join-Path $root 'SDK/Tools/Project/Deploy-MonoRuntime.ps1'
+$bootstrapTargets = Join-Path $root 'SDK/Build/Nexus.ManagedBootstrap.targets'
+$usesMono = (Test-Path -LiteralPath $bootstrapTargets) -and ([IO.File]::ReadAllText($bootstrapTargets).Contains('NexusMonoRoot'))
+if($usesMono -or (Test-Path -LiteralPath $monoDeployment)) {
+    if(-not (Test-Path -LiteralPath $monoDeployment)) { throw 'Mono deployment helper is missing from the Installed SDK.' }
+    & $monoDeployment -MonoRoot (Join-Path $root 'SDK/ThirdParty/Mono/Runtime') -ValidateOnly
+}
 $changes = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $ChangesFile).Path, [Text.Encoding]::UTF8)
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 if(Test-Path -LiteralPath $output) { throw 'Choose a new output directory.' }

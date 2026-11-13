@@ -5,17 +5,32 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-if (args.Length == 1 && args[0] == "--verify-public-download")
+if (args.Length is 1 or 2 && args[0] == "--verify-public-download")
 {
     var catalog = await Distribution.LoadCatalog("https://nexus-engine.nexus-engine-website.workers.dev/releases.json", default);
-    if (catalog.Length != 3) throw new Exception("Public version catalog is incomplete.");
-    var latest = catalog.Single(item => item.Version == "1.1.1");
+    // 版数の固定値で新版の検証を妨げず、指定された公開版を確実に確認する。
+    var latest = args.Length == 2
+        ? catalog.Single(item => item.Id == "nexus" && item.Configuration == "Release" && item.Version == args[1])
+        : catalog.Where(item => item.Id == "nexus" && item.Configuration == "Release" && Version.TryParse(item.Version, out _))
+            .OrderByDescending(item => Version.Parse(item.Version)).First();
     using var response = await Distribution.DownloadHttps(latest.Url, default);
     response.EnsureSuccessStatusCode();
     using var body = await response.Content.ReadAsStreamAsync();
-    var sha256 = Convert.ToHexString(await SHA256.HashDataAsync(body));
-    if (!sha256.Equals(latest.Sha256, StringComparison.OrdinalIgnoreCase)) throw new Exception("Public SDK checksum mismatch.");
-    Console.WriteLine("PASS: Launcher loaded three public versions and downloaded verified SDK 1.1.1 through GitHub HTTPS redirects.");
+    using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+    var buffer = new byte[65536];
+    long bytes = 0;
+    int count;
+    while ((count = await body.ReadAsync(buffer)) != 0)
+    {
+        bytes += count;
+        hash.AppendData(buffer, 0, count);
+    }
+    var sha256 = Convert.ToHexString(hash.GetHashAndReset());
+    if (bytes != latest.Bytes || !sha256.Equals(latest.Sha256, StringComparison.OrdinalIgnoreCase))
+    {
+        throw new Exception("Public SDK checksum or size mismatch.");
+    }
+    Console.WriteLine($"PASS: Launcher loaded {catalog.Length} public versions and downloaded verified SDK {latest.Version} through GitHub HTTPS redirects.");
     return;
 }
 

@@ -30,7 +30,9 @@ const batch = createHash('sha256').update(uploads.map(item => item.sha256).join(
 const tag = `distribution-${batch}`;
 const existing = await call(api + '/releases?per_page=100');
 let release = existing.find(item => item.tag_name === tag);
-const body = 'NexusEngine Windows x64配布物。SDK 1.0.0 / 1.1.0 / 1.1.1とLauncher setupを添付しています。\n\n導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、このバッチの登録時点のソースであり、各旧SDKを生成した履歴の保証ではありません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
+const versions = uploads.filter(item => item.key.startsWith('engines/')).map(item => item.key.match(/^engines\/nexus-(.+)-(?:Debug|Develop|Release)\.zip$/)?.[1]);
+if (versions.some(version => !version)) throw new Error('Cannot determine SDK versions from upload manifest.');
+const body = `NexusEngine Windows x64配布物。SDK ${versions.join(' / ')}とLauncher setupを添付しています。\n\n導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、このバッチの登録時点のソースであり、各旧SDKを生成した履歴の保証ではありません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n` + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
 if (!release) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: resolve(root, '../..'), encoding: 'utf8' }).trim();
   release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: commit, name: 'NexusEngine Windows SDK / Launcher', body, draft: true }) });

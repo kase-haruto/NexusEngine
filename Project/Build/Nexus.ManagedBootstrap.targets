@@ -6,6 +6,7 @@
     <NexusManagedBuildArguments Condition="'$(NexusManagedRebuild)'=='true'">-t:Rebuild</NexusManagedBuildArguments>
     <NexusManagedRuntime Condition="'$(NexusManagedRuntime)'==''">CoreCLR</NexusManagedRuntime>
     <NexusMonoRoot Condition="'$(NexusMonoRoot)'==''">$(NEXUS_MONO_ROOT)</NexusMonoRoot>
+    <NexusMonoRoot Condition="'$(NexusMonoRoot)'=='' and Exists('$(NexusEngineRoot)/ThirdParty/Mono/Runtime/bin/mono-2.0-sgen.dll')">$(NexusEngineRoot)/ThirdParty/Mono/Runtime</NexusMonoRoot>
     <NexusMonoRoot Condition="'$(NexusMonoRoot)'=='' and Exists('$(OutDir)Mono/bin/mono.exe')">$(OutDir)Mono</NexusMonoRoot>
     <NexusManagedFrameworkArguments>-p:NexusManagedRuntime=CoreCLR -p:TargetFramework=net10.0</NexusManagedFrameworkArguments>
     <NexusManagedFrameworkArguments Condition="'$(NexusManagedRuntime)'=='Mono'">-p:NexusManagedRuntime=Mono -p:TargetFramework=net48 -p:LangVersion=latest -p:GenerateDependencyFile=true</NexusManagedFrameworkArguments>

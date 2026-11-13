@@ -3,7 +3,7 @@ const origin = process.env.NEXUS_SITE_ORIGIN || 'https://nexus-engine.nexus-engi
 const get = async path => { const response = await fetch(new URL(path, origin), { cache: 'no-store' }); if (!response.ok) throw new Error(`HTTP ${response.status}: ${path}`); return response.json(); };
 const catalog = await get('/data/catalog.json');
 const launcherCatalog = await get('/releases.json');
-if (!catalog.launcher?.available || !catalog.releases.length || launcherCatalog.schemaVersion !== 1 || launcherCatalog.releases.length !== catalog.releases.length || catalog.releases.some(item => !launcherCatalog.releases.some(r => r.id === item.id && r.version === item.version && r.sha256 === item.sha256 && r.url === item.url))) throw new Error('Public catalog is incomplete.');
+if (!catalog.launcher?.available || !catalog.releases.length || launcherCatalog.schemaVersion !== 1 || launcherCatalog.releases.length !== catalog.releases.length || catalog.releases.some(item => !launcherCatalog.releases.some(r => r.id === item.id && r.version === item.version && r.configuration === item.configuration && r.sha256 === item.sha256 && r.bytes === item.bytes && r.url === item.url))) throw new Error('Public catalog is incomplete.');
 for (const item of [...catalog.releases, catalog.launcher]) {
   if (!item.available || !item.url.startsWith('https://github.com/kase-haruto/NexusEngine/releases/download/')) throw new Error('Invalid download address.');
   const response = await fetch(item.url);

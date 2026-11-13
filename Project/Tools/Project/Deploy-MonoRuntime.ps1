@@ -1,7 +1,6 @@
-﻿param([Parameter(Mandatory=$true)][string]$MonoRoot,[Parameter(Mandatory=$true)][string]$OutputDirectory)
+﻿param([Parameter(Mandatory=$true)][string]$MonoRoot,[string]$OutputDirectory,[switch]$ValidateOnly)
 $ErrorActionPreference='Stop'
 $source=[IO.Path]::GetFullPath($MonoRoot).TrimEnd('\','/')
-$destination=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\','/')
 # Windows PowerShell 5.1のFileSystem providerは長いGAC名をMAX_PATHで拒否する。
 # Processの設定やOS policyを変えず、明示的な拡張長pathでファイルAPIを利用する。
 function Native-Path([string]$Path) {
@@ -24,6 +23,10 @@ function Copy-MonoFile([string]$From,[string]$To) {
 foreach($required in @('bin/mono.exe','bin/mono-2.0-sgen.dll','lib/mono/4.5/mscorlib.dll','etc/mono/config')) {
     if(-not [IO.File]::Exists((Join-Path $source $required))) { throw "Incomplete Mono SDK: $required" }
 }
+if(-not [IO.Directory]::Exists((Join-Path $source 'lib/mono/gac'))) { throw 'Incomplete Mono SDK: lib/mono/gac' }
+if($ValidateOnly) { return }
+if(-not $OutputDirectory) { throw 'OutputDirectory is required for Mono deployment.' }
+$destination=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\','/')
 # 配置済みRuntimeをSDKとして再利用する場合は、その場へのcopyを繰り返さない。
 if($source -ieq $destination) { return }
 if($destination.StartsWith($source+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Mono deployment cannot be inside its source SDK.' }

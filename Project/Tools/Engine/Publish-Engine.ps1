@@ -2,7 +2,8 @@
     [Parameter(Mandatory=$true)][string]$SourceManifest,
     [Parameter(Mandatory=$true)][string]$Destination,
     [Parameter(Mandatory=$true)][string]$EngineId,
-    [Parameter(Mandatory=$true)][string]$Version
+    [Parameter(Mandatory=$true)][string]$Version,
+    [string]$MonoRoot = $env:NEXUS_MONO_ROOT
 )
 $ErrorActionPreference = 'Stop'
 $sourceFile = [IO.Path]::GetFullPath($SourceManifest)
@@ -23,6 +24,12 @@ if([IO.Directory]::Exists($destinationPath) -or [IO.File]::Exists($destinationPa
 if($destinationPath.StartsWith($sdkSource.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Install outside the Engine source directories.' }
 $parent = [IO.Path]::GetDirectoryName($destinationPath)
 if(-not $parent) { throw 'Installed Engine destination needs a parent directory.' }
+# Installed templates use Mono even without a separately installed SDK.
+# Validate before compiling or creating staging; bundled files enter inventory below.
+if(-not $MonoRoot) { $MonoRoot = Join-Path $sdkSource 'ThirdParty/Mono/Runtime' }
+$monoDeployment = Join-Path $sdkSource 'Tools/Project/Deploy-MonoRuntime.ps1'
+if(-not [IO.Directory]::Exists($MonoRoot)) { throw 'Publishing requires the official Mono x64 SDK. Set -MonoRoot or NEXUS_MONO_ROOT; the runtime will be bundled for launcher users.' }
+& $monoDeployment -MonoRoot $MonoRoot -ValidateOnly
 [IO.Directory]::CreateDirectory($parent) | Out-Null
 $staging = Join-Path $parent ('.nexus-install-' + [guid]::NewGuid().ToString())
 [IO.Directory]::CreateDirectory($staging) | Out-Null
@@ -31,8 +38,19 @@ $sdk = Join-Path $staging 'SDK'
 $bin = Join-Path $staging 'Bin'
 $configuration = $source.configuration
 $utf8 = [Text.UTF8Encoding]::new($false)
+function Native-Path([string]$Path) {
+    $full = [IO.Path]::GetFullPath($Path)
+    if($full.StartsWith('\\?\')) {
+        return $full
+    }
+    if($full.StartsWith('\\')) {
+        return '\\?\UNC\' + $full.Substring(2)
+    }
+    return '\\?\' + $full
+}
 function Digest([string]$File) {
-    $hash = [Security.Cryptography.SHA256]::Create(); $inputFile = [IO.File]::OpenRead($File)
+    # 同梱MonoのGAC名はstaging配下でMAX_PATHを超えるため、5.1でも長いpathを明示する。
+    $hash = [Security.Cryptography.SHA256]::Create(); $inputFile = [IO.File]::OpenRead((Native-Path $File))
     try { return [BitConverter]::ToString($hash.ComputeHash($inputFile)).Replace('-','').ToLowerInvariant() }
     finally { $inputFile.Dispose(); $hash.Dispose() }
 }
@@ -86,7 +104,9 @@ function Remove-Owned([string]$Path) {
     # 削除は今回所有するstaging本体か、その.Buildに限定する。
     if($resolved -cne $staging -and $resolved -cne $work) { throw 'Unsafe publishing cleanup target.' }
     if([IO.Path]::GetDirectoryName($staging) -cne $parent -or -not [IO.Path]::GetFileName($staging).StartsWith('.nexus-install-')) { throw 'Invalid staging ownership.' }
-    if(Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+    if(Test-Path -LiteralPath $resolved) {
+        [IO.Directory]::Delete((Native-Path $resolved),$true)
+    }
 }
 try {
     $locator = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -118,6 +138,7 @@ try {
         'Managed/Nexus.Managed/MonoCompatibility.cs','Managed/Nexus.Managed/MonoInterop.cs',
         'Managed/Nexus.Managed.Bootstrap/MonoGameScriptCatalog.cs','Managed/Nexus.Managed.Bootstrap/MonoEntryPoints.cs',
         'ThirdParty/Mono/PATENTS.txt')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    & $monoDeployment -MonoRoot $MonoRoot -OutputDirectory (Join-Path $sdk 'ThirdParty/Mono/Runtime')
     foreach($file in @('Build/Nexus.ManagedGameplay.targets', 'Managed/Directory.Build.props',
         'Managed/Nexus.Managed/Nexus.Managed.csproj', 'Managed/Nexus.Managed/Interop.cs', 'Managed/Nexus.Managed/Entity.cs', 'Managed/Nexus.Managed/GameWorld.cs', 'Managed/Nexus.Managed/ScriptBehaviour.cs',
         'Managed/Nexus.Managed/ExposeAttribute.cs', 'Managed/Nexus.Managed/ScriptMetadata.cs',

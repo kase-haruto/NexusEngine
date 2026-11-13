@@ -3,7 +3,7 @@
 ModulesはNativeCombat (C++)とGameplay (C#)です。Level / Assets / Entity / Componentは両言語で共有します。
 初期言語はModule生成順であり、Projectの言語固定ではありません。
 
-新規ProjectのC# BackendはMono / SGenです。.NET SDK、net48参照Assembly、NEXUS_MONO_ROOTで指定する公式Mono x64 SDKを用意してください。
+新規ProjectのC# BackendはMono / SGenです。.NET SDKとnet48参照Assemblyを用意してください。1.2.1以降のInstalled SDKはMono Runtimeを同梱し、初回Buildで自動配置します。Source Engineでは公式Mono x64 SDKのrootをNEXUS_MONO_ROOTで指定してください。
 ScriptはDetailsで選択し、Sourceからdropでも設定できます。1 Entityに1 Scriptです。Open / DetachとUndoは共通Editor経路を使います。
 
 NativeCombatは共通Game APIだけを参照し、combat.impulse v1を明示登録します。

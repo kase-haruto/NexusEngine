@@ -8,7 +8,7 @@ Entity.TryGetTransform(out var value)は既存ComponentのLocal値をコピー�
 任意Component型の汎用取得や、Native Game Systemの型付きBindingはこのAPIに含みません。
 
 最初にGameホストをBuildし、Bootstrap・Nexus.Managed・GameScriptsを共通Utilityから準備します。
-.NET SDK、net48参照Assembly、公式Mono x64 SDKが必要です。NEXUS_MONO_ROOTをMono SDK rootへ設定してください。
+.NET SDKとnet48参照Assemblyが必要です。1.2.1以降のInstalled SDKはMono Runtimeを同梱し、初回Buildで自動配置します。Source Engineでは公式Mono x64 SDKのrootをNEXUS_MONO_ROOTへ設定してください。
 新規ProjectはMono / SGenを使用します。BuildTargets.jsonのmanagedRuntimeを省略した旧ProjectはCoreCLRを維持します。
 GameScripts.csprojをIDEで直接開く場合も、最初にホストBuildでNexus.Managedを準備してください。
 DetailsのScript選択欄、Sourceのdrop / 右クリックで型を設定し、Open Script / Detach Scriptで開く・解除できます。

@@ -2,7 +2,7 @@
 
 公開先: https://nexus-engine.nexus-engine-website.workers.dev/
 
-紹介・Launcher setup.exe・1.0.0〜1.1.1の変更点・導入手順・開発ドキュメントをまとめた日本語サイト。UEのビジュアルと導入導線、Blenderのダウンロードとリリース案内を参考にし、独自の配色とNexusEngine自身のPBR描画画像を使っています。
+紹介・Launcher setup.exe・1.0.0〜1.2.1の変更点・導入手順・開発ドキュメントをまとめた日本語サイト。1.2.1はMono Runtimeを同梱し、新規C# / Hybridプロジェクトの別途Mono設定を不要にします。UEのビジュアルと導入導線、Blenderのダウンロードとリリース案内を参考にし、独自の配色とNexusEngine自身のPBR描画画像を使っています。
 
 ## 従量課金を使わない構成
 
@@ -37,7 +37,7 @@ Cloudflare CLIとGit Credential ManagerのGitHub認証を使用。認証情報�
 
 `-LauncherSetup`を省略すると公開URLを埋め込んだsetupを新規生成します。Visual Studio C++ / Windows SDK / .NET SDKが必要。ローカルカタログのパスを設定したReview用setupは公開しません。
 
-公開処理: 実ZIPのSHA-256・サイズを確認 → テスト → GitHubの下書きへアップロード → GitHubのSHA-256と照合 → Release公開 → 静的カタログ生成 → Cloudflareへデプロイ → 4ファイルを実際に取得し再照合。同一バッチは再利用し、異なるファイルの上書きを拒否します。
+公開処理: 実ZIPのSHA-256・サイズを確認 → テスト → GitHubの下書きへアップロード → GitHubのSHA-256と照合 → Release公開 → 静的カタログ生成 → Cloudflareへデプロイ → 全配布ファイルを実際に取得し再照合。同一バッチは再利用し、異なるファイルの上書きを拒否します。
 
 `published-assets.json`は公開URL・サイズ・SHA-256だけを保持。`upload-manifest.json`はPC内の絶対パスを含むためGit管理・配布ZIPから除外します。配布タグのGitHub自動生成Source codeを各旧SDKのソース履歴と誤認しないようRelease説明に注意書きを入れています。
 
