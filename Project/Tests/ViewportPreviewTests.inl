@@ -84,10 +84,10 @@ void ViewportPreviewOverlayTests() {
     ImGui::CreateContext();
     auto& io = ImGui::GetIO(); io.DisplaySize = {1200,850}; io.DeltaTime = 1.0f/60; io.IniFilename = nullptr;
     unsigned char* pixels; int w,h; io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h); io.Fonts->SetTexID(1);
-    const auto frame = [&](ImVec2 mouse, bool down, float windowWidth = 1050) {
+    const auto frame = [&](ImVec2 mouse, bool down, float windowWidth = 1050, float fontScale = 1) {
         io.AddMousePosEvent(mouse.x,mouse.y); io.AddMouseButtonEvent(0,down);
         ImGui::NewFrame(); ImGui::SetNextWindowPos({0,0}); ImGui::SetNextWindowSize({windowWidth,750});
-        ImGui::Begin("PreviewTest"); panel.Draw(context); ImGui::End(); ImGui::Render();
+        ImGui::Begin("PreviewTest"); ImGui::SetWindowFontScale(fontScale); panel.Draw(context); ImGui::End(); ImGui::Render();
     };
     frame({-100,-100}, false); frame({-100,-100}, false);
     frame({-100,-100}, false);
@@ -99,6 +99,17 @@ void ViewportPreviewOverlayTests() {
     }
     assert(shelf && shelf->Active && headerWindow && headerWindow->Active);
     assert(shelf->Size.x < 50 && headerWindow->Size.x < 180);
+    // 端数DPIでも十分なViewport幅があるときはHeaderの4組が一列に収まる。
+    for(float scale : {1.f, 1.25f, 1.5f, 1.75f, 2.f}) {
+        for(int index = 0; index < 3; ++index) {
+            frame({-100,-100}, false, 1050, scale);
+        }
+        const auto style = UI::CurrentEditorTheme().viewportTools;
+        const float rowHeight = (style.button + style.padding * 2) * headerWindow->WindowPadding.x / style.padding;
+        assert(headerWindow->Size.y <= std::ceil(rowHeight) + 3);
+        assert(!headerWindow->ScrollbarX && !headerWindow->ScrollbarY);
+    }
+    frame({-100,-100}, false); frame({-100,-100}, false); frame({-100,-100}, false);
     auto* sceneWindow = ImGui::FindWindowByName("PreviewTest");
     const auto sceneExtent = sceneWindow->WorkRect.GetSize();
     const auto renderExtent = std::pair{renderWidth,renderHeight};

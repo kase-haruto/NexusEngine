@@ -30,7 +30,16 @@ const batch = createHash('sha256').update(uploads.map(item => item.sha256).join(
 const tag = `distribution-${batch}`;
 const existing = await call(api + '/releases?per_page=100');
 let release = existing.find(item => item.tag_name === tag);
-const body = 'NexusEngine Windows x64配布物。SDK 1.0.0 / 1.1.0 / 1.1.1とLauncher setupを添付しています。\n\n導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、このバッチの登録時点のソースであり、各旧SDKを生成した履歴の保証ではありません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
+// 添付する実カタログから版一覧を生成し、次回の公開時も説明と配布物を一致させる。
+const versions = uploads
+  .filter(item => {
+    return item.key.startsWith('engines/');
+  })
+  .map(item => {
+    return item.key.replace(/^engines\/nexus-/, '').replace(/-Release\.zip$/, '');
+  })
+  .join(' / ');
+const body = 'NexusEngine Windows x64配布物。SDK ' + versions + 'とLauncher setupを添付しています。\n\n導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、このバッチの登録時点のソースであり、各旧SDKを生成した履歴の保証ではありません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
 if (!release) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: resolve(root, '../..'), encoding: 'utf8' }).trim();
   release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: commit, name: 'NexusEngine Windows SDK / Launcher', body, draft: true }) });
@@ -46,7 +55,7 @@ for (const item of uploads) {
     asset = await call(`https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(item.bytes) }, body: createReadStream(item.file), duplex: 'half' });
   }
   if (asset.size !== item.bytes || asset.digest !== `sha256:${item.sha256}` || asset.state !== 'uploaded') throw new Error(`Uploaded asset verification failed: ${name}`);
-  published[item.key] = { url: asset.browser_download_url, bytes: asset.size, sha256: item.sha256 };
+  published[item.key] = { url: asset.browser_download_url, bytes: asset.size, sha256: item.sha256, ...(item.version ? { version: item.version } : {}) };
   console.log(`Verified ${name}`);
 }
 if (release.draft) release = await call(api + `/releases/${release.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft: false, make_latest: 'true' }) });

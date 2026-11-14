@@ -59,6 +59,8 @@ template<> struct ReflectionTraits<ColliderComponent> {
         visitor("friction", &ColliderComponent::friction);
         visitor("restitution", &ColliderComponent::restitution);
         visitor("sensor", &ColliderComponent::sensor);
+        visitor("collisionLayer", &ColliderComponent::collisionLayer);
+        visitor("collisionMask", &ColliderComponent::collisionMask);
     }
 };
 template<> struct ReflectionTraits<DirectionalLightComponent> {
@@ -197,6 +199,8 @@ template<> struct ReflectionTraits<RigidBodyComponent> {
         visitor("angularVelocity", &RigidBodyComponent::angularVelocity);
         visitor("sensor", &RigidBodyComponent::sensor);
         visitor("continuous", &RigidBodyComponent::continuous);
+        visitor("collisionLayer", &RigidBodyComponent::collisionLayer);
+        visitor("collisionMask", &RigidBodyComponent::collisionMask);
     }
 };
 template<> struct ReflectionTraits<ScriptComponent> {

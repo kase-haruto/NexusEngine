@@ -66,6 +66,7 @@ Result<void> GameRuntime::Start(std::unique_ptr<Level> level) {
         return std::unexpected(Error(ErrorCategory::Framework, 40, "Game runtime requires a loaded level and a stopped session."));
     // 設定の値受渡しは開始前に完了できるが、Worldを所有する最初の開始要求以降はThreadを変えない。
     if(thread_ == std::thread::id{}) thread_ = std::this_thread::get_id();
+    level->GetScene()->Time() = {}; // Playの新sessionは時刻0から開始する。ReloadのCloneとは区別する。
     starting_ = true;
     nativePatchState_ = NativePatchState::Idle;
     pendingStop_ = false;
@@ -228,6 +229,14 @@ Result<void> GameRuntime::UpdateWorld(float deltaTime) {
         ~UpdateGuard() { owner.updating_ = false; if(owner.pendingStop_) owner.Stop(); }
     } guard{*this};
     try {
+        // 時間と消費をゲーム更新境界でだけ進め、Editor/Camera previewの抽出回数に依存させない。
+        auto& clock = level_->GetScene()->Time();
+        if(!clock.BeginFrame(deltaTime)) {
+            return std::unexpected(Error(ErrorCategory::Framework, 43, "Game clock overflow."));
+        }
+        deltaTime = clock.deltaTime;
+        const float fixedDelta = clock.fixedDeltaTime;
+        level_->GetScene()->AdvanceDebugDraw(deltaTime);
         if(nativeModule_) {
             auto result = nativeModule_->Update(deltaTime);
             if(!result) { pendingStop_ = true; return result; }
@@ -237,8 +246,30 @@ Result<void> GameRuntime::UpdateWorld(float deltaTime) {
             auto updated = module->Update(deltaTime); if(!updated) { pendingStop_ = true; return updated; }
         }
         if(pendingStop_) return {};
-        auto result = level_->Update(deltaTime);
-        if(result && !pendingStop_ && gameApi_) gameApi_->PublishPhysicsContacts();
+        // 遅延frameは最大64step。余剰時間は時計へ記録し、無制限の追従でEditorを固めない。
+        for(uint32_t step = 0; step < clock.pendingSteps; ++step) {
+            clock.inFixedStep = true;
+            clock.fixedElapsed += fixedDelta;
+            ++clock.fixedTick;
+            struct FixedGuard {
+                GameTimeState& clock;
+                ~FixedGuard() {
+                    clock.inFixedStep = false;
+                }
+            } fixedGuard{clock};
+            auto result = level_->GetSystemScheduler().FixedStep(*level_->GetScene(), fixedDelta);
+            if(!result) {
+                pendingStop_ = true;
+                return result;
+            }
+            if(gameApi_ && !pendingStop_) {
+                gameApi_->PublishPhysicsContacts();
+            }
+            if(pendingStop_) {
+                return {};
+            }
+        }
+        auto result = level_->GetSystemScheduler().VariableStep(*level_->GetScene(), deltaTime);
         // Native Systemも既存Schedulerから失敗するため、DLLのModule.update成功だけで実行を継続しない。
         if(!result) pendingStop_ = true;
         return result;

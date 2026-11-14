@@ -2,12 +2,15 @@
 param(
     [uri]$CatalogUrl,
     [string]$CatalogFile,
+    [uri]$LauncherCatalogUrl,
+    [ValidatePattern('^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$')][string]$LauncherVersion = '1.0.0',
     [string]$ProjectToolDirectory,
     [string]$OutputDirectory = (Join-Path $PSScriptRoot ('../../../Generated/LauncherDistribution/' + [guid]::NewGuid().ToString('N'))),
     [switch]$FrameworkDependent
 )
 $ErrorActionPreference = 'Stop'
 if($CatalogUrl -and $CatalogUrl.Scheme -ne 'https') { throw 'CatalogUrl must be HTTPS.' }
+if($LauncherCatalogUrl -and $LauncherCatalogUrl.Scheme -ne 'https') { throw 'LauncherCatalogUrl must be HTTPS.' }
 if($CatalogFile) { $CatalogFile = (Resolve-Path -LiteralPath $CatalogFile).Path }
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $launcherSource = Join-Path $repository 'Project/Launcher'
@@ -27,10 +30,11 @@ $launcherOutput = Join-Path $output 'Launcher'
 $setupOutput = Join-Path $output 'Setup'
 $selfContained = if($FrameworkDependent) { 'false' } else { 'true' }
 New-Item -ItemType Directory -Path $output | Out-Null
-& dotnet publish (Join-Path $launcherSource 'Standalone/Launcher.csproj') -c Release -r win-x64 --self-contained $selfContained -o $launcherOutput
+& dotnet publish (Join-Path $launcherSource 'Standalone/Launcher.csproj') -c Release -r win-x64 --self-contained $selfContained "-p:Version=$LauncherVersion" -o $launcherOutput
 if($LASTEXITCODE -ne 0) { throw 'Launcher publish failed.' }
 $catalogAddress = if($CatalogUrl) { $CatalogUrl.AbsoluteUri } else { '' }
-@{catalogUrl=$catalogAddress;catalogFile=$CatalogFile;projectTool='Tools/NexusProjectTool.exe'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $launcherOutput 'launcher.json') -Encoding UTF8
+$launcherCatalogAddress = if($LauncherCatalogUrl) { $LauncherCatalogUrl.AbsoluteUri } elseif($CatalogUrl) { [uri]::new($CatalogUrl, 'launcher-releases.json').AbsoluteUri } else { '' }
+@{catalogUrl=$catalogAddress;catalogFile=$CatalogFile;projectTool='Tools/NexusProjectTool.exe';launcherCatalogUrl=$launcherCatalogAddress;launcherVersion=$LauncherVersion} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $launcherOutput 'launcher.json') -Encoding UTF8
 $tools = Join-Path $launcherOutput 'Tools'
 New-Item -ItemType Directory -Path $tools | Out-Null
 Copy-Item -LiteralPath (Join-Path $toolRoot 'NexusProjectTool.exe') -Destination $tools

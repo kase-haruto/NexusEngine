@@ -9,10 +9,10 @@ namespace NexusLauncher;
 
 public sealed record Release(string Id, string Version, string Configuration, string Changes, string Url, string Sha256, long Bytes)
 {
-    public override string ToString() => $"NexusEngine {Version} ({Configuration})";
+    public override string ToString() => $"{(Id == "nexus-launcher" ? "Launcher" : "NexusEngine")} {Version} ({Configuration})";
 }
 public sealed record Catalog(int SchemaVersion, Release[] Releases);
-public sealed record Settings(string CatalogUrl, string ProjectTool, string? CatalogFile = null);
+public sealed record Settings(string CatalogUrl, string ProjectTool, string? CatalogFile = null, string? LauncherCatalogUrl = null, string LauncherVersion = "1.0.0");
 public sealed record Installed(string Manifest, string Id, string Version, string Configuration, string Association = "installed")
 {
     public override string ToString() => $"{Version} ({Configuration}) — {Manifest}";

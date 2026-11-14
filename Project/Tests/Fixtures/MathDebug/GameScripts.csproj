@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>MathDebugScripts</AssemblyName><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><EnableDynamicLoading>true</EnableDynamicLoading></PropertyGroup>
+  <ItemGroup><Reference Include="Nexus.Managed"><HintPath>$(NexusManagedApiPath)</HintPath><Private>false</Private></Reference></ItemGroup>
+</Project>

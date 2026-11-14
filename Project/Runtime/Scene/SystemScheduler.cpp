@@ -21,7 +21,19 @@ namespace NexusEngine {
         return false;
     }
 
-	Result<void> SystemScheduler::Update(Scene& scene, const float deltaTime) {
+	Result<void> ISceneSystem::FixedUpdate(Scene&, float) {
+        return {};
+    }
+    Result<void> SystemScheduler::Update(Scene& scene, float deltaTime) {
+        return Run(scene, deltaTime, 0);
+    }
+    Result<void> SystemScheduler::FixedStep(Scene& scene, float deltaTime) {
+        return Run(scene, deltaTime, 1);
+    }
+    Result<void> SystemScheduler::VariableStep(Scene& scene, float deltaTime) {
+        return Run(scene, deltaTime, 2);
+    }
+    Result<void> SystemScheduler::Run(Scene& scene, const float deltaTime, int mode) {
 		if(executing_) {
 			return std::unexpected(Error(ErrorCategory::Scene, 32, "System scheduler update cannot be reentered."));
 		}
@@ -32,7 +44,12 @@ namespace NexusEngine {
 		} guard { executing_ };
 		executing_ = true;
 		for(const auto& system : systems_) {
-			auto result = system->Update(scene, deltaTime);
+			// 固定stepはSimulationの専用callback→Physics→Transform。可変stepはPhysicsを進めない。
+            if(mode == 2 && system->GetPhase() == SystemPhase::Physics) {
+                continue;
+            }
+            auto result = mode == 1 && system->GetPhase() == SystemPhase::Simulation ?
+                system->FixedUpdate(scene, deltaTime) : system->Update(scene, deltaTime);
 			if(!result) {
 				return result;
 			}

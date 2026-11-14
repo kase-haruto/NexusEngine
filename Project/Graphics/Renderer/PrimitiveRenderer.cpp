@@ -290,6 +290,10 @@ namespace NexusEngine {
         if(!result) return result;
         result = grid_.Initialize(context);
         if(!result) return result;
+        result = debugDraw_.Initialize(context);
+        if(!result) {
+            return result;
+        }
 		mark(initializationProfile_.selectionMs);
 
         if(modelAsset_ == nullptr || modelPose_ == nullptr || modelPose_->GetAsset() != modelAsset_) {
@@ -340,6 +344,7 @@ namespace NexusEngine {
         selectionDraws_.clear();
         selectionOutline_.Shutdown();
         grid_.Shutdown();
+        debugDraw_.Shutdown();
 		// GraphicsSystem の GPU idle 後に呼ばれる。元 Vertex Buffer より先に解放する。
 		meshletResources_.clear();
 		meshPipeline_.Shutdown();
@@ -594,6 +599,10 @@ namespace NexusEngine {
         }
         auto outlined = selectionOutline_.Render(context, selectionDraws_);
         if(!outlined) NEXUS_LOG_ERROR("Selection", outlined.error().GetMessageText());
+        auto debug = debugDraw_.Render(context, projection, renderScene_->debugLines);
+        if(!debug) {
+            NEXUS_LOG_ERROR("DebugDraw", debug.error().GetMessageText());
+        }
 	}
 
 } // namespace NexusEngine

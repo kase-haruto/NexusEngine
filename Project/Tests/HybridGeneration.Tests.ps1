@@ -34,7 +34,7 @@ $targets=@{schemaVersion=1;runtimeProject='GameRuntime.vcxproj';editorProject='G
 Put (Join-Path $game 'Config/BuildTargets.json') ($targets | ConvertTo-Json -Depth 10)
 Put (Join-Path $game 'Levels/Main.level') 'unchanged Level bytes'
 Put (Join-Path $game 'Assets/Keep.asset') 'unchanged Asset bytes'
-foreach($name in @('Main.cpp','CrowdSimulationSystem.h','CrowdSimulationSystem.cpp','CrowdBinding.h','NativeModuleState.h','NativePatchHooks.cpp')) {
+foreach($name in @('Main.cpp','CrowdSimulationSystem.h','CrowdSimulationSystem.cpp','CrowdBinding.h','NativeModuleState.h','NativePatchHooks.cpp','NativeMover.h','NativeMover.cpp','GameComponents.h')) {
  Put (Join-Path $game ('Source/Native/'+$name)) ((Template ('NativeModule/'+$name+'.in')).Replace('@PROJECT_GUID@',$projectId).Replace('{"Game", 4}','{"CrowdSimulation", 15}'))
 }
 Put (Join-Path $game 'Source/Managed/Keep.cs') '// Existing source must remain unchanged.'
@@ -49,7 +49,7 @@ Put (Join-Path $game 'Source/Host/Main.cpp') ('// NEXUS_PROJECT_MODULE_MANIFEST 
 Put (Join-Path $game 'Game.slnx') '<Solution />'
 
 $sourceTool=Join-Path $engineSource 'Tools/Project/Add-GameSource.ps1'
-& $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name CrowdAgent
+& $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name CrowdAgent -Kind System
 $native=[IO.File]::ReadAllText((Join-Path $game 'Source/Native/CrowdAgent.h'))
 Require ($native.Contains('class CrowdAgent final') -and -not $native.Contains('CrowdAgentAgent')) 'Native template replacement processed the new name twice.'
 $binding=[IO.File]::ReadAllText((Join-Path $game 'Source/Native/CrowdAgentBinding.h'))
@@ -60,6 +60,44 @@ Require ($facade.Contains('global::Nexus.Managed.Entity')) 'Facade can shadow it
 & $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId Managed -Name ScriptBehaviour
 $behaviour=[IO.File]::ReadAllText((Join-Path $game 'Source/Managed/ScriptBehaviour.cs'))
 Require ($behaviour.Contains('class ScriptBehaviour : global::Nexus.Managed.ScriptBehaviour')) 'Generated Behaviour inherited from itself.'
+foreach($callback in @('OnCreate','OnEnable','OnUpdate','OnFixedUpdate','OnDisable','OnDestroy')) {
+ Require ($behaviour.Contains('protected override void '+$callback+'(')) ('Missing C# lifecycle stub: '+$callback)
+}
+Require (-not $behaviour.Contains('transform.Translation.X +=')) 'A new Behaviour still moves an Entity automatically.'
+Require ($behaviour.Contains('deltaTime') -and $behaviour.Contains('秒') -and $behaviour.Contains('ここに')) 'C# guidance comments are missing.'
+& $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId Managed -Name MoveSpeed
+
+# Entity単位のC++ Behaviourは、全Lifecycleと明示登録をまとめて生成する。
+& $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name PlayerController
+$controller=Join-Path $game 'Source/Native/PlayerController.cpp'
+$controllerText=[IO.File]::ReadAllText($controller)
+foreach($callback in @('OnCreate','OnEnable','OnUpdate','OnFixedUpdate','OnDisable','OnDestroy')) {
+ Require ($controllerText.Contains('PlayerController::'+$callback+'(')) ('Missing C++ lifecycle stub: '+$callback)
+}
+Require (-not $controllerText.Contains('inline ') -and $controllerText.Contains('ここに')) 'C++ guidance or definition style is incorrect.'
+Put $controller ($controllerText+"`n// User gameplay code must survive adding another Behaviour.`n")
+$edited=[IO.File]::ReadAllText($controller)
+& $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name EnemyController
+Require ([IO.File]::ReadAllText($controller) -ceq $edited) 'Adding a Behaviour overwrote user gameplay code.'
+$registryHeader=Join-Path $game 'Source/Native/NexusGeneratedBehaviours.h'
+$header=[IO.File]::ReadAllText($registryHeader)
+$literal=[regex]::Match($header,'(?m)^#define NEXUS_GENERATED_BEHAVIOUR_METADATA (".*")\r?$').Groups[1].Value
+$json=ConvertFrom-Json $literal
+$metadata=ConvertFrom-Json ('['+$json.Substring(1)+']')
+Require ($metadata.Count -eq 2 -and $metadata[0].id -ceq 'CrowdSimulation.behaviours.PlayerController') 'Native Behaviour type IDs were not retained.'
+Require ($metadata[0].sourceFiles.Count -eq 2 -and $metadata[0].sourceFiles[0] -ceq 'PlayerController.h' -and $metadata[0].sourceFiles[1] -ceq 'PlayerController.cpp') 'Native source declarations do not identify the editable files.'
+$main=[IO.File]::ReadAllText((Join-Path $game 'Source/Native/Main.cpp'))
+Require ([regex]::Matches($main,'RegisterGeneratedBehaviours\(state.systems\)').Count -eq 1 -and $main.Contains('ConnectGeneratedBehaviours(systems, *context)')) 'Native lifecycle registration was missing or duplicated.'
+$rejected=$false
+try { & $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name PlayerController } catch { $rejected=$true }
+Require ($rejected -and [IO.File]::ReadAllText($controller) -ceq $edited) 'Duplicate generation overwrote an existing Behaviour.'
+Put $registryHeader ($header+"`n// Customized registration must not be overwritten.`n")
+$rejected=$false
+try { & $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name ThirdController } catch { $rejected=$true }
+Require ($rejected -and -not (Test-Path -LiteralPath (Join-Path $game 'Source/Native/ThirdController.cpp'))) 'Customized registration caused partial generation.'
+Put $registryHeader $header
+& $sourceTool -ProjectFile $file -EngineManifest $manifest -ModuleId CrowdSimulation -Name PostBehaviourSystem -Kind System
+Require ([IO.File]::ReadAllText((Join-Path $game 'Source/Native/Main.cpp')).Contains('RegisterGeneratedBehaviours(state.systems)')) 'Adding a batch System removed Behaviour registration.'
 & (Join-Path $engineSource 'Tools/Project/Add-GameModule.ps1') -ProjectFile $file -EngineManifest $manifest -ModuleId Effects -Language CSharp
 $hostSource=[IO.File]::ReadAllText((Join-Path $game 'Source/Host/Main.cpp'))
 Require ([regex]::IsMatch($hostSource,'(?m)^#define NEXUS_PROJECT_MODULE_MANIFEST 1')) 'A comment was mistaken for a Host definition.'

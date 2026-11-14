@@ -1017,6 +1017,7 @@ namespace {
 
 #include "ColorManagementTests.inl"
 #include "AdaptiveGridTests.inl"
+#include "DebugDrawRenderingTests.inl"
 #include "EnvironmentLightingTests.inl"
 #include "SkyRenderingTests.inl"
 #include "ViewportRenderingTests.inl"
@@ -1047,6 +1048,10 @@ int main(int argc, char** argv) {
         }
         if(argc==2 && std::strcmp(argv[1],"--sky")==0) { SkyRenderingTests(); return 0; }
         if(argc==2 && std::strcmp(argv[1],"--adaptive-grid")==0) { AdaptiveGridTests(); return 0; }
+        if(argc == 2 && std::strcmp(argv[1], "--debug-draw") == 0) {
+            DebugDrawRenderingTests();
+            return 0;
+        }
 		if(argc == 2 && std::strcmp(argv[1], "--transient-descriptors") == 0) { TransientDescriptorTests(); return 0; }
 		if(argc == 2 && std::strcmp(argv[1], "--meshlet-lazy") == 0) {
 			const auto raster = ForwardIntegration(false,false,false,6);

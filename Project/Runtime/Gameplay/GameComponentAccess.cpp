@@ -42,9 +42,11 @@ bool ValidValue(const NexusComponentValueV1& value, std::string_view text) {
 uint32_t Kind(PropertyKind kind) {
     switch(kind) {
         case PropertyKind::Bool: return NEXUS_COMPONENT_BOOL;
-        case PropertyKind::Int: case PropertyKind::MeshNode: return NEXUS_COMPONENT_INT;
+        case PropertyKind::Int: case PropertyKind::MeshNode: case PropertyKind::ColliderShape: case PropertyKind::CollisionLayer: case PropertyKind::LayerMask: return NEXUS_COMPONENT_INT;
         case PropertyKind::Float: return NEXUS_COMPONENT_FLOAT;
-        case PropertyKind::String: case PropertyKind::MeshAsset: case PropertyKind::TextureAsset: return NEXUS_COMPONENT_STRING;
+        case PropertyKind::EntityReference:
+    case PropertyKind::ComponentReference:
+    case PropertyKind::String: case PropertyKind::MeshAsset: case PropertyKind::TextureAsset: return NEXUS_COMPONENT_STRING;
         case PropertyKind::Vector2: return NEXUS_COMPONENT_VECTOR2;
         case PropertyKind::Vector3: return NEXUS_COMPONENT_VECTOR3;
         case PropertyKind::Vector4: case PropertyKind::Rotation: case PropertyKind::Color: return NEXUS_COMPONENT_VECTOR4;

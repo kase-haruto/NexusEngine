@@ -230,6 +230,7 @@ internal sealed class ScriptPropertyMetadata
             throw new InvalidOperationException($"Expose requires a public instance get/set property: {info.Name}");
         var t = info.PropertyType;
         Kind = t == typeof(bool) ? "Bool" : t == typeof(int) ? "Int" : t == typeof(float) ? "Float" : t == typeof(string) ? "String" :
+            t == typeof(EntityReference) ? "EntityReference" : t == typeof(ComponentReference) ? "ComponentReference" :
             t == typeof(Vector2) ? "Vector2" : t == typeof(Vector3) ? "Vector3" : t == typeof(Vector4) ? "Vector4" : throw new InvalidOperationException($"Unsupported Expose type: {t}");
     }
     /// <summary>getterから値をコピーし、nullや非有限値を保存前に拒否する。</summary>
@@ -238,6 +239,7 @@ internal sealed class ScriptPropertyMetadata
         var value = Info.GetValue(instance) ?? throw new InvalidOperationException($"Null exposed value: {Id}");
         JsonNode node = value switch {
             bool b => JsonValue.Create(b)!, int i => JsonValue.Create(i)!, float f => JsonValue.Create(f)!, string s => JsonValue.Create(s)!,
+            EntityReference reference => JsonValue.Create(reference.ToString())!, ComponentReference reference => JsonValue.Create(reference.ToString())!,
             Vector2 v => new JsonArray(v.X, v.Y), Vector3 v => new JsonArray(v.X, v.Y, v.Z), Vector4 v => new JsonArray(v.X, v.Y, v.Z, v.W),
             _ => throw new InvalidOperationException("Unsupported property value.") };
         _ = Convert(node); return node;
@@ -246,6 +248,8 @@ internal sealed class ScriptPropertyMetadata
     internal object Convert(JsonNode node)
     {
         float Number(JsonNode? item) { var value = item!.GetValue<float>(); if (float.IsNaN(value) || float.IsInfinity(value)) throw new InvalidOperationException("Nonfinite property value."); return value; }
+        if (Kind == "EntityReference") return EntityReference.Parse(node.GetValue<string>());
+        if (Kind == "ComponentReference") return ComponentReference.Parse(node.GetValue<string>());
         if (Kind == "Bool") return node.GetValue<bool>();
         if (Kind == "Int") return node.GetValue<int>();
         if (Kind == "Float") return Number(node);

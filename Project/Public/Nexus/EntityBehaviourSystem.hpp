@@ -1,6 +1,7 @@
 #pragma once
 #include "GameComponents.hpp"
 #include "NativeGameSystems.h"
+#include "GameTime.h"
 #include <map>
 #include <memory>
 #include <string>
@@ -83,6 +84,9 @@ public:
         static constexpr NexusGameString writes[]{{"GameComponents", 14}, {"Transform", 9}};
         NexusNativeSystemDescriptorV1 result{}; result.structSize = sizeof(result); result.version = 1; result.id = systemId;
         result.writes = writes; result.writeCount = 2;
+        if constexpr(requires(T& value) { value.OnFixedUpdate(0.0f); }) {
+            result.reserved = NEXUS_NATIVE_SYSTEM_FIXED_UPDATES;
+        }
         result.create = [](const NexusNativeSystemContextV1* context, void** output) noexcept -> NexusGameStatus {
             if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = nullptr;
             if(!context || context->abiVersion != 1 || context->structSize != sizeof(*context) ||
@@ -130,7 +134,25 @@ private:
     static NexusGameStatus Enable(T& value) noexcept { return Invoke([&]() -> decltype(auto) { if constexpr(requires { value.OnEnable(); }) return value.OnEnable(); }); }
     static NexusGameStatus Disable(T& value) noexcept { return Invoke([&]() -> decltype(auto) { if constexpr(requires { value.OnDisable(); }) return value.OnDisable(); }); }
     static NexusGameStatus Destroy(T& value) noexcept { return Invoke([&]() -> decltype(auto) { if constexpr(requires { value.OnDestroy(); }) return value.OnDestroy(); }); }
-    static NexusGameStatus Tick(T& value, float dt) noexcept { return Invoke([&]() -> decltype(auto) { if constexpr(requires { value.OnUpdate(dt); }) return value.OnUpdate(dt); }); }
+    static NexusGameStatus Tick(T& value, float dt, bool fixedOnly) noexcept {
+        if(fixedOnly) {
+            if constexpr(requires { value.OnFixedUpdate(dt); }) {
+                return Invoke([&]() -> decltype(auto) {
+                    return value.OnFixedUpdate(dt);
+                });
+            } else {
+                return NEXUS_GAME_OK;
+            }
+        } else {
+            if constexpr(requires { value.OnUpdate(dt); }) {
+                return Invoke([&]() -> decltype(auto) {
+                    return value.OnUpdate(dt);
+                });
+            } else {
+                return NEXUS_GAME_OK;
+            }
+        }
+    }
     /** \brief 全終了callbackを一度だけ試みる。解放済み資源への再試行を避け、失敗を保持する */
     static NexusGameStatus Retire(Instance& instance) noexcept {
         instance.context->BeginDestroy();
@@ -152,6 +174,23 @@ private:
     }
     /** \brief Query完了後だけcallbackを呼ぶ。callback内の構造変更でScene反復を壊さない */
     NexusGameStatus Update(float deltaTime) {
+        bool fixedOnly = false;
+        if constexpr(requires(T& value) { value.OnFixedUpdate(deltaTime); }) {
+            // 新callbackのあるBehaviourだけ新時計protocolを要求し、旧DLLとの互換性を維持する。
+            const NexusTimeRequestV1 request{1};
+            NexusGameTimeV1 time{};
+            uint32_t length = 0;
+            if(!services_.api.invoke) {
+                return NEXUS_GAME_INCOMPATIBLE_ABI;
+            }
+            constexpr char command[] = NEXUS_TIME_COMMAND;
+            const auto status = services_.api.invoke(services_.client, {command, sizeof(command) - 1}, 1, {},
+                {reinterpret_cast<const uint8_t*>(&request), sizeof(request)}, reinterpret_cast<uint8_t*>(&time), sizeof(time), &length);
+            if(status != NEXUS_GAME_OK || length != sizeof(time)) {
+                return status == NEXUS_GAME_OK ? NEXUS_GAME_FAILED : status;
+            }
+            fixedOnly = time.inFixedStep != 0;
+        }
         if(!components_) return NEXUS_GAME_INVALID_HANDLE;
         const NexusGameString type{type_.data(), static_cast<uint32_t>(type_.size())};
         std::map<Key, NexusEntityHandle> current; uint32_t cursor = 0;
@@ -206,7 +245,7 @@ private:
             uint64_t after = 0; status = components_->Attachment(entity, type, after);
             if(status == NEXUS_GAME_INVALID_HANDLE || (status == NEXUS_GAME_OK && after != token)) continue;
             if(status != NEXUS_GAME_OK) return status;
-            if(instance.enabled) { status = Tick(*instance.value, deltaTime); if(status != NEXUS_GAME_OK) return status; }
+            if(instance.enabled) { status = Tick(*instance.value, deltaTime, fixedOnly); if(status != NEXUS_GAME_OK) return status; }
         }
         return NEXUS_GAME_OK;
     }

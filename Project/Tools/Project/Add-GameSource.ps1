@@ -1,4 +1,5 @@
-﻿param([Parameter(Mandatory=$true)][string]$ProjectFile,[Parameter(Mandatory=$true)][string]$EngineManifest,[Parameter(Mandatory=$true)][string]$ModuleId,[Parameter(Mandatory=$true)][string]$Name)
+﻿param([Parameter(Mandatory=$true)][string]$ProjectFile,[Parameter(Mandatory=$true)][string]$EngineManifest,[Parameter(Mandatory=$true)][string]$ModuleId,[Parameter(Mandatory=$true)][string]$Name,
+ [ValidateSet('Behaviour','System')][string]$Kind='Behaviour')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Project-ModuleOrder.ps1')
 $root=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ProjectFile))
@@ -16,15 +17,20 @@ $module=@($project.modules | Where-Object { $_.id -ceq $ModuleId }); if($module.
 $directory=[IO.Path]::GetFullPath((Join-Path $root $module.path)); if(-not $directory.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase) -or -not [IO.Directory]::Exists($directory)) { throw 'Invalid Module Source directory.' }
 $cursor=$directory; while($cursor -and $cursor.Length -ge $root.Length) { if((Get-Item -Force -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Source cannot traverse a reparse point.' }; $cursor=[IO.Path]::GetDirectoryName($cursor) }
 if($module.language -ceq 'CSharp') {
- if($Name -cin @('MoveSpeed','OnCreate','OnEnable','OnUpdate','OnDisable','OnDestroy')) { throw 'Behaviour name conflicts with a generated member.' }
+ if($Name -cin @('OnCreate','OnEnable','OnUpdate','OnDisable','OnDestroy')) { throw 'Behaviour name conflicts with a generated member.' }
  $namespace='NexusGameScripts.M'+(Get-NexusModuleCodeIdentifier $ModuleId)
  # 旧生成のModule.Behaviour等と衝突しない系列を使う。保存済みScript IDは書き換えない。
- $text=[IO.File]::ReadAllText((Join-Path $templates 'ManagedGameplay/PlayerController.cs.in')).Replace('namespace Game;','namespace '+$namespace+';').Replace('PlayerController',$Name).Replace('"game.player"','"'+$ModuleId+'.behaviours.'+$Name+'"')
+ $text=[IO.File]::ReadAllText((Join-Path $templates 'Behaviour/CSharp.cs.in')).Replace('@NAMESPACE@',$namespace).Replace('@CLASS@',$Name).Replace('@TYPE_ID@',$ModuleId+'.behaviours.'+$Name)
  $file=Join-Path $directory ($Name+'.cs'); if(Test-Path -LiteralPath $file) { throw 'Source already exists.' }
  $temporary=$file+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
  try { [IO.File]::WriteAllText($temporary,$text,[Text.UTF8Encoding]::new($false)); [IO.File]::Move($temporary,$file) }
  finally { if([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 } else {
+ if($Kind -ceq 'Behaviour') {
+  & (Join-Path $PSScriptRoot 'Add-NativeBehaviour.ps1') -Directory $directory -Templates $templates -ModuleId $ModuleId -Name $Name
+  Write-Output ('C++ Behaviour created: '+$Name+'. Build and restart the Host, then attach the Behaviour in Details.')
+  return
+ }
  # 既存scaffoldのstate型・System ID・メンバと同名の型を作ると、コンパイルまたは登録で衝突する。
  if($Name -cmatch '\A(Nexus|NEXUS_)' -or $Name -cin @('std','NativeMover','GameComponents','RegisterNativeMover','ConnectNativeMover','ConnectSettings','CrowdSimulation','GameState','TargetRequest','NativeCombat','Target','Descriptor','Update','SetTarget','game_','world_','targets_','settings_','settingsType_','RegisterCrowdBinding','RebindCrowdBinding','InvokeCrowdSetTarget','CrowdPatchContract')) { throw 'Native System name conflicts with the Public API or scaffold.' }
  # 既存の明示V2登録を持つ生成scaffoldだけを拡張する。任意C++を解析・自動Bindingしない。

@@ -95,8 +95,11 @@ $localFile = Join-Path $projectRoot 'Nexus.Engine.local.props'
 $temporary = $localFile + '.' + [guid]::NewGuid().ToString() + '.tmp'
 $backup = $temporary + '.bak'
 try {
-    [IO.File]::WriteAllText($temporary,$localProps,[Text.UTF8Encoding]::new($false))
-    if([IO.File]::Exists($localFile)) { [IO.File]::Replace($temporary,$localFile,$backup) } else { [IO.File]::Move($temporary,$localFile) }
+    # 同じpropsの再保存は全翻訳単位の再コンパイルを招くため、内容が変わった場合だけ置換する。
+    if(-not [IO.File]::Exists($localFile) -or [IO.File]::ReadAllText($localFile) -cne $localProps) {
+        [IO.File]::WriteAllText($temporary,$localProps,[Text.UTF8Encoding]::new($false))
+        if([IO.File]::Exists($localFile)) { [IO.File]::Replace($temporary,$localFile,$backup) } else { [IO.File]::Move($temporary,$localFile) }
+    }
 } finally {
     if([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }
     if([IO.File]::Exists($backup)) { [IO.File]::Delete($backup) }

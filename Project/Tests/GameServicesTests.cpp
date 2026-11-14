@@ -402,7 +402,127 @@ void PhysicsMeshAndContacts() {
     std::cout << "PASS: Jolt triangle/convex cooking, CCD configuration, contact sleep/exit/sensor and opt-in Event routing\n";
 }
 
+#include "GameDebugTests.inl"
+#include "Public/Nexus/GameTime.h"
+#include "Runtime/Reflection/GamePropertyMetadata.h"
+#include "Runtime/Scene/EntityReference.h"
+
+namespace {
+/** 保存IDと時刻のprotocolを実Worldで検証し、削除・再利用・再読込の境界を確認する。 */
+void TimeAndReferenceOperations() {
+    Level level;
+    assert(level.LoadEmpty());
+    auto entity = level.CreateEntity("Persistent target");
+    const auto id = entity.GetComponent<PersistentIdComponent>()->value;
+    const auto text = FormatEntityReference(id);
+    assert(ParseEntityReference(text) == id);
+    assert(!ParseEntityReference("not-an-id"));
+    assert(ValidateReferenceValue(text + "|Transform", true));
+    assert(!ValidateReferenceValue(text + "|", true));
+    assert(GamePropertyMetadata::Kind("EntityReference") == PropertyKind::EntityReference);
+    assert(std::get<std::string>(GamePropertyMetadata::Value("ComponentReference", text + "|Transform")) == text + "|Transform");
+    auto* saved = entity.AddComponent<ScriptComponent>();
+    saved->scriptType = "test.references";
+    saved->propertyState = "{\"schemaVersion\":1,\"types\":{\"test.references\":{\"version\":1,\"values\":{\"Target\":{\"EntityReference\":\"" + text + "\"},\"Transform\":{\"ComponentReference\":\"" + text + "|Transform\"}}}}}";
+    const auto path = std::filesystem::path("Generated/GameServicesTests/References.level");
+    std::filesystem::create_directories(path.parent_path());
+    assert(level.Save(path));
+    Level restored;
+    assert(restored.Load(path));
+    assert(restored.FindEntity(id).GetComponent<ScriptComponent>()->propertyState == saved->propertyState);
+    GameApiBridge bridge(level);
+    auto api = GameApiBridge::Services();
+    uint64_t client = 0;
+    assert(api.open(bridge.World(), &client) == NEXUS_GAME_OK);
+    NexusEntityHandle handle{bridge.World(), entity.GetId().index, entity.GetId().generation};
+    const auto reference = [&](NexusEntityReferenceRequestV1 request, NexusEntityHandle target, void* output, uint32_t size) {
+        uint32_t length = 0;
+        constexpr char command[] = NEXUS_REFERENCE_COMMAND;
+        const auto status = api.invoke(client, {command, sizeof(command) - 1}, 1, target,
+            {reinterpret_cast<const uint8_t*>(&request), sizeof(request)}, static_cast<uint8_t*>(output), size, &length);
+        assert(status != NEXUS_GAME_OK || length == size);
+        return status;
+    };
+    NexusEntityReferenceV1 persistent{};
+    assert(reference({1}, handle, &persistent, sizeof(persistent)) == NEXUS_GAME_OK);
+    assert(persistent.high == id.high && persistent.low == id.low);
+    NexusEntityHandle resolved{};
+    assert(reference({2, 0, id.high, id.low}, {}, &resolved, sizeof(resolved)) == NEXUS_GAME_OK && resolved.index == handle.index && resolved.generation == handle.generation);
+    assert(level.DestroyEntity(entity));
+    auto replacement = level.CreateEntity("Reused slot");
+    assert(replacement.GetId().index == handle.index);
+    assert(reference({2, 0, id.high, id.low}, {}, &resolved, sizeof(resolved)) == NEXUS_GAME_OK && resolved.world == 0);
+    auto& clock = level.GetScene()->Time();
+    clock.timeScale = .5f;
+    assert(clock.BeginFrame(.1f) && clock.pendingSteps == 3 && std::abs(clock.deltaTime - .05f) < 1e-6);
+    clock.timeScale = 0;
+    assert(clock.BeginFrame(.1f) && clock.pendingSteps == 0 && clock.unscaledElapsed > .19);
+    clock.timeScale = 1;
+    assert(clock.BeginFrame(10) && clock.pendingSteps == 64 && clock.droppedFixedTime > 8);
+    const auto frame = clock.frame;
+    assert(!clock.BeginFrame(-1) && !clock.BeginFrame(std::numeric_limits<float>::infinity()) && clock.frame == frame);
+    const NexusTimeRequestV1 query{1};
+    NexusGameTimeV1 snapshot{};
+    uint32_t length = 0;
+    constexpr char command[] = NEXUS_TIME_COMMAND;
+    assert(api.invoke(client, {command, sizeof(command) - 1}, 1, {}, {reinterpret_cast<const uint8_t*>(&query), sizeof(query)},
+        reinterpret_cast<uint8_t*>(&snapshot), sizeof(snapshot), &length) == NEXUS_GAME_OK);
+    assert(length == sizeof(snapshot) && snapshot.frame == frame && snapshot.droppedFixedTime > 8);
+    assert(api.close(client) == NEXUS_GAME_OK);
+}
+/** bilateral maskを実simulationで確認し、ray maskと保存値にも同じ32bit契約を適用する。 */
+void CollisionLayerOperations() {
+    Level level;
+    assert(level.LoadEmpty());
+    auto floor = level.CreateEntity("Layer floor");
+    auto* collider = floor.AddComponent<ColliderComponent>();
+    collider->halfExtent = {10, .5f, 10};
+    collider->collisionLayer = 0;
+    collider->collisionMask = 0;
+    floor.GetComponent<TransformComponent>()->translation.y = -.5f;
+    auto ball = level.CreateEntity("Layer ball");
+    auto* body = ball.AddComponent<RigidBodyComponent>();
+    body->shape = 1;
+    body->collisionLayer = 31;
+    body->collisionMask = 1;
+    ball.GetComponent<TransformComponent>()->translation.y = 2;
+    GameApiBridge bridge(level);
+    uint64_t client = 0;
+    assert(GameApiBridge::OpenNativeServices(bridge.World(), &client) == NEXUS_GAME_OK);
+    const NexusGameServicesContextV1 context{1, sizeof(NexusGameServicesContextV1), bridge.World(), client, GameApiBridge::Services()};
+    NexusGame::Physics physics(context);
+    NexusPhysicsHitV1 hit{};
+    assert(physics.Raycast({0, 5, 0}, {0, -1, 0}, 20, hit, 0x80000000u) == NEXUS_GAME_OK && hit.entity.index == ball.GetId().index);
+    assert(physics.Raycast({0, 5, 0}, {0, -1, 0}, 20, hit, 1) == NEXUS_GAME_OK && hit.entity.index == floor.GetId().index);
+    assert(physics.Raycast({0, 5, 0}, {0, -1, 0}, 20, hit, 0) == NEXUS_GAME_OK && hit.entity.world == 0);
+    for(int step = 0; step < 90; ++step) {
+        assert(level.Update(1.f / 60));
+    }
+    assert(ball.GetComponent<TransformComponent>()->translation.y < -1);
+    // 一方のmaskだけが許可しても通過した。両方を許可すると床で停止する。
+    collider->collisionMask = static_cast<int32_t>(0x80000000u);
+    ball.GetComponent<TransformComponent>()->translation.y = 2;
+    body->velocity = {};
+    for(int step = 0; step < 180; ++step) {
+        assert(level.Update(1.f / 60));
+    }
+    assert(ball.GetComponent<TransformComponent>()->translation.y > .4f);
+    const auto id = floor.GetComponent<PersistentIdComponent>()->value;
+    const auto path = std::filesystem::path("Generated/GameServicesTests/Layers.level");
+    assert(level.Save(path));
+    Level restored;
+    assert(restored.Load(path));
+    const auto* saved = restored.FindEntity(id).GetComponent<ColliderComponent>();
+    assert(saved && saved->collisionLayer == 0 && static_cast<uint32_t>(saved->collisionMask) == 0x80000000u);
+    assert(GameApiBridge::Services().close(client) == NEXUS_GAME_OK);
+}
+}
+
 void RunGameServicesTests() {
+    TimeAndReferenceOperations();
+    CollisionLayerOperations();
+    std::cout << "PASS: persistent Entity/Component reference values, deletion/reuse/load, clock limits, bilateral collision layers and masked rays\n";
+    GameDebugOperations();
     InputOperations();
     GamepadOperations();
     AudioOperations();

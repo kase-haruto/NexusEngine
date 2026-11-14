@@ -4,6 +4,7 @@
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
+#include "Runtime/Scene/Components/ColliderComponent.h"
 #include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
 #include "Runtime/Scene/Components/SkyLightComponent.h"
 #include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
@@ -84,6 +85,114 @@ void RegisterEnvironmentType(TypeRegistry& registry, const char* id, const char*
     registry.Register(std::move(type));
 }
 void RegisterSceneTypes(TypeRegistry& registry) {
+    // 物理値の保存形式(int)を維持したまま、Detailsで形状名・layer・maskを選べるようにする。
+    auto collider = Type<ColliderComponent>("Collider", "Collider (Box / Sphere / Capsule / Mesh)");
+    collider.add = [](Entity entity) {
+        return entity.AddComponent<ColliderComponent>() != nullptr;
+    };
+    auto colliderShape = Property<ColliderComponent, int>("shape", "Shape", PropertyKind::ColliderShape,
+        [](const auto& component) {
+            return component.shape;
+        }, [](auto& component, int value) {
+            auto next = component;
+            next.shape = value;
+            if(!next.IsValid()) {
+                return false;
+            }
+            component = next;
+            return true;
+        });
+    const auto setColliderShape = colliderShape.set;
+    colliderShape.set = [setColliderShape](Entity entity, const PropertyValue& value) {
+        const auto* shape = std::get_if<int>(&value);
+        const auto* body = entity.GetComponent<RigidBodyComponent>();
+        if(shape && *shape == 3 && body && body->motion == 1) {
+            return false;
+        }
+        return setColliderShape(entity, value);
+    };
+    colliderShape.enumValues = {{0,"Box Collider"},{1,"Sphere Collider"},{2,"Capsule Collider"},{3,"Mesh Collider (Static / Kinematic)"},{4,"Convex Mesh Collider"}};
+    collider.properties.push_back(std::move(colliderShape));
+    collider.properties.push_back(Property<ColliderComponent, std::string>("meshAsset", "Collision Mesh", PropertyKind::MeshAsset,
+        [](const auto& component) {
+            return component.meshAsset;
+        }, [](auto& component, const auto& path) {
+            auto next = component;
+            next.meshAsset = path;
+            if(!next.IsValid()) {
+                return false;
+            }
+            component = next;
+            return true;
+        }));
+    collider.properties.push_back(Property<ColliderComponent, int>("collisionLayer", "Collision Layer", PropertyKind::CollisionLayer,
+        [](const auto& component) {
+            return component.collisionLayer;
+        }, [](auto& component, int value) {
+            if(value < 0 || value > 31) {
+                return false;
+            }
+            component.collisionLayer = value;
+            return true;
+        }));
+    collider.properties.push_back(Property<ColliderComponent, int>("collisionMask", "Collides With", PropertyKind::LayerMask,
+        [](const auto& component) {
+            return component.collisionMask;
+        }, [](auto& component, int value) {
+            component.collisionMask = value;
+            return true;
+        }));
+    registry.Register(std::move(collider));
+    // Collider未追加の既存RigidBodyにも同じlayer/mask UIを用意する。
+    auto rigid = Type<RigidBodyComponent>("RigidBody", "component.rigidBody");
+    rigid.add = [](Entity entity) {
+        auto* body = entity.AddComponent<RigidBodyComponent>();
+        const auto* shape = entity.GetComponent<ColliderComponent>();
+        // Triangle Meshへ追加する際に、既定Dynamicで直ちに無効な組合せを作らない。
+        if(body && shape && shape->shape == 3) {
+            body->motion = 0;
+        }
+        return body != nullptr;
+    };
+    rigid.properties.push_back(Property<RigidBodyComponent, int>("collisionLayer", "Collision Layer", PropertyKind::CollisionLayer,
+        [](const auto& body) {
+            return body.collisionLayer;
+        }, [](auto& body, int layer) {
+            if(layer < 0 || layer > 31) {
+                return false;
+            }
+            body.collisionLayer = layer;
+            return true;
+        }));
+    rigid.properties.push_back(Property<RigidBodyComponent, int>("collisionMask", "Collides With", PropertyKind::LayerMask,
+        [](const auto& body) {
+            return body.collisionMask;
+        }, [](auto& body, int mask) {
+            body.collisionMask = mask;
+            return true;
+        }));
+    auto motion = Property<RigidBodyComponent, int>("motion", "Motion", PropertyKind::ColliderShape,
+        [](const auto& body) {
+            return body.motion;
+        }, [](auto& body, int value) {
+            if(value < 0 || value > 2) {
+                return false;
+            }
+            body.motion = value;
+            return true;
+        });
+    motion.enumValues = {{0, "Static"}, {1, "Dynamic"}, {2, "Kinematic"}};
+    const auto setMotion = motion.set;
+    motion.set = [setMotion](Entity entity, const PropertyValue& value) {
+        const auto* mode = std::get_if<int>(&value);
+        const auto* shape = entity.GetComponent<ColliderComponent>();
+        if(mode && *mode == 1 && shape && shape->shape == 3) {
+            return false;
+        }
+        return setMotion(entity, value);
+    };
+    rigid.properties.push_back(std::move(motion));
+    registry.Register(std::move(rigid));
     RegisterEnvironmentType<SkyAtmosphereComponent>(registry, "SkyAtmosphere", "component.skyAtmosphere");
     RegisterEnvironmentType<SkyLightComponent>(registry, "SkyLight", "component.skyLight");
     RegisterEnvironmentType<ExponentialHeightFogComponent>(registry, "ExponentialHeightFog", "component.heightFog");

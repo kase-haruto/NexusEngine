@@ -36,7 +36,7 @@ public:
     /** \brief game logicの後、Transform確定の前に同期・simulation・結果書戻しを行う */
     Result<void> Step(Scene& scene, float deltaTime);
     /** \brief 現在のSceneを同期し、正規化した方向へ最近傍raycastを行う。no-hitはentity無効 */
-    Result<Hit> Raycast(Scene& scene, const std::array<float,3>& origin, const std::array<float,3>& direction, float distance);
+    Result<Hit> Raycast(Scene& scene, const std::array<float,3>& origin, const std::array<float,3>& direction, float distance, uint32_t layerMask = UINT32_MAX);
     /** \brief 最後のPhysics stepの非消費snapshot。借用spanは次step/World破棄まで有効 */
     std::span<const Contact> Contacts() const noexcept;
     uint32_t DroppedContacts() const noexcept;

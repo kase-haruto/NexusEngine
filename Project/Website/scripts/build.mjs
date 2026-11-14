@@ -33,6 +33,18 @@ export function publishedDownload(item, assets) {
   if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password || url.port || url.search || url.hash || !/^\/kase-haruto\/NexusEngine\/releases\/download\/distribution-[a-f0-9]{12}\/[a-zA-Z0-9._-]+$/.test(url.pathname) || asset.sha256 !== item.sha256 || asset.bytes !== item.bytes) throw new Error('Published GitHub asset does not match verified package.');
   return { ...item, available: true, url: url.href };
 }
+export function launcherCatalog(launcher, published) {
+  const history = Object.entries(published).filter(([key]) => /^launcher\/[a-f0-9]{64}\/launcherSetup\.exe$/.test(key))
+    .map(([key, asset]) => ({ ...asset, key, version: asset.version || `1.0.0-${asset.sha256.slice(0, 12)}` }));
+  const candidates = launcher ? [launcher, ...history.filter(item => item.key !== launcher.key)] : history;
+  const versions = new Set();
+  return candidates.map(item => publishedDownload(item, published)).filter(item => item.available).map(item => {
+    const version = item.version || `1.0.0-${item.sha256.slice(0, 12)}`;
+    if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version) || versions.has(version)) throw new Error('Assign a unique launcher version before publishing.');
+    versions.add(version);
+    return { id: 'nexus-launcher', version, configuration: 'Release', changes: 'NexusEngine Launcher のインストーラー', url: item.url, sha256: item.sha256, bytes: item.bytes };
+  }).sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
+}
 async function build() {
   let published = {};
   try { published = await readJson(resolve(root, 'published-assets.json')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -59,12 +71,14 @@ async function build() {
     const origin = new URL(process.env.NEXUS_SITE_ORIGIN);
     if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || settings.catalogUrl !== new URL('/releases.json', origin).href || settings.catalogFile) throw new Error('Installer must use the production HTTPS catalog without local paths.');
     const sha256 = await hash(file), bytes = (await stat(file)).size;
-    launcher = { key: `launcher/${sha256}/launcherSetup.exe`, bytes, sha256 };
+    const version = settings.launcherVersion || '1.0.0';
+    if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Invalid launcher version.');
+    launcher = { key: `launcher/${sha256}/launcherSetup.exe`, bytes, sha256, version };
     uploads.push({ ...launcher, file });
   }
   else {
     const known = Object.entries(published).find(([key]) => /^launcher\/[a-f0-9]{64}\/launcherSetup\.exe$/.test(key));
-    if (known) launcher = { key: known[0], bytes: known[1].bytes, sha256: known[1].sha256 };
+    if (known) launcher = { key: known[0], bytes: known[1].bytes, sha256: known[1].sha256, version: known[1].version };
   }
   await mkdir(resolve(root, 'dist/data'), { recursive: true });
   await cp(resolve(root, 'public'), resolve(root, 'dist'), { recursive: true });
@@ -83,6 +97,8 @@ async function build() {
   const publicLauncher = launcher ? publishedDownload(launcher, published) : null;
   await writeFile(resolve(root, 'dist/data/catalog.json'), JSON.stringify({ schemaVersion: 1, releases: publicReleases, launcher: publicLauncher }, null, 2));
   await writeFile(resolve(root, 'dist/releases.json'), JSON.stringify({ schemaVersion: 1, releases: publicReleases.filter(r => r.available).map(({ key, available, ...release }) => release) }, null, 2));
+  // Setupも版を選んで導入できる一覧にする。旧配布物はhash付き識別子で区別して保持する。
+  await writeFile(resolve(root, 'dist/launcher-releases.json'), JSON.stringify({ schemaVersion: 1, releases: launcherCatalog(launcher, published) }, null, 2));
   await writeFile(resolve(root, 'upload-manifest.json'), JSON.stringify(uploads, null, 2));
   console.log(`Built ${releases.length} verified releases. Installer: ${launcher ? 'ready' : 'not published'}.`);
 }

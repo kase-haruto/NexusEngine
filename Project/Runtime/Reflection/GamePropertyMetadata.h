@@ -1,5 +1,6 @@
 #pragma once
 #include "TypeRegistry.h"
+#include "Runtime/Scene/EntityReference.h"
 #include "Runtime/Project/ProjectJson.h"
 #include <algorithm>
 #include <cmath>
@@ -88,6 +89,13 @@ template<size_t Size> PropertyValue Vector(const Json& value) {
 }
 /** \brief 保存kindとJSON値の組を、型変換による情報損失を避けて検証する */
 inline PropertyValue Value(const std::string& kind, const Json& value) {
+    if((kind == "EntityReference" || kind == "ComponentReference") && value.is_string()) {
+        auto text = value.get<std::string>();
+        if(!ValidateReferenceValue(text, kind == "ComponentReference")) {
+            throw std::runtime_error("Invalid persistent reference.");
+        }
+        return text;
+    }
     if(kind == "Bool" && value.is_boolean()) return value.get<bool>();
     if(kind == "Int" && value.is_number_integer() && value >= INT32_MIN && value <= INT32_MAX) return value.get<int>();
     if(kind == "Float") return Number(value);
@@ -103,6 +111,12 @@ inline PropertyValue Value(const std::string& kind, const Json& value) {
 }
 /** \brief 対応する共通PropertyKindだけを公開する */
 inline PropertyKind Kind(const std::string& kind) {
+    if(kind == "EntityReference") {
+        return PropertyKind::EntityReference;
+    }
+    if(kind == "ComponentReference") {
+        return PropertyKind::ComponentReference;
+    }
     if(kind == "Bool") return PropertyKind::Bool; if(kind == "Int") return PropertyKind::Int;
     if(kind == "Float") return PropertyKind::Float; if(kind == "String") return PropertyKind::String;
     if(kind == "Vector2") return PropertyKind::Vector2; if(kind == "Vector3") return PropertyKind::Vector3;

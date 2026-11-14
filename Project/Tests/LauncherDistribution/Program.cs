@@ -8,14 +8,18 @@ using System.Text.Json;
 if (args.Length == 1 && args[0] == "--verify-public-download")
 {
     var catalog = await Distribution.LoadCatalog("https://nexus-engine.nexus-engine-website.workers.dev/releases.json", default);
-    if (catalog.Length != 3) throw new Exception("Public version catalog is incomplete.");
-    var latest = catalog.Single(item => item.Version == "1.1.1");
+    // 版数は公開のたびに増えるため、旧版の保持と最新の安定版を動的に検査する。
+    if (catalog.Length == 0 || new[] { "1.0.0", "1.1.0", "1.1.1" }.Any(version => !catalog.Any(item => item.Version == version)))
+    {
+        throw new Exception("Public version catalog is incomplete.");
+    }
+    var latest = catalog.Where(item => Version.TryParse(item.Version, out _)).OrderByDescending(item => Version.Parse(item.Version)).First();
     using var response = await Distribution.DownloadHttps(latest.Url, default);
     response.EnsureSuccessStatusCode();
     using var body = await response.Content.ReadAsStreamAsync();
     var sha256 = Convert.ToHexString(await SHA256.HashDataAsync(body));
     if (!sha256.Equals(latest.Sha256, StringComparison.OrdinalIgnoreCase)) throw new Exception("Public SDK checksum mismatch.");
-    Console.WriteLine("PASS: Launcher loaded three public versions and downloaded verified SDK 1.1.1 through GitHub HTTPS redirects.");
+    Console.WriteLine($"PASS: Launcher loaded {catalog.Length} public versions and downloaded verified SDK {latest.Version} through GitHub HTTPS redirects.");
     return;
 }
 
@@ -38,6 +42,7 @@ Directory.CreateDirectory(root);
 try
 {
     passed += ProjectRemovalTests.Run(root);
+    passed += await LauncherUpdateTests.Run(root);
     Reject(() => Distribution.Https("http://example.com/releases.json"));
     Reject(() => Distribution.Https("https://user:secret@example.com/releases.json"));
     Reject(() => Distribution.Within(root, "../escape.txt"));

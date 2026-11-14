@@ -67,6 +67,7 @@
     <ClCompile Include="..\Graphics\Renderer\GraphicsSystem.cpp" />
     <ClCompile Include="..\Graphics\Renderer\PrimitiveRenderer.cpp" />
     <ClCompile Include="..\Graphics\Grid\GridRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Debug\DebugDrawRenderer.cpp" />
     <ClCompile Include="..\Graphics\Sky\SkyRenderer.cpp" />
     <ClCompile Include="..\Graphics\Resource\ConstantBuffer.cpp" />
     <ClCompile Include="..\Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />

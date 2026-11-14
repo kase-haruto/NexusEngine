@@ -30,7 +30,13 @@ namespace NexusEngine {
 			return std::unexpected(Error(ErrorCategory::Scene, 234, "ScriptSystem received another World or invalid deltaTime."));
 		return Synchronize(deltaTime, false);
 	}
-	Result<void> ScriptSystem::Synchronize(float deltaTime, bool initializeOnly) {
+	Result<void> ScriptSystem::FixedUpdate(Scene& scene, float deltaTime) {
+        if(&scene != scene_) {
+            return std::unexpected(Error(ErrorCategory::Scene, 234, "FixedUpdate received another World."));
+        }
+        return Synchronize(deltaTime, false, true);
+    }
+    Result<void> ScriptSystem::Synchronize(float deltaTime, bool initializeOnly, bool fixedOnly) {
 		if(!bridge_ || !scene_) return {};
 		if(thread_ != std::this_thread::get_id()) return std::unexpected(Error(ErrorCategory::Scene, 234, "Script synchronization requires its owner thread."));
 		if(!level_ || level_->GetScene() != scene_) return std::unexpected(Error(ErrorCategory::Scene, 234, "Script World was replaced without stopping its Runtime."));
@@ -62,7 +68,7 @@ namespace NexusEngine {
 																	item.enabled,
 																	0});
 			// ここではSceneのIterationGuardが終了済み。callbackからEntity / Componentの構造変更が可能。
-			auto result = bridge_->Tick(bindings_, deltaTime, initializeOnly);
+			auto result = bridge_->Tick(bindings_, deltaTime, initializeOnly, fixedOnly);
 			if(!result) return result;
 			// 例外的にcallback中にDetachされた場合も旧Levelを参照せず、書戻しを拒否する。
 			if(!level_ || level_->GetScene() != scene_) return std::unexpected(Error(ErrorCategory::Scene, 234, "Script callback detached or replaced its World. Stop the Runtime at a frame boundary."));

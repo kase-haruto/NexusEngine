@@ -12,4 +12,5 @@
   <ItemGroup><Compile Include="GameInput.cs" /></ItemGroup>
   <ItemGroup><Compile Include="GameAudio.cs" /></ItemGroup>
   <ItemGroup><Compile Include="GameWorldControl.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="GameCollider.cs" /><Compile Include="GameReferences.cs" /><Compile Include="GameTime.cs" /><Compile Include="GameMath.cs" /><Compile Include="GameDebug.cs" /></ItemGroup>
 </Project>

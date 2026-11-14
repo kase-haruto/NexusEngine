@@ -28,6 +28,7 @@
 #include "Graphics/Meshlet/MeshletResource.h"
 #include "Graphics/Selection/SelectionOutline.h"
 #include "Graphics/Grid/GridRenderer.h"
+#include "Graphics/Debug/DebugDrawRenderer.h"
 
 namespace NexusEngine {
 	enum class TextureColorSpace : uint8_t;
@@ -142,6 +143,7 @@ namespace NexusEngine {
 		GraphicsResourceFactory* resources_ = nullptr; //< GraphicsSystem所有Factoryへの非所有参照
 		GraphicsPipeline pipeline_; //< Primitive ShaderとPSOの所有者
         GridRenderer grid_;
+        DebugDrawRenderer debugDraw_;
         SelectionOutline selectionOutline_; //< 独立Maskから深度なしで外周を合成
         std::vector<SelectionOutlineDraw> selectionDraws_; //< 通常Drawの確定済みCBをFrame内だけ借用する
 		MeshShaderPipeline meshPipeline_; //< 独立 AS/MS/PS 経路

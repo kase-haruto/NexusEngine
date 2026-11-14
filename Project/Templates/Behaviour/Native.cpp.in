@@ -1,0 +1,45 @@
+#include "@CLASS@.h"
+
+@CLASS@::@CLASS@(NexusGame::EntityBehaviourContext& context) noexcept
+    : context_(context) {
+    // コンストラクターでは借用先の保持だけを行います。ゲームの初期化はOnCreateへ書きます。
+}
+
+NexusGameStatus @CLASS@::OnCreate() noexcept {
+    // ここに初期値や参照の準備を書きます。実行インスタンスで一度呼ばれます。
+    // APIが失敗した場合はそのstatusを返してください。noexceptの外へ例外を出さないでください。
+    return NEXUS_GAME_OK;
+}
+
+NexusGameStatus @CLASS@::OnEnable() noexcept {
+    // ここに動作再開の処理を書きます。OnDisableと対応させ、再有効化できるようにします。
+    return NEXUS_GAME_OK;
+}
+
+NexusGameStatus @CLASS@::OnUpdate(float deltaTime) noexcept {
+    // ここに入力、移動、ゲームルールなどの毎回の処理を書きます。Pause中は呼ばれません。
+    // deltaTimeは秒です。移動量は「毎秒の速度 * deltaTime」で計算します。
+    // context_.GetTransformでコピーを取得し、変更後はcontext_.SetTransformで書き戻します。
+    // Engine APIの戻り値を確認し、失敗時はそのstatusを返してください。
+    (void)deltaTime; // 空のテンプレートでも未使用引数の警告を出さないためです。
+    return NEXUS_GAME_OK;
+}
+
+NexusGameStatus @CLASS@::OnFixedUpdate(float fixedDeltaTime) noexcept {
+    // 物理に関係する処理を書きます。fixedDeltaTimeは物理stepの秒数です。
+    (void)fixedDeltaTime;
+    return NEXUS_GAME_OK;
+}
+
+NexusGameStatus @CLASS@::OnDisable() noexcept {
+    // ここに継続中の処理やイベント購読を止める処理を書きます。
+    // 終了に伴って呼ばれる場合もあります。Entity/Worldの変更は行わないでください。
+    return NEXUS_GAME_OK;
+}
+
+NexusGameStatus @CLASS@::OnDestroy() noexcept {
+    // ここに自分で確保した資源の解放を書きます。Task/Threadやcallbackを残さないでください。
+    // Entityが既に破棄されている場合があります。context_からEntity/Worldを変更しないでください。
+    // 終了処理の失敗はDLLの保持とホスト再起動につながるため、解放順を明確にしてください。
+    return NEXUS_GAME_OK;
+}

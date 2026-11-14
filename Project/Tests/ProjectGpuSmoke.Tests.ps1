@@ -15,6 +15,14 @@ if($LASTEXITCODE -ne 0) { throw 'Cannot create GPU validation Game.' }
 $file = Join-Path $gameRoot '日本語 GPU Game.nxproject'
 $levelFile = Join-Path $gameRoot 'Levels/Startup.level'
 $level = [IO.File]::ReadAllText($levelFile)
+if($Template -eq 'blank') {
+    if($level -match '(?m)^ENTITY ') { throw 'Blank template is not empty.' }
+    # GPU経路の型付きEntityはfixtureとして明示追加する。
+    $basicLevel = [IO.File]::ReadAllText((Join-Path $workspace 'Project/Templates/Basic3D/Startup.level'))
+    $cameraFixture = [regex]::Match($basicLevel, '(?ms)^ENTITY .*?"Camera"\r?\n.*?^END_ENTITY\r?\n').Value
+    if(-not $cameraFixture) { throw 'Camera fixture is missing.' }
+    $level = $level.Replace('END_LEVEL', $cameraFixture + 'END_LEVEL')
+}
 $position = $level.IndexOf('COMPONENTS 0'); if($position -lt 0) { throw 'Missing GPU Level component insertion point.' }
 $component = 'COMPONENTS 1' + "`n" + 'COMPONENT "Game.Health" object 2 "fields" object 1 "health" int 42 "type" string "Game.Health"'
 [IO.File]::WriteAllText($levelFile,$level.Remove($position,12).Insert($position,$component),[Text.UTF8Encoding]::new($false))

@@ -1,5 +1,7 @@
 # Hybrid Project / Build / Packaging — Phase 8
 
+参照保存・時計・タイマー・固定更新・Collider／衝突レイヤーの追加APIは[利用ガイド](GameReferencesTimePhysicsREADME.md)を参照してください。
+
 新規Managed / Hybrid ProjectのBackendは[Mono](MonoRuntimeREADME.md)へ更新した。以下のCoreCLR / private .NETの記述は既存Projectの互換経路として残る。Monoは配置済みMono Runtime / BCL / GACを同梱する。
 
 Phase 8ではC++のみ、C#のみ、複数のNative / Managed Moduleを持つHybridを共通Project・World・Editorで扱う。Module追加、ソース作成、共通Build、配布用Package生成までを接続した。その後の[実行検証](HybridVerificationREADME.md)でDebug / ReleaseのBuild、回帰テスト、実Editor / Runtime、Native / Managed Reload、private .NET付き配布物の起動を確認した。本書末尾の未実行記録はソース実装時点の履歴である。
@@ -110,6 +112,8 @@ DLLのcreate / destroyは同じCRTで対にする。STL・C++例外・Native poi
 ## 言語の途中追加・ソース作成
 
 EditorのTools → Project Modules / Build / Packageから、一覧・依存・Module追加・Behaviour / Native System作成を同じPanelで扱う。Play / 別Runtime実行中は変更操作を無効にする。
+
+現行ソースでは、C#・C++の新規Behaviourに5つのLifecycle関数と日本語ガイドコメントを生成する。関数本体は空で、C++の型情報・登録も生成する。Native Systemの作成は明示選択に分けた。対応Moduleと作成後の手順は[スクリプト生成](ScriptGenerationREADME.md)を参照。
 
 同じ操作をCLIからも行える。以下はユーザー向けの手順であり、この実装作業中には実行していない。
 

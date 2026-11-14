@@ -57,6 +57,6 @@
   ],
   "id": "blank",
   "schemaVersion": 1,
-  "description": "Cameraを備えた最小プロジェクト。",
-  "name": "Blank Project"
+  "description": "Entityを配置しない空のシーンから始めます。",
+  "name": "空のプロジェクト"
 }

@@ -1,0 +1,59 @@
+using System.Numerics;
+
+namespace @NAMESPACE@;
+
+// エディタで関連付けたEntityに対するゲーム処理です。クラス名とファイル名は揃えてください。
+// ScriptTypeのIDは保存済みシーンとの関連付けに使います。名前を変える場合もIDは維持します。
+[global::Nexus.Managed.ScriptTypeAttribute("@TYPE_ID@")]
+public sealed class @CLASS@ : global::Nexus.Managed.ScriptBehaviour
+{
+    // 状態を保持するフィールドや、エディタで編集するプロパティをここに追加します。
+    // 例: [global::Nexus.Managed.ExposeAttribute(Id = "speed", Label = "Speed")]
+    //     public float Speed { get; set; } = 5.0f;
+
+    // この関連付けのインスタンスが作られたときに一度呼ばれます。無効状態でも呼ばれます。
+    // 初期値の準備や参照の取得を書きます。コンストラクターではEntity/Worldを操作しないでください。
+    // リロードで新しいインスタンスを作るときにも呼ばれます。
+    protected override void OnCreate()
+    {
+        // ここに初期化処理を書きます。
+    }
+
+    // OnCreateの後、有効になったときに呼ばれます。再び有効にした場合にも呼ばれます。
+    // OnDisableで解除するイベント購読や、動作再開の処理を書きます。
+    protected override void OnEnable()
+    {
+        // ここに有効化時の処理を書きます。
+    }
+
+    // 有効な間、ゲーム更新ごとに呼ばれます。Pause中は呼ばれません。
+    // deltaTimeは前回の更新からのゲーム時間（秒）です。移動量は「毎秒の速度 * deltaTime」で計算します。
+    protected override void OnUpdate(float deltaTime)
+    {
+        // ここに入力、移動、ゲームルールなどの毎回の処理を書きます。
+        // Entity.Transformは値のコピーです。変更後はEntity.Transformへ書き戻してください。
+        // Engine APIはこの所有スレッドから呼びます。Task.Runなどの中から呼ばないでください。
+    }
+
+    // 物理計算の直前に固定間隔で呼ばれます。一frame内で0回～複数回です。
+    // Rigidbodyへの力・速度変更など、物理に関係する処理を書きます。
+    protected override void OnFixedUpdate(float fixedDeltaTime)
+    {
+        // fixedDeltaTimeは物理stepの秒数です。毎frameの入力/UI処理はOnUpdateへ書きます。
+    }
+
+    // 有効だったスクリプトが無効化・解除・停止されるときに呼ばれます。
+    // OnEnableで始めた購読や継続処理を止めます。再有効化できる状態を残してください。
+    protected override void OnDisable()
+    {
+        // ここに無効化時の処理を書きます。
+    }
+
+    // 関連付けの解除、停止、リロードなどで、このインスタンスを終了するときに呼ばれます。
+    // 自分で作った資源やイベント購読を解放し、Task/Threadが残らないようにします。
+    // Entityが既に破棄されている場合があります。終了処理からEntity/Worldを変更しないでください。
+    protected override void OnDestroy()
+    {
+        // ここに最終的な後片付けを書きます。
+    }
+}

@@ -42,6 +42,8 @@ namespace NexusEngine {
         /** \brief 公開World APIで構造変更も可能なSystemはtrue。アクセス一覧だけで並列安全と判断しない */
         [[nodiscard]] virtual bool HasUnspecifiedComponentAccess() const noexcept { return false; }
 		[[nodiscard]] virtual Result<void> Update(Scene& scene, float deltaTime) = 0;
+        /** 固定間隔で物理stepの直前に呼ぶ。可変更新と重複実行しない。 */
+        virtual Result<void> FixedUpdate(Scene& scene, float fixedDeltaTime);
 	};
 
 	/*-----------------------------------------------------------------------------------------
@@ -77,6 +79,11 @@ namespace NexusEngine {
 
 		/** \brief 登録順にSystemを実行する \note frame中の一時allocationは行わない */
 		[[nodiscard]] Result<void> Update(Scene& scene, float deltaTime);
+        [[nodiscard]] Result<void> FixedStep(Scene& scene, float deltaTime);
+        [[nodiscard]] Result<void> VariableStep(Scene& scene, float deltaTime);
+    private:
+        [[nodiscard]] Result<void> Run(Scene& scene, float deltaTime, int mode);
+    public:
 
 		[[nodiscard]] std::span<const std::unique_ptr<ISceneSystem>> GetSystems() const noexcept {
 			return systems_;

@@ -190,21 +190,6 @@ void EditorWorkspace::RegisterToolbar() {
     }});
     toolbar_.RegisterButton("play.stop", "play.stop", "play.stop", 120);
     toolbar_.RegisterButton("project.reloadCpp", "Reload C++", "project.reloadCpp", 125);
-    toolbar_.RegisterSection({"project.nativeReloadState", 205, 10, [](const auto&, const auto&) {
-        const char* state = "Unavailable";
-        switch(LiveCodingAgent::State()) {
-            case NativeReloadState::Idle: state = "Idle"; break;
-            case NativeReloadState::Queued: state = "Queued"; break;
-            case NativeReloadState::Reloading: state = "Reloading"; break;
-            case NativeReloadState::Succeeded: state = "Reload Success"; break;
-            case NativeReloadState::NoChanges: state = "No Changes"; break;
-            case NativeReloadState::CompileError: state = "Compile Error"; break;
-            case NativeReloadState::CompatibilityError: state = "Compatibility Error"; break;
-            case NativeReloadState::StateRestoreError: state = "State Restore Error"; break;
-            default: break;
-        }
-        ImGui::TextDisabled("Native: %s", state);
-    }});
 
     // ギズモ・視点・表示の操作はViewport内のオプションへ配置する。
 }
@@ -212,7 +197,7 @@ void EditorWorkspace::RegisterToolbar() {
 void EditorWorkspace::RegisterCommands() {
     EditorCommandRegistry::Command nativeReload{[this] {
         if(!LiveCodingAgent::RequestReload()) Report(std::unexpected(Error(ErrorCategory::Framework, 239, "Native Reload unavailable or busy. Module-only mode requires an opt-in development build and an active Native Game Module session.")));
-    }, [this] { return !IsProjectOperationActive() && !commands_.IsChecked("project.runStandalone"); }};
+    }, [this] { return LiveCodingAgent::CanReload() && !IsProjectOperationActive() && !commands_.IsChecked("project.runStandalone"); }};
     // Compile要求からpatch完了までを公開し、Managed Compileや通常Buildとの競合を防ぐ。
     nativeReload.isChecked = [] { const auto state = LiveCodingAgent::State(); return state == NativeReloadState::Queued || state == NativeReloadState::Reloading; };
     commands_.Register("project.reloadCpp", std::move(nativeReload));

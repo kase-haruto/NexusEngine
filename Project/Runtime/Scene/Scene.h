@@ -15,6 +15,9 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <span>
+#include "Foundation/Math/DebugDrawLine.h"
+#include "GameTimeState.h"
 
 // engine
 #include "Components/NameComponent.h"
@@ -60,6 +63,16 @@ namespace NexusEngine {
 			return IsAlive(id) ? Entity(this, id) : Entity {};
 		}
 		[[nodiscard]] size_t GetEntityCount() const noexcept { return livingEntityCount_; }
+        GameTimeState& Time() noexcept;
+        const GameTimeState& Time() const noexcept;
+        /** \brief 診断線を一括追加する。満杯時は部分追加せずfalseを返す。保存対象には含めない */
+        bool AddDebugLines(uint64_t owner, std::span<const DebugDrawLine> lines, float duration);
+        /** \brief clientの終了・Reload時に、そのclientの診断線だけを失効させる */
+        void ClearDebugLines(uint64_t owner);
+        /** \brief ゲーム更新前に経過時間を反映する。一回描画の線は抽出後の更新で消す */
+        void AdvanceDebugDraw(float deltaTime);
+        /** \brief 複数の描画先へ同じ値を抽出する。ここでは消費せず描画済みだけを記録する */
+        void CopyDebugLines(std::vector<DebugDrawLine>& output);
 
         /** \brief Componentの有無に依存せず生存Entityを列挙する。callback中の構造変更は拒否する */
         template<typename Function>
@@ -160,6 +173,14 @@ namespace NexusEngine {
 		std::vector<uint32_t> freeEntityIndices_; //< 再利用可能な破棄済みslot index
 		std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> componentStorages_; //< Component型別Storage
 		size_t livingEntityCount_ = 0; //< 現在生存しているEntity数
+        struct DebugEntry {
+            DebugDrawLine line;
+            uint64_t owner;
+            float remaining;
+            bool presented = false;
+        };
+        std::vector<DebugEntry> debugLines_; //< Scene寿命の診断値。SerializationやReflectionへ混入させない
+        GameTimeState time_; //< Runtimeの時計。Reload用Cloneへ引き継ぐが、Level保存へは含めない
 		size_t iterationDepth_ = 0; //< Component反復中の構造変更を拒否するネスト数
 	};
 

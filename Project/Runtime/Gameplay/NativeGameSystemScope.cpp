@@ -1,4 +1,5 @@
 #include "NativeGameSystemScope.h"
+#include "Public/Nexus/GameTime.h"
 #include "GameApiBridge.h"
 #include "Runtime/Reflection/NativeComponentMetadata.h"
 #include "Runtime/Scene/Components/GameComponentData.h"
@@ -52,6 +53,7 @@ public:
     std::span<const std::type_index> GetWriteComponents() const noexcept override { return access.writes; }
     // Game Public APIはEntity生成・削除も許す。型宣言だけで将来並列実行できるとは扱わない。
     bool HasUnspecifiedComponentAccess() const noexcept override { return true; }
+    Result<void> FixedUpdate(Scene& scene, float deltaTime) override;
     /** \brief Schedulerが渡した現在Sceneを検査し、DLLのUpdateへだけ転送する */
     Result<void> Update(Scene& scene, float deltaTime) override {
         if(detached) return {};
@@ -88,6 +90,13 @@ public:
         return *clean;
     }
 };
+Result<void> NativeGameSystemAdapter::FixedUpdate(Scene& scene, float deltaTime) {
+    if((callbacks.reserved & NEXUS_NATIVE_SYSTEM_FIXED_UPDATES) == 0) {
+        return {};
+    }
+    return Update(scene, deltaTime);
+}
+
 }
 /*-----------------------------------------------------------------------------------------
  * NativeGameSystemScope::Impl
@@ -164,7 +173,7 @@ struct NativeGameSystemScope::Impl {
     }
     static NexusGameStatus NEXUS_GAME_CALL Add(uint64_t scope, const NexusNativeSystemDescriptorV1* descriptor, uint64_t* output) noexcept {
         if(!output) return NEXUS_GAME_INVALID_ARGUMENT; *output = 0;
-        if(!descriptor || descriptor->structSize != sizeof(*descriptor) || !descriptor->version || descriptor->reserved || descriptor->reservedReads || descriptor->reservedWrites ||
+        if(!descriptor || descriptor->structSize != sizeof(*descriptor) || !descriptor->version || (descriptor->reserved & ~NEXUS_NATIVE_SYSTEM_FIXED_UPDATES) || descriptor->reservedReads || descriptor->reservedWrites ||
             !descriptor->create || !descriptor->update || !descriptor->destroy || descriptor->afterCount > 64 || (descriptor->afterCount && !descriptor->after)) return NEXUS_GAME_INVALID_ARGUMENT;
         return Dispatch(scope, [&](Impl& self) {
             auto& scheduler = self.level.GetSystemScheduler();
@@ -180,7 +189,8 @@ struct NativeGameSystemScope::Impl {
             }
             adapter->access.reads = self.AccessTypes(descriptor->reads, descriptor->readCount);
             adapter->access.writes = self.AccessTypes(descriptor->writes, descriptor->writeCount);
-            adapter->callbacks.create = descriptor->create; adapter->callbacks.update = descriptor->update; adapter->callbacks.destroy = descriptor->destroy;
+            adapter->callbacks.reserved = descriptor->reserved;
+              adapter->callbacks.create = descriptor->create; adapter->callbacks.update = descriptor->update; adapter->callbacks.destroy = descriptor->destroy;
             self.systems.reserve(self.systems.size() + 1);
             const auto initialized = adapter->Initialize();
             if(initialized != NEXUS_GAME_OK) return initialized;

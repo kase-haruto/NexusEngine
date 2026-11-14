@@ -29,6 +29,7 @@ namespace NexusEngine {
 	 * - Graphics API型を公開せず、PSO生成に必要な可変設定を保持する
 	 *---------------------------------------------------------------------------------------*/
 	struct GraphicsPipelineDesc {
+        bool lineTopology = false; //< 診断線のLineList PSO。通常のMesh描画はTriangleのまま
 		// Scene pipelines use HDR; standalone/overlay pipelines keep the 8-bit default.
 		bool hdrRenderTarget = false;
         bool doubleSided = false; //< 選択マスク等で表裏を問わず形状を描く

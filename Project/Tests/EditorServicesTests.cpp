@@ -830,6 +830,8 @@ void CacheAndWorkspaceIntegration() {
     io.Fonts->SetTexID(2); // Keep the font distinct from the fake viewport texture (1).
     {
         EditorWorkspace workspace(f.session); workspace.Initialize(std::filesystem::absolute("Project"));
+        // Live++ Agentのない通常テスト環境では、利用不可のReloadを押せる状態にしない。
+        assert(!workspace.Commands().CanExecute("project.reloadCpp"));
         // 外部processを起動せず、共通Command経由の競合拒否と完了後の再許可を検証する。
         bool developmentBusy = false, managedBusy = false;
         EditorCommandRegistry::Command development{[] {}};

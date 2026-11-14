@@ -145,6 +145,9 @@ namespace NexusEngine {
 		case PrimitiveTopology::TriangleList:
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			break;
+        case PrimitiveTopology::LineList:
+            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+            break;
 		}
 	}
 

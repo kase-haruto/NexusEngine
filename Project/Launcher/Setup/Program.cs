@@ -6,8 +6,19 @@ using NexusLauncher;
 internal static class Program
 {
 [STAThread]
-static void Main()
+static void Main(string[] args)
 {
+// 更新元が終了するまで新しいランチャーを起動しない。待機はUI表示前で、元の処理はすぐ終了する。
+if (args.Length == 2 && args[0] == "--wait-for" && int.TryParse(args[1], out var previousId))
+{
+    try
+    {
+        using var previous = Process.GetProcessById(previousId);
+        if (!previous.WaitForExit(30000)) throw new IOException("更新元のランチャーを終了してから再試行してください。");
+    }
+    catch (ArgumentException) { }
+    catch (Exception ex) { MessageBox.Show(ex.Message, "ランチャーの更新"); return; }
+}
 ApplicationConfiguration.Initialize();
 using var form = new Form { Text = "NexusEngine Launcher Setup", Width = 700, Height = 340, StartPosition = FormStartPosition.CenterScreen, Font = new("Yu Gothic UI", 10), FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
 var title = new Label { Text = "NEXUS  /  LAUNCHER SETUP", Left = 24, Top = 20, Width = 630, Height = 42, Font = new("Segoe UI", 18, FontStyle.Bold) };

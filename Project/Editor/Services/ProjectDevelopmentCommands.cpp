@@ -87,6 +87,7 @@ class ProjectDevelopmentPanel final : public IEditorPanel {
     std::shared_ptr<ProjectDevelopmentJob> job_; //< 閉じたPanelでもWorkspaceが完了を回収する共有Job
     char module_[65] = "GameplayExtra", source_[65] = "Controller", dependencies_[512]{}, package_[1024]{}, dotnet_[1024]{}; //< 値入力だけを所有する
     int language_ = 0, selected_ = 0; //< 言語は新Moduleの初期実装方式でありProjectの制約ではない
+    int sourceKind_ = 0; //< 通常はEntity単位のBehaviour。一括Native Systemは明示選択で残す
     char sdk_[1024]{}; //< マシン固有の明示SDK配置。Projectへ保存しない
 public:
     ProjectDevelopmentPanel(EditorWorkspace& workspace, std::shared_ptr<ProjectDevelopmentJob> job) : workspace_(workspace), job_(std::move(job)) { const auto path = ProjectJson::Utf8(job_->options.livePPDirectory); if(path.size() < sizeof(sdk_)) std::copy(path.begin(), path.end(), sdk_); }
@@ -120,12 +121,20 @@ public:
             const auto& selected = project->Descriptor().modules[static_cast<size_t>(selected_)];
             if(ImGui::BeginCombo("Source Module", selected.id.c_str())) { for(size_t index = 0; index < project->Descriptor().modules.size(); ++index) if(ImGui::Selectable(project->Descriptor().modules[index].id.c_str(), selected_ == static_cast<int>(index))) selected_ = static_cast<int>(index); ImGui::EndCombo(); }
             ImGui::InputText("Source name", source_, sizeof(source_));
-            if(ImGui::Button("Create Behaviour / Native System")) job_->Start(workspace_, "Add-GameSource", {L"-ModuleId", ProjectJson::Path(selected.id).wstring(), L"-Name", ProjectJson::Path(source_).wstring()});
+            if(selected.language == ProjectModuleLanguage::Cpp) {
+                ImGui::Combo("Source type", &sourceKind_, "Entity Behaviour\0Native System (advanced)\0");
+            }
+            const bool nativeSystem = selected.language == ProjectModuleLanguage::Cpp && sourceKind_ == 1;
+            ImGui::TextWrapped("%s", nativeSystem ? "Creates a batch Native System." : "Creates OnCreate / OnEnable / OnUpdate / OnDisable / OnDestroy with Japanese guidance comments.");
+            if(ImGui::Button(nativeSystem ? "Create Native System" : "Create Behaviour")) {
+                job_->Start(workspace_, "Add-GameSource", {L"-ModuleId", ProjectJson::Path(selected.id).wstring(),
+                    L"-Name", ProjectJson::Path(source_).wstring(), L"-Kind", nativeSystem ? L"System" : L"Behaviour"});
+            }
         }
         ImGui::InputText("New Package directory", package_, sizeof(package_)); ImGui::InputText("Private .NET root (optional)", dotnet_, sizeof(dotnet_));
         if(ImGui::Button("Package")) { std::vector<std::wstring> args{L"-OutputDirectory", ProjectJson::Path(package_).wstring()}; if(*dotnet_) { args.push_back(L"-DotNetRoot"); args.push_back(ProjectJson::Path(dotnet_).wstring()); } job_->Start(workspace_, "Package-Game", std::move(args)); }
         ImGui::EndDisabled();
-        ImGui::TextWrapped("Attach a ScriptComponent and choose the generated Script Type in the common Details panel after Build / restart.");
+        ImGui::TextWrapped("C#: Build / Reload C#, then attach the Script Type in Details. C++ Behaviour: add it as a Component after Build / restart. Function bodies start empty; no automatic movement is added.");
     }
 };
 }

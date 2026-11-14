@@ -22,7 +22,8 @@ namespace NexusEngine {
 
 	/** 描画Backendに依存しないPrimitive topology。 */
 	enum class PrimitiveTopology : uint8_t {
-		TriangleList
+		TriangleList,
+        LineList
 	};
 
 	/*-----------------------------------------------------------------------------------------

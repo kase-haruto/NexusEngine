@@ -186,6 +186,14 @@ int RunProjectTool(int argc, wchar_t** argv) {
         }
         if(command == L"build-editor" || command == L"build-runtime" || options.rebuild) return 0;
         ProjectLaunchOptions launch; launch.checkOnly = command == L"check"; launch.build = options;
+        if(command == L"open") {
+            // 親ランチャーのstdoutをEditorに残さず、起動後すぐCLIの出力を閉じられるようにする。
+            auto id = CreateUuid();
+            if(!id) {
+                return Fail(id.error());
+            }
+            launch.log = project->Root() / "Build/Logs" / ("Editor-" + *id + ".log");
+        }
         auto process = ProjectBuild::Launch(*project, *engine, kind, launch); if(!process) return Fail(process.error());
         if(command != L"check") { std::cout << "Started PID " << process->Id() << '\n'; return 0; }
         for(;;) { auto state = process->Poll(); if(!state) return Fail(state.error()); if(*state) return static_cast<int>(**state); std::this_thread::sleep_for(std::chrono::milliseconds(20)); }

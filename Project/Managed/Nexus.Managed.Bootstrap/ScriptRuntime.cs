@@ -41,8 +41,15 @@ internal sealed unsafe class ScriptRuntime
     private bool Current(Instance item, out ScriptState state) => world.TryScript(item.Owner, item.Attachment, out state);
     private void Report(Instance item, Exception exception)
     {
-        try { var message = $"Script {item.Type}: {exception.GetType().Name}: {exception.Message}"; world.Log(message.Length > 2048 ? message.Substring(0, 2048) : message); }
-        catch { /* Native側でも境界の失敗を記録する。診断失敗を二次例外にしない。 */ }
+        try { world.Debug.LogError($"Script {item.Type}: {exception}"); }
+        catch {
+            // 旧Hostの追加サービス未提供時も、従来の必須Loggerで例外を失わない。
+            try {
+                var message = $"Script {item.Type}: {exception}";
+                world.Log(message.Length > 2048 ? message.Substring(0, 2048) : message);
+            }
+            catch { /* 診断失敗を二次例外にしない。 */ }
+        }
     }
     /// <summary>後続cleanupを継続しながら失敗を記録する。例外objectで旧Assemblyをrootさせない。</summary>
     private void CleanupFailure(Instance item, Exception exception) { cleanupFailed = true; Report(item, exception); }
@@ -81,7 +88,7 @@ internal sealed unsafe class ScriptRuntime
         else if (!item.Active && enabled) { item.Active = true; Invoke(item, () => item.Behaviour!.Enable()); }
     }
     /// <summary>Nativeの反復終了後に一括同期する。callbackによる自己破棄・型置換もHandleで再検証する。</summary>
-    internal bool Tick(Span<ScriptBinding> bindings, float deltaTime, bool initializeOnly)
+    internal bool Tick(Span<ScriptBinding> bindings, float deltaTime, bool initializeOnly, bool fixedOnly = false)
     {
         if (stopping) throw new InvalidOperationException("Script runtime is stopping.");
         var names = new string[bindings.Length]; var keep = new HashSet<ulong>();
@@ -124,11 +131,12 @@ internal sealed unsafe class ScriptRuntime
             }
             Reconcile(item);
             if (!cleanupFailed && !initializeOnly && !item.Removed && item.Active && Current(item, out var active) && active.Enabled != 0)
-                Invoke(item, () => item.Behaviour!.Update(deltaTime));
+                Invoke(item, () => { if(fixedOnly) item.Behaviour!.FixedUpdate(deltaTime); else item.Behaviour!.Update(deltaTime); });
             if (!item.Removed) Reconcile(item);
             if (!item.Removed) binding.Instance = item.Id;
             if (initializeOnly && item.Faulted) initialFailure = true;
         }
+        if(!initializeOnly && !fixedOnly) world.TickTimers();
         // 全behaviourの更新が終わってから保存する。後続behaviourによる値変更も同じsnapshotへ含める。
         foreach (var item in instances.Values.ToArray())
         {

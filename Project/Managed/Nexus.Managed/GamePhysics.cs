@@ -103,8 +103,11 @@ public sealed unsafe partial class GameWorld
     }
     /// <summary>既存ECSのColliderへ最近傍Raycastする。方向はNativeで正規化され、無衝突時はfalse。</summary>
     public bool Raycast(Vector3 origin, Vector3 direction, float distance, out PhysicsHit hit)
+        => Raycast(origin, direction, distance, uint.MaxValue, out hit);
+    /// <summary>所属layerがmaskに含まれるColliderだけを照会する。mask=0は常に無衝突。</summary>
+    public bool Raycast(Vector3 origin, Vector3 direction, float distance, uint layerMask, out PhysicsHit hit)
     {
-        var bytes=PhysicsCall(default,new PhysicsRequest { Operation=1, Vector=origin, Direction=direction, Distance=distance },false);
+        var bytes=PhysicsCall(default,new PhysicsRequest { Operation=layerMask==uint.MaxValue ? 1u : 6u, Vector=origin, Direction=direction, Distance=distance, Reserved2=layerMask==uint.MaxValue ? 0u : layerMask },false);
         if(bytes.Length!=48 || sizeof(NativePhysicsHit)!=48) throw new InvalidOperationException("Physics hit ABI mismatch.");
         NativePhysicsHit value;
         fixed(byte* pointer=bytes) value=*(NativePhysicsHit*)pointer;

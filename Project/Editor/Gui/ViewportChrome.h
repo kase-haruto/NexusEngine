@@ -5,6 +5,7 @@
 #include "Editor/Gui/Widgets/EditorIconButton.h"
 #include "ThirdParty/imgui/imgui_internal.h"
 #include <algorithm>
+#include <cmath>
 
 namespace NexusEngine {
 struct ViewportUiRect {
@@ -183,7 +184,8 @@ public:
         const auto style = UI::CurrentEditorTheme().viewportTools;
         const float scale = ImGui::GetFontSize()/18;
         const bool collapsed = ImGui::GetStateStorage()->GetBool(ImGui::GetID("ViewportHeaderCollapsed"));
-        return (style.padding*2+style.detailArrowWidth+(collapsed ? 0 : (style.button+style.detailArrowWidth)*4+style.spacing*4))*scale;
+        // 子Windowの境界は整数pixelへ丸められる。DPI倍率が端数でも最後の組を折り返さない余白を確保する。
+        return std::ceil((style.padding*2+style.detailArrowWidth+(collapsed ? 0 : (style.button+style.detailArrowWidth)*4+style.spacing*4))*scale) + 2;
     }
     /** \brief 設定UIを小幅の子Windowへ構成し、その入力領域を返す */
     template<class DrawSettings>
@@ -201,7 +203,10 @@ public:
         auto background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg); background.w = .9f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg,background);
         ImGui::SetNextWindowSizeConstraints({0,0},{width,std::max(1.f,available.y)});
-        if(ImGui::BeginChild("ViewportHeader",{width,0},ImGuiChildFlags_AutoResizeY|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoSavedSettings)) {
+        // 高さの自動計測中に縦Scrollbarが出ると、有効幅が縮んで折返しが固定される。
+        // Headerは行数に合わせて伸長させ、スクロールによる幅の変動を避ける。
+        if(ImGui::BeginChild("ViewportHeader",{width,0},ImGuiChildFlags_AutoResizeY|ImGuiChildFlags_AlwaysUseWindowPadding,
+            ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse)) {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{0,0});
             const bool collapseClicked = ImGui::Button(collapsed ? "<###CollapseOverlay" : ">###CollapseOverlay",{style.detailArrowWidth*scale,style.button*scale});
             ImGui::PopStyleVar();

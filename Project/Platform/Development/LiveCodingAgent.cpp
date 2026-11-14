@@ -380,10 +380,19 @@ namespace NexusEngine {
         }
 #endif
     }
-    bool LiveCodingAgent::RequestReload() noexcept {
+    bool LiveCodingAgent::CanReload() noexcept {
 #if NEXUS_WITH_LIVEPP && NEXUS_LIVEPP_GAME_MODULE_ONLY
-        if(moduleRejected.load()) return false;
+        if(moduleRejected.load()) {
+            return false;
+        }
 #endif
+        const auto state = reloadState.load();
+        return state != NativeReloadState::Unavailable && state != NativeReloadState::Queued && state != NativeReloadState::Reloading;
+    }
+    bool LiveCodingAgent::RequestReload() noexcept {
+        if(!CanReload()) {
+            return false;
+        }
         auto state = reloadState.load();
         do {
             if(state == NativeReloadState::Unavailable || state == NativeReloadState::Queued || state == NativeReloadState::Reloading) return false;

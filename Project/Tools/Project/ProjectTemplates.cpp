@@ -162,7 +162,10 @@ Result<ProjectContext> ProjectTemplates::Create(const std::filesystem::path& roo
             Level startup; auto loaded = startup.Load(context.StartupLevel()); if(!loaded) return loaded;
             bool camera = false;
             startup.GetScene()->ForEach<CameraComponent>([&](Entity, const CameraComponent& value) { camera |= value.primary && value.enabled; });
-            if(!camera) return std::unexpected(Invalid("Runnable template requires an enabled primary Camera."));
+            // 空シーンだけはCameraを要求しない。実行用テンプレートの検証は維持する。
+            if(!camera && projectTemplate.id != "blank") {
+                return std::unexpected(Invalid("Runnable template requires an enabled primary Camera."));
+            }
             return {};
         } catch(const std::exception& exception) { return std::unexpected(Invalid(exception.what())); }
     });

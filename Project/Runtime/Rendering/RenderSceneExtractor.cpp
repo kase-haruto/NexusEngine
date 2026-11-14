@@ -47,6 +47,7 @@ namespace NexusEngine {
 
 		// clearはcapacityを保持するので、安定したEntity数なら毎frameの再確保は発生しない。
 		result.primitives.clear();
+        scene.CopyDebugLines(result.debugLines);
 		result.camera.reset();
         result.atmosphere = {};
         result.skyLight.reset();

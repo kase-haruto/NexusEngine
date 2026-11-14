@@ -1,7 +1,7 @@
 #pragma once
 #include "RigidBodyComponent.h"
 #include <string>
-NEXUS_REFLECT_COMPONENT(ColliderComponent, "Collider", "component.collider", enabled, meshAsset, shape, halfExtent, radius, halfHeight, friction, restitution, sensor)
+NEXUS_REFLECT_COMPONENT(ColliderComponent, "Collider", "component.collider", enabled, meshAsset, shape, halfExtent, radius, halfHeight, friction, restitution, sensor, collisionLayer, collisionMask)
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
  * ColliderComponent
@@ -17,10 +17,13 @@ struct ColliderComponent {
     float radius=0.5f,halfHeight=0.5f; //< Sphere/Capsuleの形状寸法
     float friction=0.5f,restitution=0; //< 接触材質。RigidBodyの運動パラメータと分離する
     bool sensor=false; //< 物理接触応答を抑制する
+    int collisionLayer = 0, collisionMask = -1; //< Colliderがある場合はこちらのlayer/maskを使用する
     /** \brief backend非依存の計算用settingsへ形状・材質を反映する */
     void ApplyTo(RigidBodyComponent& body) const noexcept {
         body.shape=shape; body.halfExtent=halfExtent; body.radius=radius; body.halfHeight=halfHeight;
         body.friction=friction; body.restitution=restitution; body.sensor=sensor;
+        body.collisionLayer = collisionLayer;
+        body.collisionMask = collisionMask;
     }
     /** \brief 既存のPhysics値検証を共通利用し、保存とsimulationの検証範囲を一致させる */
     bool IsValid() const noexcept {

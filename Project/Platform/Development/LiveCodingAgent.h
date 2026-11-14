@@ -28,6 +28,8 @@ namespace NexusEngine {
         void RejectReload();
         /** \brief Editor共通Commandから要求だけを送る。SDK操作は次のFramework境界で行う */
         [[nodiscard]] static bool RequestReload() noexcept;
+        /** \brief UIと要求経路で同じ利用可否を参照する。SDKへの要求は発行しない */
+        [[nodiscard]] static bool CanReload() noexcept;
         [[nodiscard]] static NativeReloadState State() noexcept;
         /** \brief EXEのReinstancingと独立DLLの固定stateパッチを別profileとして選択する */
         [[nodiscard]] bool IsGameModuleBackend() const noexcept;

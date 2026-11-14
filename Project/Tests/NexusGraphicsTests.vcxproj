@@ -67,6 +67,7 @@
     <ClCompile Include="..\Graphics\Renderer\GraphicsResourceFactory.cpp" />
     <ClCompile Include="..\Graphics\Renderer\PrimitiveRenderer.cpp" />
     <ClCompile Include="..\Graphics\Grid\GridRenderer.cpp" />
+    <ClCompile Include="..\Graphics\Debug\DebugDrawRenderer.cpp" />
     <ClCompile Include="..\Graphics\Sky\SkyRenderer.cpp" />
     <ClCompile Include="..\Graphics\Meshlet\MeshletBuilder.cpp" />
     <ClCompile Include="..\Graphics\Backend\DirectX12\Meshlet\MeshletResource.cpp" />

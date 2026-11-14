@@ -3,8 +3,114 @@
 // c++
 #include <utility>
 #include <stdexcept>
+#include "EntityReference.h"
+#include <charconv>
+#include <format>
+#include <cmath>
+#include <cfloat>
 
 namespace NexusEngine {
+    GameTimeState& Scene::Time() noexcept {
+        return time_;
+    }
+    const GameTimeState& Scene::Time() const noexcept {
+        return time_;
+    }
+    bool GameTimeState::BeginFrame(float unscaledDelta) {
+        const double scaled = static_cast<double>(unscaledDelta) * timeScale;
+        if(!std::isfinite(timeScale) || timeScale < 0 || timeScale > 100 || !std::isfinite(fixedDeltaTime) || fixedDeltaTime < .001f || fixedDeltaTime > 1 ||
+            !std::isfinite(unscaledDelta) || unscaledDelta < 0 || !std::isfinite(scaled) || scaled > FLT_MAX || frame == UINT64_MAX) {
+            return false;
+        }
+        activeFixedDelta = fixedDeltaTime;
+        unscaledDeltaTime = unscaledDelta;
+        deltaTime = static_cast<float>(scaled);
+        unscaledElapsed += unscaledDelta;
+        elapsed += scaled;
+        accumulator += scaled;
+        // TimeScale=0では間隔を変更しても蓄積残量を消費しない。再開後のstepへ持ち越す。
+        const double steps = timeScale == 0 ? 0 : std::floor((accumulator + fixedDeltaTime * 1e-6) / fixedDeltaTime);
+        pendingSteps = static_cast<uint32_t>(std::min(steps, 64.0));
+        if(steps > 64) {
+            droppedFixedTime += (steps - 64) * fixedDeltaTime;
+        }
+        accumulator = std::max(0.0, accumulator - steps * fixedDeltaTime);
+        inFixedStep = false;
+        ++frame;
+        return true;
+    }
+    std::string FormatEntityReference(PersistentId id) {
+        if(!id.IsValid()) {
+            return {};
+        }
+        return std::format("{:016x}{:016x}", id.high, id.low);
+    }
+    std::optional<PersistentId> ParseEntityReference(std::string_view value) {
+        if(value.empty()) {
+            return PersistentId{};
+        }
+        if(value.size() != 32) {
+            return {};
+        }
+        PersistentId id;
+        const auto high = std::from_chars(value.data(), value.data() + 16, id.high, 16);
+        const auto low = std::from_chars(value.data() + 16, value.data() + 32, id.low, 16);
+        if(high.ec != std::errc{} || high.ptr != value.data() + 16 || low.ec != std::errc{} || low.ptr != value.data() + 32 || !id.IsValid()) {
+            return {};
+        }
+        return id;
+    }
+    bool ValidateReferenceValue(std::string_view value, bool component) {
+        if(value.empty()) {
+            return true;
+        }
+        if(!component) {
+            return ParseEntityReference(value).has_value();
+        }
+        if(value.size() < 34 || value.size() > 545 || value[32] != '|' || !ParseEntityReference(value.substr(0, 32))) {
+            return false;
+        }
+        for(unsigned char character : value.substr(33)) {
+            if(character < 32 || character == 127) {
+                return false;
+            }
+        }
+        return true;
+    }
+    bool Scene::AddDebugLines(uint64_t owner, std::span<const DebugDrawLine> lines, float duration) {
+        if(lines.size() > 1024 - debugLines_.size()) {
+            return false;
+        }
+        // 先に必要領域を確保し、確保失敗で途中まで描画要求が残ることを防ぐ。
+        const auto required = debugLines_.size() + lines.size();
+        if(required > debugLines_.capacity()) {
+            debugLines_.reserve(std::min(size_t{1024}, std::max(required, debugLines_.capacity() * 2)));
+        }
+        for(const auto& line : lines) {
+            debugLines_.push_back({line, owner, duration, false});
+        }
+        return true;
+    }
+    void Scene::ClearDebugLines(uint64_t owner) {
+        std::erase_if(debugLines_, [owner](const DebugEntry& entry) { return entry.owner == owner; });
+    }
+    void Scene::AdvanceDebugDraw(float deltaTime) {
+        std::erase_if(debugLines_, [deltaTime](DebugEntry& entry) {
+            if(entry.remaining <= 0) {
+                return entry.presented;
+            }
+            entry.remaining -= deltaTime;
+            return entry.remaining <= 0;
+        });
+    }
+    void Scene::CopyDebugLines(std::vector<DebugDrawLine>& output) {
+        output.clear();
+        output.reserve(debugLines_.size());
+        for(auto& entry : debugLines_) {
+            output.push_back(entry.line);
+            entry.presented = true;
+        }
+    }
 	Scene::EntityLayout Scene::CaptureEntityLayout() const {
 		EntityLayout result;
 		for(const auto& slot : entitySlots_) {
@@ -40,6 +146,8 @@ namespace NexusEngine {
 		copy->entitySlots_ = entitySlots_;
 		copy->freeEntityIndices_ = freeEntityIndices_;
 		copy->livingEntityCount_ = livingEntityCount_;
+        // Reloadの候補Worldにも時計を引き継ぎ、保存参照と同じ実行時点から再開する。
+        copy->time_ = time_;
 		for(const auto& [type, storage] : componentStorages_) {
 			auto values = storage->Clone();
 			if(!values) return {};

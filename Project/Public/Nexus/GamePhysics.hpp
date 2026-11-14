@@ -16,10 +16,10 @@ public:
         client_(context.abiVersion==1 && context.structSize==sizeof(context) ? context.client : 0) {}
     /** \brief 最近傍のhitをコピーする。成功かつoutput.entity.world==0なら無衝突 */
     NexusGameStatus Raycast(const std::array<float,3>& origin, const std::array<float,3>& direction,
-        float distance, NexusPhysicsHitV1& output) const noexcept {
+        float distance, NexusPhysicsHitV1& output, uint32_t layerMask = UINT32_MAX) const noexcept {
         output={};
-        const NexusPhysicsRequestV1 input{1,0,{origin[0],origin[1],origin[2]},
-            {direction[0],direction[1],direction[2]},distance,0};
+        const NexusPhysicsRequestV1 input{layerMask == UINT32_MAX ? 1u : 6u,0,{origin[0],origin[1],origin[2]},
+            {direction[0],direction[1],direction[2]},distance,layerMask == UINT32_MAX ? 0u : layerMask};
         NexusPhysicsHitV1 result{}; uint32_t count=0;
         const auto status=Invoke({},input,reinterpret_cast<uint8_t*>(&result),sizeof(result),count);
         if(status!=NEXUS_GAME_OK) return status;

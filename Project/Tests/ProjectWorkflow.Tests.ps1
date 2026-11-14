@@ -35,6 +35,14 @@ foreach($template in @('blank','basic-3d')) {
     # Game固有の型を含むLevelは汎用Runtimeでは開けず、生成したGameホストで開けること。
     $level = Join-Path $gameRoot 'Levels/Startup.level'
     $levelText = [IO.File]::ReadAllText($level)
+    if($template -eq 'blank') {
+        if($levelText -match '(?m)^ENTITY ') { throw 'Blank template is not empty.' }
+        # 型登録と実行経路の検証用Cameraはテスト側で追加し、空テンプレートの契約を変えない。
+        $basicLevel = [IO.File]::ReadAllText((Join-Path $workspace 'Project/Templates/Basic3D/Startup.level'))
+        $cameraFixture = [regex]::Match($basicLevel, '(?ms)^ENTITY .*?"Camera"\r?\n.*?^END_ENTITY\r?\n').Value
+        if(-not $cameraFixture) { throw 'Camera fixture is missing.' }
+        $levelText = $levelText.Replace('END_LEVEL', $cameraFixture + 'END_LEVEL')
+    }
     $component = 'COMPONENTS 1' + "`n" + 'COMPONENT "Game.Health" object 2 "fields" object 1 "health" int 42 "type" string "Game.Health"'
     $position = $levelText.IndexOf('COMPONENTS 0')
     if($position -lt 0) { throw 'Template has no component insertion point.' }
@@ -42,8 +50,11 @@ foreach($template in @('blank','basic-3d')) {
     [IO.File]::WriteAllText($level,$levelText,$utf8)
     $null = Invoke-Expected $generic @('--project',$file,'--engine',$dataRoot,'--check-game') 1
     $null = Invoke-Expected $tool @('check',$file,$registry,$Configuration)
+    $localProps = Join-Path $gameRoot 'Nexus.Engine.local.props'
+    $propsTime = [IO.File]::GetLastWriteTimeUtc($localProps)
     # 再ビルドでlocal propsとstampの置換も通す。Solutionや既存Gameを対象にしない。
     $null = Invoke-Expected $tool @('build-editor',$file,$registry,$Configuration)
+    if([IO.File]::GetLastWriteTimeUtc($localProps) -ne $propsTime) { throw 'Unchanged local props were rewritten and invalidate incremental compilation.' }
     $null = Invoke-Expected $tool @('verify-editor',$file,$registry,$Configuration)
     $null = Invoke-Expected $tool @('verify-runtime',$file,$registry,$Configuration)
     $editor = Join-Path $gameRoot "Build/Bin/x64/$Configuration/GameEditor.exe"

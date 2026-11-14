@@ -258,6 +258,25 @@ void CreationTests(const std::filesystem::path& root, const ProjectContext& cont
 void HybridTemplateTests(const std::filesystem::path& root) {
     auto templates = ProjectTemplates::List(std::filesystem::absolute("Project/Templates")); Require(templates.has_value(), "Cannot list Templates.");
     EngineInstallation engine; engine.identity = Descriptor().engine;
+    for(const auto id : {"blank", "basic-3d"}) {
+        const auto found = std::ranges::find(*templates, id, &ProjectTemplate::id);
+        Require(found != templates->end(), "Scene template missing.");
+        auto descriptor = Descriptor();
+        descriptor.startupLevel = descriptor.paths.levels + "/Startup.level";
+        auto created = ProjectTemplates::Create(root / id, descriptor, *found, engine);
+        Require(created.has_value(), "Cannot create scene template.");
+        Level scene;
+        Require(scene.Load(created->StartupLevel()).has_value(), "Cannot load generated scene.");
+        size_t count = 0;
+        bool camera = false, sky = false, cube = false;
+        scene.GetScene()->ForEach<NameComponent>([&](Entity, const NameComponent& name) {
+            ++count;
+            camera |= name.name == "Camera";
+            sky |= name.name == "Sky";
+            cube |= name.name == "Cube";
+        });
+        Require(std::string_view(id) == "blank" ? count == 0 : camera && sky && cube, "Scene template contents differ from the launcher description.");
+    }
     for(const auto language : {ProjectModuleLanguage::Cpp, ProjectModuleLanguage::CSharp}) {
         const auto found = std::ranges::find(*templates, "hybrid-gameplay", &ProjectTemplate::id); Require(found != templates->end(), "Hybrid Template missing.");
         auto descriptor = Descriptor(); descriptor.startupLevel = descriptor.paths.levels + "/Startup.level";

@@ -7,6 +7,8 @@
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayerInterfaceTable.h>
 #include <Jolt/Physics/Collision/BroadPhase/ObjectVsBroadPhaseLayerFilterTable.h>
 #include <Jolt/Physics/Collision/ObjectLayerPairFilterTable.h>
+#include <Jolt/Physics/Collision/GroupFilter.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
@@ -58,6 +60,29 @@ struct JoltRegistration {
         JPH::Factory::sInstance = nullptr;
     }
 };
+/** 所属layerをSubGroup、相手maskをGroupとして値で渡す。BodyやSceneのpointerをfilterへ保存しない。 */
+class CollisionMaskFilter final : public JPH::GroupFilter {
+public:
+    bool CanCollide(const JPH::CollisionGroup& first, const JPH::CollisionGroup& second) const override;
+};
+bool CollisionMaskFilter::CanCollide(const JPH::CollisionGroup& first, const JPH::CollisionGroup& second) const {
+    return first.GetSubGroupID() < 32 && second.GetSubGroupID() < 32 &&
+        (first.GetGroupID() & (uint32_t{1} << second.GetSubGroupID())) != 0 &&
+        (second.GetGroupID() & (uint32_t{1} << first.GetSubGroupID())) != 0;
+}
+class RayLayerFilter final : public JPH::BodyFilter {
+public:
+    explicit RayLayerFilter(uint32_t mask);
+    bool ShouldCollideLocked(const JPH::Body& body) const override;
+private:
+    uint32_t mask_;
+};
+RayLayerFilter::RayLayerFilter(uint32_t mask) : mask_(mask) {
+}
+bool RayLayerFilter::ShouldCollideLocked(const JPH::Body& body) const {
+    const auto layer = body.GetCollisionGroup().GetSubGroupID();
+    return layer < 32 && (mask_ & (uint32_t{1} << layer)) != 0;
+}
 }
 /*-----------------------------------------------------------------------------------------
  * PhysicsWorld::Impl
@@ -78,6 +103,7 @@ struct PhysicsWorld::Impl {
     Scene* scene=nullptr; //< 所有しない。交換時は参照を比較するだけで旧objectをdereferenceしない
     JPH::BroadPhaseLayerInterfaceTable layers{2,2}; //< Staticと移動bodyを分ける派生layer
     JPH::ObjectLayerPairFilterTable pairs{2}; //< Static同士のsimulation接触は作らない
+    JPH::Ref<CollisionMaskFilter> collisionMasks = new CollisionMaskFilter(); //< Bodyの参照がなくなるまで保持する
     std::unique_ptr<JPH::ObjectVsBroadPhaseLayerFilterTable> broad; //< solverより長く保持するfilter
     JPH::TempAllocatorImpl allocator{16*1024*1024}; //< World専用のstep作業領域
     JPH::JobSystemSingleThreaded jobs{JPH::cMaxPhysicsJobs}; //< 既存の逐次実行契約を維持するbackend
@@ -126,7 +152,7 @@ struct PhysicsWorld::Impl {
     static bool Same(const Body& body,const RigidBodyComponent& value,const std::array<float,3>& scale) {
         const auto& old=body.settings;
         return old.motion==value.motion && old.shape==value.shape && old.halfExtent==value.halfExtent && old.radius==value.radius && old.halfHeight==value.halfHeight &&
-            old.mass==value.mass && old.friction==value.friction && old.restitution==value.restitution && old.gravityScale==value.gravityScale && old.sensor==value.sensor && old.continuous==value.continuous && body.scale==scale;
+            old.mass==value.mass && old.friction==value.friction && old.restitution==value.restitution && old.gravityScale==value.gravityScale && old.sensor==value.sensor && old.continuous==value.continuous && body.scale==scale && old.collisionLayer==value.collisionLayer && old.collisionMask==value.collisionMask;
     }
     /** \brief 全入力を検証後、同じScene内の世代付きEntityIdをBodyへ同期する */
     Result<void> Sync(Scene& value) {
@@ -193,6 +219,7 @@ struct PhysicsWorld::Impl {
                 else shape=new JPH::CapsuleShape(component.halfHeight*scale[1],component.radius*(std::max)(scale[0],scale[2]));
                 const auto motion=component.motion==0?JPH::EMotionType::Static:component.motion==1?JPH::EMotionType::Dynamic:JPH::EMotionType::Kinematic;
                 JPH::BodyCreationSettings settings(shape,position,rotation,motion,static_cast<JPH::ObjectLayer>(component.motion==0?0:1));
+                settings.mCollisionGroup = JPH::CollisionGroup(collisionMasks, static_cast<uint32_t>(component.collisionMask), static_cast<uint32_t>(component.collisionLayer));
                 settings.mFriction=component.friction; settings.mRestitution=component.restitution; settings.mGravityFactor=component.gravityScale; settings.mIsSensor=component.sensor;
                 settings.mMotionQuality=component.continuous && component.motion==1 ? JPH::EMotionQuality::LinearCast : JPH::EMotionQuality::Discrete;
                 settings.mCollideKinematicVsNonDynamic=component.motion==2;
@@ -251,12 +278,13 @@ Result<void> PhysicsWorld::Step(Scene& scene,float deltaTime) {
     }
     return {};
 }
-Result<PhysicsWorld::Hit> PhysicsWorld::Raycast(Scene& scene,const std::array<float,3>& origin,const std::array<float,3>& direction,float distance) {
+Result<PhysicsWorld::Hit> PhysicsWorld::Raycast(Scene& scene,const std::array<float,3>& origin,const std::array<float,3>& direction,float distance,uint32_t layerMask) {
     for(const auto* vector:{&origin,&direction}) for(float value:*vector) if(!std::isfinite(value)) return std::unexpected(Failure("Ray contains nonfinite values."));
     const auto vector=Vector(direction); const float length=vector.Length(); if(!std::isfinite(length)||length<1e-6f||!std::isfinite(distance)||distance<=0||distance>1000000) return std::unexpected(Failure("Invalid ray direction or distance."));
     auto synced=impl_->Sync(scene); if(!synced) return std::unexpected(synced.error());
     JPH::RRayCast ray(JPH::RVec3(origin[0],origin[1],origin[2]),vector*(distance/length)); JPH::RayCastResult result;
-    if(!impl_->physics.GetNarrowPhaseQuery().CastRay(ray,result)) return Hit{};
+    const RayLayerFilter filter(layerMask);
+    if(!impl_->physics.GetNarrowPhaseQuery().CastRay(ray,result,{}, {},filter)) return Hit{};
     const auto key=impl_->physics.GetBodyInterface().GetUserData(result.mBodyID); Hit hit; hit.entity={static_cast<uint32_t>(key),static_cast<uint32_t>(key>>32)};
     const auto point=ray.GetPointOnRay(result.mFraction); hit.point={point.GetX(),point.GetY(),point.GetZ()}; hit.distance=distance*result.mFraction;
     JPH::BodyLockRead lock(impl_->physics.GetBodyLockInterface(),result.mBodyID); if(lock.Succeeded()) hit.normal=Array(lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2,point));

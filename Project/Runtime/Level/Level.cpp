@@ -69,10 +69,10 @@ namespace NexusEngine {
 	}
 
 	Result<PhysicsWorld::Hit> Level::Raycast(const std::array<float,3>& origin,
-		const std::array<float,3>& direction, float distance) {
+		const std::array<float,3>& direction, float distance, uint32_t layerMask) {
 		if(!scene_) return std::unexpected(Error(ErrorCategory::Scene, kLevelNotLoaded, "Cannot query an unloaded level."));
 		if(!physics_) physics_ = std::make_unique<PhysicsWorld>(physicsModels_);
-		return physics_->Raycast(*scene_, origin, direction, distance);
+		return physics_->Raycast(*scene_, origin, direction, distance, layerMask);
 	}
 
     Result<void> Level::SetResourceRoot(std::filesystem::path root) {

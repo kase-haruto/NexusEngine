@@ -30,7 +30,7 @@ public:
     /** \brief V5でEngine常駐のNative System dispatchを渡す。Game DLLのpointerは渡さない */
     [[nodiscard]] Result<void> StartBoundGameplay(DotNetHost& host, const std::filesystem::path& assembly, const NexusManagedGameplayContextV5& context);
     /** \brief 一回のInteropで既存ECSの関連付け全体を同期・更新する。bufferをManagedへ保持させない */
-    [[nodiscard]] Result<void> Tick(std::span<NexusScriptBindingV1> bindings, float deltaTime, bool initializeOnly);
+    [[nodiscard]] Result<void> Tick(std::span<NexusScriptBindingV1> bindings, float deltaTime, bool initializeOnly, bool fixedOnly = false);
     /** \brief frame境界でReload段階を実行する。失敗時もWorldを破棄せず停止状態を上位へ伝える */
     [[nodiscard]] Result<void> Reload(uint32_t operation, const std::filesystem::path& assembly = {});
     [[nodiscard]] bool IsSuspended() const noexcept { return suspended_; }
@@ -51,6 +51,7 @@ private:
     NexusManagedTickFn tick_ = nullptr; //< Script全体の同期・lifecycle更新entry
     NexusManagedReloadFn reload_ = nullptr; //< 安定BootstrapのReload entry。Game delegateではない
     bool suspended_ = false; //< Unload失敗・初期化失敗後は通常Tickを再開させない
+    bool fixedUpdates_ = false;
     bool scriptAttachments_ = false; //< 旧Bootstrapへ複数関連付けを渡して黙って無視させない
     uint64_t session_ = 0; //< Managed所有辞書のID。ポインタやGCHandleではない
     std::thread::id thread_; //< Managed sessionを作成したthread

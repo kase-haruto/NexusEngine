@@ -1,0 +1,32 @@
+#pragma once
+#include <Nexus/EntityBehaviourSystem.hpp>
+
+/*-----------------------------------------------------------------------------------------
+ * @CLASS@
+ * - エディタでこのBehaviourを関連付けたEntityに対するゲーム処理です。
+ * - 関数の中身は@CLASS@.cppへ書きます。ヘッダには宣言と保持する状態を置きます。
+ * - EntityやWorldはEngine所有です。Behaviour自身で破棄・所有しません。
+ *---------------------------------------------------------------------------------------*/
+class @CLASS@ final {
+public:
+    /** Contextの借用だけを行います。Entity操作を伴う初期化はOnCreateへ書いてください。 */
+    explicit @CLASS@(NexusGame::EntityBehaviourContext& context) noexcept;
+    /** 実行インスタンスを作ったときに一度呼ばれます。無効状態でも呼ばれます。 */
+    NexusGameStatus OnCreate() noexcept;
+    /** OnCreateの後、有効化時に呼ばれます。再有効化時にも呼ばれます。 */
+    NexusGameStatus OnEnable() noexcept;
+    /** 有効な間、ゲーム更新ごとに呼ばれます。deltaTimeはゲーム時間の秒数です。 */
+    NexusGameStatus OnUpdate(float deltaTime) noexcept;
+    /** 物理計算の直前に固定間隔で呼ばれます。一frame内で0回～複数回実行します。 */
+    NexusGameStatus OnFixedUpdate(float fixedDeltaTime) noexcept;
+    /** 無効化・解除・停止時、有効だったインスタンスの動作を止めます。 */
+    NexusGameStatus OnDisable() noexcept;
+    /** 関連付けの解除や停止で呼ばれます。自分で所有する資源を解放します。 */
+    NexusGameStatus OnDestroy() noexcept;
+
+private:
+    // 自分のEntityのTransformや公開値はcontext_経由で読み書きします。
+    // 借用先はSystem所有です。deleteしたり別スレッドへ渡したりしないでください。
+    NexusGame::EntityBehaviourContext& context_;
+    // このインスタンスで保持したい状態をここに追加します。
+};

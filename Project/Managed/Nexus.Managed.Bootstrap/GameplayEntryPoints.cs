@@ -39,6 +39,10 @@ public static unsafe partial class EntryPoints
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
 #endif
     public static int SupportsScriptAttachments(uint abi) => abi == 1 ? Ok : IncompatibleAbi;
+#if !NEXUS_MONO
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+#endif
+    public static int SupportsFixedUpdates(uint abi) => abi == 1 ? Ok : IncompatibleAbi;
     /// <summary>安定APIを共有してGameScriptsをロードし、既存WorldのGameplayセッションを開始する。</summary>
 #if !NEXUS_MONO
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -135,7 +139,7 @@ public static unsafe partial class EntryPoints
 #endif
     public static int Tick(ulong sessionId, ScriptBinding* bindings, uint count, float deltaTime, uint initializeOnly)
     {
-        if ((count != 0 && bindings == null) || count > int.MaxValue || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime) || deltaTime < 0 || initializeOnly > 1) return InvalidArgument;
+        if ((count != 0 && bindings == null) || count > int.MaxValue || float.IsNaN(deltaTime) || float.IsInfinity(deltaTime) || deltaTime < 0 || initializeOnly > 2) return InvalidArgument;
         Session? session = null;
         try
         {
@@ -143,10 +147,10 @@ public static unsafe partial class EntryPoints
             {
                 if (!SessionRegistry.Sessions.TryGetValue(sessionId, out session)) return InvalidHandle;
                 if (session.Thread != Environment.CurrentManagedThreadId) return WrongThread;
-                if (session.Busy || session.Suspended || session.CleanupFailed || session.Gameplay == null || (session.ReloadCommitting && initializeOnly == 0)) return Failed;
+                if (session.Busy || session.Suspended || session.CleanupFailed || session.Gameplay == null || (session.ReloadCommitting && initializeOnly != 1)) return Failed;
                 session.Busy = true;
             }
-            try { return session.Gameplay.Tick(new Span<ScriptBinding>(bindings, checked((int)count)), deltaTime, initializeOnly != 0) ? Ok : Failed; }
+            try { return session.Gameplay.Tick(new Span<ScriptBinding>(bindings, checked((int)count)), deltaTime, initializeOnly == 1, initializeOnly == 2) ? Ok : Failed; }
             finally { session.Busy = false; }
         }
         catch (Exception exception) { Report(session, exception); return Failed; }

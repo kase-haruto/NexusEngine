@@ -7,7 +7,8 @@
 #pragma pack(push, 8)
 /*-----------------------------------------------------------------------------------------
  * NexusPhysicsRequestV1
- * - operationは1=Raycast、2=Force、3=Impulse、4=接触snapshot、5=既存Eventへの通知購読
+ * - operationは1=Raycast、2=Force、3=Impulse、4=接触snapshot、5=既存Eventへの通知購読、6=layer mask付きRaycast
+ * - operation=6ではreserved2が32bit layer mask。既存のoperation=1は全layerを照会する
  * - Raycastは空target、他は生存Entityを要求する。vectorは原点または力、directionはRaycastだけ
  * - reservedは4でoffset、5で購読0/1、他は0。pointer/STL/solver固有型を含めない
  *---------------------------------------------------------------------------------------*/

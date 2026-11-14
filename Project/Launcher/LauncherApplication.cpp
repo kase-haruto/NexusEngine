@@ -36,7 +36,14 @@ Result<LauncherSnapshot> ReadSnapshot(const std::filesystem::path& recent, const
         LauncherEngine item; item.registration = std::move(registration);
         if(item.registration.installation) {
             auto templates = ProjectTemplates::List(item.registration.installation->templates);
-            if(templates) item.templates = std::move(*templates);
+            if(templates) {
+                // シーンの初期状態だけを選ばせる。開発BackendのサンプルはCLIで引き続き生成できる。
+                for(auto& projectTemplate : *templates) {
+                    if(projectTemplate.id == "blank" || projectTemplate.id == "basic-3d") {
+                        item.templates.push_back(std::move(projectTemplate));
+                    }
+                }
+            }
             else item.registration.error = templates.error().GetMessageText();
         }
         snapshot.engines.push_back(std::move(item));

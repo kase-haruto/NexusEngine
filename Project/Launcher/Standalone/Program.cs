@@ -104,8 +104,10 @@ public sealed class LauncherForm : Form
         projects.OpenProject += () => Work(async token =>
         {
             EnsureTool(); var p = projects.Selected ?? throw new IOException("プロジェクトを選択してください。");
-            await Distribution.Run(Tool, ["open", p.File, EngineRegistry, projects.Configuration], token);
-        });
+            var tool = Tool; var configuration = projects.Configuration;
+            // プロセス生成と出力待ちをUIスレッドから離し、起動中も画面の描画・移動を維持する。
+            await Task.Run(() => Distribution.Run(tool, ["open", p.File, EngineRegistry, configuration], token), token);
+        }, "プロジェクトをビルドしてエディタを起動しています…", allowNavigation: true);
         projects.RefreshProjects += () => Work(_ => { RefreshLocal(); return Task.CompletedTask; });
         projects.RemoveProject += () => RemoveSelectedProject(false);
         projects.DeleteProject += () => RemoveSelectedProject(true);
@@ -114,21 +116,22 @@ public sealed class LauncherForm : Form
         Add(create, "使用するエンジン", engines);
         var name = new TextBox { Width = 400 }; var parent = new TextBox { Width = 600, Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
         var template = new ComboBox { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-        template.Items.AddRange(["blank", "basic-3d", "native-module", "managed-bootstrap", "managed-gameplay", "hybrid-gameplay"]); template.SelectedIndex = 0;
+        template.Items.AddRange(["空のプロジェクト", "基本の3Dプロジェクト（Camera・Sky・Cube）"]); template.SelectedIndex = 0;
         Add(create, "新規プロジェクト名", name); Add(create, "親フォルダー", parent);
         Button(create, "プロジェクト保存先を選択", () => { var path = Folder(); if (path != null) parent.Text = path; });
         Add(create, "テンプレート", template);
         var initialLanguage = new ComboBox { Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
         initialLanguage.Items.AddRange(["C++ — Native Game Development", "C# — Managed Game Development"]); initialLanguage.SelectedIndex = 0;
         Add(create, "Initial Game Language", initialLanguage);
-        create.Controls.Add(new Label { Width = 740, Height = 65, Text = "最初のGame Moduleの種類を選択します。Projectの言語は固定されません。HybridはC++とC#で同じWorldを操作します。Managed GameplayはProperty編集とReload C#に対応します。Managed Bootstrapは起動確認、blank / basic-3dのC#は宣言のみです。" });
+        create.Controls.Add(new Label { Width = 740, Height = 65, Text = "空のプロジェクト：何も配置しないシーン。基本の3Dプロジェクト：Camera・Sky・Cube・Directional Lightを配置したシーン。C#の初期Moduleは宣言のみで、実行にはManagedホストの生成が必要です。" });
         Button(create, "新規プロジェクトを作成", () => Work(async token =>
         {
             EnsureTool(); var engine = engines.SelectedItem as Installed ?? throw new IOException("エンジンを選択してください。");
             var target = ProjectTarget(parent.Text, name.Text);
             var language = initialLanguage.SelectedIndex == 0 ? "Cpp" : "CSharp";
             // C++の既定選択は旧CLIと同じ引数を維持し、既存の配布Toolでも作成できるようにする。
-            List<string> createArguments = ["create-template", target, name.Text.Trim(), engine.Manifest, template.Text];
+            var templateId = template.SelectedIndex == 0 ? "blank" : "basic-3d";
+            List<string> createArguments = ["create-template", target, name.Text.Trim(), engine.Manifest, templateId];
             if (language == "CSharp") createArguments.Add(language);
             var file = await Distribution.Run(Tool, createArguments, token);
             await Distribution.Run(Tool, ["register", file], token); RefreshLocal();
@@ -173,6 +176,28 @@ public sealed class LauncherForm : Form
             Work(async token => { EnsureTool(); await Distribution.Run(Tool, ["engine-remove", engine.Manifest, EngineRegistry], token); RefreshLocal(); });
         });
         var maintenance = Page("ランチャーの管理", "LAUNCHER / MAINTENANCE");
+        maintenance.Controls.Add(new Label { AutoSize = true, Text = $"使用中のランチャー: {settings.LauncherVersion}" });
+        var launcherVersions = new ComboBox { Width = 720, DropDownStyle = ComboBoxStyle.DropDownList };
+        var launcherNotes = new TextBox { Width = 720, Height = 110, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        launcherVersions.SelectedIndexChanged += (_, _) => launcherNotes.Text = (launcherVersions.SelectedItem as Release)?.Changes ?? "";
+        Button(maintenance, "ランチャーのバージョン一覧を取得", () => Work(async token =>
+        {
+            var list = await Distribution.LoadCatalog(LauncherUpdates.CatalogUrl(settings), token);
+            launcherVersions.Items.Clear();
+            launcherVersions.Items.AddRange(list.Where(item => item.Id == "nexus-launcher").Cast<object>().ToArray());
+            if (launcherVersions.Items.Count > 0) launcherVersions.SelectedIndex = 0;
+            else status.Text = "インストール可能なランチャーはまだ公開されていません。";
+        }));
+        Add(maintenance, "インストールするランチャー", launcherVersions);
+        Add(maintenance, "変更点", launcherNotes);
+        Button(maintenance, "選択したランチャーをインストール", () => Work(async token =>
+        {
+            var release = launcherVersions.SelectedItem as Release ?? throw new IOException("ランチャーのバージョンを選択してください。");
+            var installer = await LauncherUpdates.Download(release, Path.Combine(Distribution.DataRoot, "Updates"), new Progress<int>(p => progress.Value = p), token);
+            LauncherUpdates.StartInstaller(installer);
+            // Workのfinallyで処理状態を解除してからCloseし、FormClosingの取消と衝突させない。
+            BeginInvoke(new Action(Close));
+        }, "ランチャーをダウンロードしています…"));
         maintenance.Controls.Add(new Label { AutoSize = true, Text = "ランチャーを削除しても、エンジン・プロジェクト・登録履歴は保持します。\r\nエンジンは「インストール済み」から個別に削除できます。", Margin = new(0, 12, 0, 20) });
         maintenance.Controls.Add(new Label { AutoSize = true, Text = $"配置: {AppContext.BaseDirectory}", Margin = new(0, 0, 0, 12) });
         Button(maintenance, "ランチャーをアンインストール", () =>
@@ -188,7 +213,7 @@ public sealed class LauncherForm : Form
         {
             ProjectEntry p => (p.Name, $"{p.Version}  ·  {p.Configuration}  ·  {p.File}"),
             Installed i => ($"NexusEngine {i.Version}  /  {i.Configuration}", i.Manifest),
-            Release r => ($"NexusEngine v{r.Version}", $"{r.Configuration}  ·  {r.Bytes / 1048576.0:F1} MiB"),
+            Release r => ($"{(r.Id == "nexus-launcher" ? "Launcher" : "NexusEngine")} v{r.Version}", $"{r.Configuration}  ·  {r.Bytes / 1048576.0:F1} MiB"),
             _ => (item.ToString() ?? "", "")
         };
         LauncherTheme.Apply(this);
@@ -278,14 +303,15 @@ public sealed class LauncherForm : Form
         engines.Items.AddRange(installed.Cast<object>().ToArray()); if (installed.Count > 0) engines.SelectedIndex = 0;
         projects.SetProjects(entries);
     }
-    async void Work(Func<CancellationToken, Task> action)
+    async void Work(Func<CancellationToken, Task> action, string message = "処理中…", bool allowNavigation = false)
     {
         if (operation != null) return;
-        operation = new(); tabs.Enabled = false; navigation.Enabled = false; cancel.Enabled = true; progress.Value = 0; status.Text = "処理中…";
-        try { await action(operation.Token); if (status.Text == "処理中…") status.Text = "完了しました。"; }
+        operation = new(); tabs.Enabled = false; navigation.Enabled = allowNavigation; cancel.Enabled = true; progress.Value = 0; status.Text = message;
+        progress.Style = allowNavigation ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
+        try { await action(operation.Token); if (status.Text == message) status.Text = "完了しました。"; }
         catch (OperationCanceledException) { status.Text = "キャンセルしました。"; }
         catch (Exception ex) { status.Text = ex.Message; MessageBox.Show(this, ex.Message, "処理を完了できませんでした", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { operation.Dispose(); operation = null; tabs.Enabled = true; navigation.Enabled = true; cancel.Enabled = false; }
+        finally { operation.Dispose(); operation = null; tabs.Enabled = true; navigation.Enabled = true; cancel.Enabled = false; progress.Style = ProgressBarStyle.Continuous; }
     }
     void UpdateRelease()
     {

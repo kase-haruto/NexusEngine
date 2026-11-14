@@ -1,6 +1,6 @@
 # NexusEngine Editor
 
-更新日: 2026-10-26。現在の実装はWindows / DirectX12 / ImGuiの同一プロセスEditorです。
+更新日: 2026-11-13。現在の実装はWindows / DirectX12 / ImGuiの同一プロセスEditorです。
 構成の比較と長期計画は[設計レビュー](EditorArchitectureReview.md)、描画基盤は[Graphics設計](GraphicsREADME.md)を参照してください。
 
 ## 起動・ビルド
@@ -24,7 +24,7 @@ Pop-Location
 | 新規 / 開く | Ctrl+N / Ctrl+O、File menu |
 | 保存 / 名前を付けて保存 | Ctrl+S / Ctrl+Shift+S。保存先未指定ならパス入力を表示 |
 | Undo / Redo | Ctrl+Z / Ctrl+Y、Edit menu、Toolbar |
-| Entity / Camera / Light作成 | Edit menu。ToolbarにはEntity作成も表示 |
+| Entity / Camera / Light作成 | Edit menuまたはヒエラルキーの右クリック作成メニュー |
 | Model Instance作成 | Edit menu。Detailsで描画するMeshを選択 |
 | 複数選択 | Outliner / ViewportのCtrl+クリック |
 | 範囲選択 | OutlinerでShift+クリック。Ctrl+Shiftで既存選択へ追加 |

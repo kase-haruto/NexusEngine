@@ -26,6 +26,7 @@ public sealed class Entity : IEquatable<Entity>
     internal readonly EntityHandle Handle;
     internal Entity(GameWorld owner, EntityHandle handle) { world = owner; Handle = handle; }
     public GameWorld World => world;
+    public EntityReference Reference => world.Reference(this);
     /// <summary>Reflectionの安定Type IDで現在のComponentの有無を確認する。</summary>
     public bool HasComponent(string typeId) {
         var bytes = World.ComponentCall(1, Handle, typeId);
@@ -44,6 +45,14 @@ public sealed class Entity : IEquatable<Entity>
     /// <summary>既存TransformComponentのLocal値を取得する。Entity破棄・Component不在ならfalse。返す値の変更は明示的にTransformへ書き戻す。</summary>
     public bool TryGetTransform(out LocalTransform value) => World.TryTransform(Handle, out value);
     public LocalTransform Transform { get => World.Transform(Handle); set => World.Transform(Handle, value); }
+    public Matrix4x4 LocalMatrix { get { var value = Transform; return GameMath.TRS(value.Translation, value.Rotation, value.Scale); } }
+    /// <summary>現在のLocal値と親階層から計算したコピー。Engine側のmatrix cache更新を待たない。</summary>
+    public Matrix4x4 WorldMatrix => World.ReadWorldMatrix(this);
+    public Vector3 WorldPosition => GameMath.TransformPoint(WorldMatrix, Vector3.Zero);
+    public Vector3 TransformPoint(Vector3 point) => GameMath.TransformPoint(WorldMatrix, point);
+    public Vector3 InverseTransformPoint(Vector3 point) => GameMath.TransformPoint(GameMath.Inverse(WorldMatrix), point);
+    public Vector3 TransformVector(Vector3 vector) => GameMath.TransformVector(WorldMatrix, vector);
+    public Vector3 TransformNormal(Vector3 normal) => GameMath.TransformNormal(WorldMatrix, normal);
     /// <summary>共通ECSのDynamic RigidBodyへ力を追加する。Body pointerは保持しない。</summary>
     public void AddForce(Vector3 force) => World.AddForce(this, force);
     /// <summary>共通ECSのDynamic RigidBodyへ力積を追加する。</summary>

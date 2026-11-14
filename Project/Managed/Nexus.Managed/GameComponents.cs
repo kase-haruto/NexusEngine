@@ -35,6 +35,7 @@ public sealed class GameComponent
     public string TypeId { get; } //< class名と独立したReflectionの安定ID
     internal GameComponent(Entity owner, string typeId) { entity = owner; TypeId = typeId; }
     public Entity Entity => entity;
+    public ComponentReference Reference => entity.World.Reference(this);
     /// <summary>共通Propertyの値をコピーする。対応型はbool / int / float / string / Vector2～4 / int32 Enum。</summary>
     public unsafe T Get<T>(string propertyId)
     {
@@ -48,6 +49,8 @@ public sealed class GameComponent
         if(typeof(T) == typeof(bool) && value.Kind == 1 && (value.Integer is 0 or 1)) result = value.Integer != 0;
         else if(typeof(T) == typeof(int) && value.Kind == 2) result = value.Integer;
         else if(typeof(T) == typeof(float) && value.Kind == 3) result = value.X;
+        else if(typeof(T) == typeof(EntityReference) && value.Kind == 4) result = EntityReference.Parse(GameWorld.ComponentEncoding.GetString(bytes, sizeof(ComponentValue), checked((int)value.StringLength)));
+        else if(typeof(T) == typeof(ComponentReference) && value.Kind == 4) result = ComponentReference.Parse(GameWorld.ComponentEncoding.GetString(bytes, sizeof(ComponentValue), checked((int)value.StringLength)));
         else if(typeof(T) == typeof(string) && value.Kind == 4) result = GameWorld.ComponentEncoding.GetString(bytes, sizeof(ComponentValue), checked((int)value.StringLength));
         else if(typeof(T) == typeof(Vector2) && value.Kind == 5) result = new Vector2(value.X, value.Y);
         else if(typeof(T) == typeof(Vector3) && value.Kind == 6) result = new Vector3(value.X, value.Y, value.Z);
@@ -63,6 +66,8 @@ public sealed class GameComponent
         if(input is bool boolean) { value.Kind = 1; value.Integer = boolean ? 1 : 0; }
         else if(input is int integer) { value.Kind = 2; value.Integer = integer; }
         else if(input is float number) { value.Kind = 3; value.X = number; }
+        else if(input is EntityReference entityReference) { value.Kind = 4; text = entityReference.ToString(); }
+        else if(input is ComponentReference componentReference) { value.Kind = 4; text = componentReference.ToString(); }
         else if(input is string content) { value.Kind = 4; text = content; }
         else if(input is Vector2 vector2) { value.Kind = 5; value.X = vector2.X; value.Y = vector2.Y; }
         else if(input is Vector3 vector3) { value.Kind = 6; value.X = vector3.X; value.Y = vector3.Y; value.Z = vector3.Z; }

@@ -22,6 +22,7 @@ public abstract class ScriptBehaviour
     }
     public Entity Entity => entity ?? throw new InvalidOperationException("ScriptBehaviour is not attached.");
     public GameWorld World => Entity.World;
+    public GameDebug Debug => World.Debug;
     public bool Enabled {
         get => World.TryScript(Entity.Handle, attachment, out var state) ? state.Enabled != 0 : throw new InvalidOperationException("Script attachment is no longer valid.");
         set { if(stopping) throw new InvalidOperationException("Script cleanup already started."); World.EnableScript(Entity.Handle, attachment, value); }
@@ -32,6 +33,12 @@ public abstract class ScriptBehaviour
     protected virtual void OnEnable() { }
     /// <summary>有効なframeだけ更新する。Engine APIはこのthreadから使用する。</summary>
     protected virtual void OnUpdate(float deltaTime) { }
+    /// <summary>物理stepの直前に固定秒間隔で呼ぶ。一frameに0回～複数回実行する。</summary>
+    protected virtual void OnFixedUpdate(float fixedDeltaTime) { }
+    public GameTime Time => World.Time;
+    /// <summary>このScriptの破棄・Reloadで自動取消。無効化中も時計が進めば実行する。</summary>
+    protected GameTimer After(double seconds, Action callback, bool unscaled = false) => TrackResource(World.After(seconds, callback, unscaled));
+    protected GameTimer Every(double seconds, Action callback, bool unscaled = false) => TrackResource(World.Every(seconds, callback, unscaled));
     /// <summary>無効化・解除・停止時に、有効だったbehaviourだけを停止する。</summary>
     protected virtual void OnDisable() { }
     /// <summary>関連付けを解除する。自前のeventやworkerもここで停止する。破棄済みEntityにはアクセスしない。</summary>
@@ -52,6 +59,7 @@ public abstract class ScriptBehaviour
     internal void Create() => OnCreate();
     internal void Enable() => OnEnable();
     internal void Update(float deltaTime) => OnUpdate(deltaTime);
+    internal void FixedUpdate(float deltaTime) => OnFixedUpdate(deltaTime);
     internal void Disable() => OnDisable();
     internal void Destroy() => OnDestroy();
 }

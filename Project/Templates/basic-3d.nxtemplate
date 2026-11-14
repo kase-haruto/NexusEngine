@@ -57,6 +57,6 @@
   ],
   "id": "basic-3d",
   "schemaVersion": 1,
-  "description": "Camera、Directional Light、Cubeを備えた3Dプロジェクト。",
-  "name": "Basic 3D Project"
+  "description": "Camera・Sky・CubeとDirectional Lightを配置した3Dシーンから始めます。",
+  "name": "基本の3Dプロジェクト"
 }

@@ -5,3 +5,5 @@
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 /data/*
   Cache-Control: no-cache
+/releases.json
+  Cache-Control: no-cache

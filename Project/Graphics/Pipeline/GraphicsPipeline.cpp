@@ -113,7 +113,7 @@ namespace NexusEngine {
 		desc.DepthStencilState.StencilEnable = FALSE;
 		desc.DSVFormat = ToNativeDepthStencilFormat(pipelineDesc.depthStencilFormat);
 		desc.InputLayout = { elements.data(), static_cast<UINT>(elements.size()) };
-		desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        desc.PrimitiveTopologyType = pipelineDesc.lineTopology ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE : D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		desc.NumRenderTargets = 1;
 		desc.RTVFormats[0] = pipelineDesc.hdrRenderTarget ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 		desc.SampleDesc.Count = 1;

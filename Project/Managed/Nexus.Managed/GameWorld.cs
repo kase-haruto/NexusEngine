@@ -30,7 +30,7 @@ public sealed unsafe partial class GameWorld
     private void WriteAccess() { Access(); if(writesBlocked) throw new InvalidOperationException("World mutation is unavailable during reload cleanup."); }
     internal void Invalidate() {
         try { if(servicesClient != 0) Check(services.Close(servicesClient)); }
-        finally { servicesClient = 0; services = default; nativeBindings = default; token = 0; api = default; scripts = default; properties = default; }
+        finally { ClearTimers(); servicesClient = 0; services = default; nativeBindings = default; token = 0; api = default; scripts = default; properties = default; }
     }
     internal bool HasPropertyApi => properties.Read != null;
     /// <summary>所有threadでcaller-owned bufferへコピーする。旧関連付けへの書込はNativeが拒否する。</summary>

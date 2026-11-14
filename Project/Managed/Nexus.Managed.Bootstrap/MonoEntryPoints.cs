@@ -23,6 +23,7 @@ public static unsafe partial class EntryPoints
         ["Start"] = new BootstrapStart(Start), ["StartGameplay"] = new GameplayStart(StartGameplay),
         ["StartReflectedGameplay"] = new ReflectedStart(StartReflectedGameplay), ["StartHybridGameplay"] = new HybridStart(StartHybridGameplay),
         ["StartBoundGameplay"] = new BoundStart(StartBoundGameplay), ["Stop"] = new StopSession(Stop), ["Tick"] = new TickSession(Tick),
+        ["SupportsFixedUpdates"] = new ScriptAttachmentFeature(SupportsFixedUpdates),
         ["SupportsScriptAttachments"] = new ScriptAttachmentFeature(SupportsScriptAttachments)
     }; //< Native側はunload前に全pointerを破棄する。このDomain内だけでdelegateをrootする
 

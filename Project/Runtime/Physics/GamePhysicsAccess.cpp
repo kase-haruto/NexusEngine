@@ -33,7 +33,8 @@ NexusGameStatus InvokeGamePhysics(Level& level, uint64_t world, NexusEntityHandl
     if(request.length!=sizeof(NexusPhysicsRequestV1) || !request.data || (capacity && !response)) return NEXUS_GAME_INVALID_ARGUMENT;
     NexusPhysicsRequestV1 input{};
     std::memcpy(&input,request.data,sizeof(input));
-    if(input.operation<1 || input.operation>4 || (input.operation!=4 && input.reserved) || input.reserved2) return NEXUS_GAME_INVALID_ARGUMENT;
+    if((input.operation<1 || input.operation>4) && input.operation!=6) return NEXUS_GAME_INVALID_ARGUMENT;
+    if((input.operation!=4 && input.reserved) || (input.operation!=6 && input.reserved2)) return NEXUS_GAME_INVALID_ARGUMENT;
     for(float item:input.vector) if(!std::isfinite(item)) return NEXUS_GAME_INVALID_ARGUMENT;
     for(float item:input.direction) if(!std::isfinite(item)) return NEXUS_GAME_INVALID_ARGUMENT;
     if(!std::isfinite(input.distance)) return NEXUS_GAME_INVALID_ARGUMENT;
@@ -45,7 +46,7 @@ NexusGameStatus InvokeGamePhysics(Level& level, uint64_t world, NexusEntityHandl
             for(float item:input.direction) if(item!=0) return NEXUS_GAME_INVALID_ARGUMENT;
             return CopyPhysicsContacts(level,world,input.reserved,response,capacity,length);
         }
-        if(input.operation==1) {
+        if(input.operation==1 || input.operation==6) {
             // 先に容量を確定し、retryでqueryを二度実行しなくてもよい契約にする。
             if(target.world || target.index || target.generation || input.distance<=0 || input.distance>1000000) return NEXUS_GAME_INVALID_ARGUMENT;
             const double lengthSquared=static_cast<double>(input.direction[0])*input.direction[0]+
@@ -54,7 +55,7 @@ NexusGameStatus InvokeGamePhysics(Level& level, uint64_t world, NexusEntityHandl
             *length=sizeof(NexusPhysicsHitV1);
             if(capacity<*length) return NEXUS_GAME_BUFFER_TOO_SMALL;
             auto result=level.Raycast({input.vector[0],input.vector[1],input.vector[2]},
-                {input.direction[0],input.direction[1],input.direction[2]},input.distance);
+                {input.direction[0],input.direction[1],input.direction[2]},input.distance,input.operation==6 ? input.reserved2 : UINT32_MAX);
             if(!result) { *length=0; return NEXUS_GAME_FAILED; }
             NexusPhysicsHitV1 hit{};
             if(result->entity.IsValid()) {

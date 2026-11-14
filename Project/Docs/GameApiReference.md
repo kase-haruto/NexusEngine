@@ -1,8 +1,12 @@
 # NexusEngine ゲーム開発API一覧 — C++ / C#
 
-更新日: 2026-11-13。現在の公開ヘッダーとManaged sourceを基準にした一覧。
+参照保存・時計・タイマー・固定更新・Collider／衝突レイヤーの追加APIは[利用ガイド](GameReferencesTimePhysicsREADME.md)を参照してください。
+
+更新日: 2026-11-14。現在の公開ヘッダーとManaged sourceを基準にした一覧。
 
 対象はGame Project向けAPI。Engine / Renderer / Editor内部の全クラス一覧ではない。C++とC#は同じECS / Entity / Level / Componentを操作する。Game DLLからSceneやRendererの内部実装へ直接依存する構成は推奨APIに含めない。
+
+現行ソースのC#数学補助、Entity行列・座標変換、重要度別ログ・例外・Assert・デバッグ描画は[数学・デバッグAPI](GameMathDebugREADME.md)を参照。公開済みSDKへ自動反映されるものではありません。
 
 ## 目次
 

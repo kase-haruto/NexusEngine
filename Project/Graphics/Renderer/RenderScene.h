@@ -9,6 +9,7 @@
 
 // engine
 #include "Foundation/Math/Matrix4x4.h"
+#include "Foundation/Math/DebugDrawLine.h"
 #include "Graphics/Shadow/ShadowTypes.h"
 #include "Graphics/Material/MaterialOverride.h"
 #include "Graphics/Model/PrimitiveShape.h"
@@ -75,6 +76,7 @@ namespace NexusEngine {
 	 * - Scene、Entity、Component Storageの型とLifetimeには依存しない
 	 *---------------------------------------------------------------------------------------*/
 	struct RenderScene {
+        std::vector<DebugDrawLine> debugLines; //< 所有Sceneから抽出した診断値。Sceneを借用しない
         std::vector<ScreenEffect> screenEffects;
         GridSettings grid;
         std::optional<float> skyIntensity; //< Present only when an enabled SkyRenderer component was extracted.

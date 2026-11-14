@@ -113,6 +113,7 @@ try {
     Copy-File (Join-Path $sdkSource 'Tools/Project/Project-ModuleOrder.ps1') (Join-Path $sdk 'Tools/Project/Project-ModuleOrder.ps1')
     foreach($file in @('Build/Nexus.GameDeployment.targets','Tools/Project/Complete-GameDeployment.ps1','Tools/Project/Managed-Deployment.ps1','Tools/Project/Add-GameModule.ps1','Tools/Project/Add-GameSource.ps1','Tools/Project/Package-Game.ps1')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     Copy-File (Join-Path $sdkSource 'Tools/Project/Build-Scripts.ps1') (Join-Path $sdk 'Tools/Project/Build-Scripts.ps1')
+    Copy-File (Join-Path $sdkSource 'Tools/Project/Add-NativeBehaviour.ps1') (Join-Path $sdk 'Tools/Project/Add-NativeBehaviour.ps1')
     # MonoでもInstalled SDKからBuild / Reloadできるよう、Backend固有の小さな実装だけを含める。
     foreach($file in @('Tools/Project/Managed-Runtime.ps1','Tools/Project/Deploy-MonoRuntime.ps1',
         'Managed/Nexus.Managed/MonoCompatibility.cs','Managed/Nexus.Managed/MonoInterop.cs',
@@ -121,6 +122,8 @@ try {
     foreach($file in @('Build/Nexus.ManagedGameplay.targets', 'Managed/Directory.Build.props',
         'Managed/Nexus.Managed/Nexus.Managed.csproj', 'Managed/Nexus.Managed/Interop.cs', 'Managed/Nexus.Managed/Entity.cs', 'Managed/Nexus.Managed/GameWorld.cs', 'Managed/Nexus.Managed/ScriptBehaviour.cs',
         'Managed/Nexus.Managed/ExposeAttribute.cs', 'Managed/Nexus.Managed/ScriptMetadata.cs',
+        'Managed/Nexus.Managed/GameCollider.cs', 'Managed/Nexus.Managed/GameReferences.cs', 'Managed/Nexus.Managed/GameTime.cs',
+        'Managed/Nexus.Managed/GameMath.cs', 'Managed/Nexus.Managed/GameDebug.cs',
         'Managed/Nexus.Managed/GameServices.cs', 'Managed/Nexus.Managed/GameComponents.cs', 'Managed/Nexus.Managed/GameScripts.cs', 'Managed/Nexus.Managed/GamePhysics.cs', 'Managed/Nexus.Managed/GameInput.cs', 'Managed/Nexus.Managed/GameAudio.cs', 'Managed/Nexus.Managed/GameWorldControl.cs', 'Managed/Nexus.Managed/NativeBindings.cs',
         'Managed/Nexus.Managed.Metadata/Nexus.Managed.Metadata.csproj', 'Managed/Nexus.Managed.Metadata/Program.cs',
         'Managed/Nexus.Managed.Bootstrap/GameplayEntryPoints.cs', 'Managed/Nexus.Managed.Bootstrap/ScriptRuntime.cs', 'Managed/Nexus.Managed.Bootstrap/GameScriptCatalog.cs', 'Managed/Nexus.Managed.Bootstrap/ReloadEntryPoints.cs')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }

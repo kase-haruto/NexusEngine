@@ -6,6 +6,9 @@
 #include "Foundation/Logging/Logger.h"
 #include "ThirdParty/imgui/imgui.h"
 #include <algorithm>
+#include <cstring>
+#include "Runtime/Scene/EntityReference.h"
+#include "Runtime/Scene/Components/NameComponent.h"
 
 namespace NexusEngine {
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -87,9 +90,90 @@ void DrawReflectedProperty(const EditorContext& context, std::string_view typeId
         options.label = {};
         options.size.x = std::max(1.0f, ImGui::GetContentRegionAvail().x);
     }
-    const auto result = asset && context.assets ? context.assets->Draw(options, *value, descriptor, context.text, mesh, node) :
+    UI::ItemResult referenceResult;
+    const bool reference = descriptor.kind == PropertyKind::EntityReference || descriptor.kind == PropertyKind::ComponentReference;
+    if(reference) {
+        // 選択肢にNative pointerを保持せず、保存とUndoの値には永続IDだけを渡す。
+        auto& stored = std::get<std::string>(*value);
+        auto* level = context.session.GetLevel();
+        const bool componentReference = descriptor.kind == PropertyKind::ComponentReference;
+        const auto separator = stored.find('|');
+        const auto persistent = ParseEntityReference(std::string_view(stored).substr(0, separator));
+        auto target = persistent && level ? level->FindEntity(*persistent) : Entity{};
+        std::string display = stored.empty() ? "None" : "Missing: " + stored;
+        if(target.IsAlive()) {
+            const auto* name = target.GetComponent<NameComponent>();
+            display = name ? name->name : FormatEntityReference(*persistent);
+            if(componentReference) {
+                display += " / " + stored.substr(separator + 1);
+                const auto* targetType = context.types.Find(stored.substr(separator + 1));
+                if(!targetType || !targetType->contains || !targetType->contains(target)) {
+                    display += " (Missing Component)";
+                }
+            }
+        }
+        bool changed = false;
+        ImGui::BeginDisabled(!options.enabled);
+        ImGui::SetNextItemWidth(options.size.x);
+        if(ImGui::BeginCombo("##Reference", display.c_str())) {
+            if(ImGui::Selectable("None", stored.empty())) {
+                stored.clear();
+                changed = true;
+            }
+            if(level) {
+                level->GetScene()->ForEachEntity([&](Entity entity) {
+                    const auto* entityId = entity.GetComponent<PersistentIdComponent>();
+                    if(!entityId) {
+                        return;
+                    }
+                    const auto key = FormatEntityReference(entityId->value);
+                    const auto* name = entity.GetComponent<NameComponent>();
+                    const auto label = (name ? name->name : key) + "##" + key;
+                    if(!componentReference) {
+                        if(ImGui::Selectable(label.c_str(), stored == key)) {
+                            stored = key;
+                            changed = true;
+                        }
+                    } else if(ImGui::BeginMenu(label.c_str())) {
+                        for(const auto& [typeId, type] : context.types.Types()) {
+                            if(type.contains && type.contains(entity) && ImGui::Selectable(typeId.c_str(), stored == key + "|" + typeId)) {
+                                stored = key + "|" + typeId;
+                                changed = true;
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
+                });
+            }
+            ImGui::EndCombo();
+        }
+        // OutlinerからのEntity dropはComponent参照ならTransformを初期候補にする。
+        if(ImGui::BeginDragDropTarget()) {
+            if(const auto* payload = ImGui::AcceptDragDropPayload("NEXUS_ENTITY")) {
+                if(payload->DataSize == sizeof(PersistentId) && level) {
+                    PersistentId droppedId{};
+                    std::memcpy(&droppedId, payload->Data, sizeof(droppedId));
+                    if(level->FindEntity(droppedId).IsAlive()) {
+                        stored = FormatEntityReference(droppedId) + (componentReference ? "|Transform" : "");
+                        changed = true;
+                    }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::EndDisabled();
+        if(changed) {
+            referenceResult.status = UI::ItemStatus::Edited | UI::ItemStatus::EditCompleted;
+        }
+    }
+    const auto result = reference ? referenceResult : asset && context.assets ? context.assets->Draw(options, *value, descriptor, context.text, mesh, node) :
         context.drawers.Draw(options, *value, descriptor, context.text);
     if(propertyRow) ImGui::EndTable();
+    if(typeId == "Collider" && propertyId == "shape") {
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextDisabled("Mesh: set Collision Mesh first. Dynamic bodies use Convex Mesh.");
+        ImGui::PopTextWrapPos();
+    }
     if(result.Changed() && descriptor.kind == PropertyKind::MeshAsset && !nodeProperty.empty()) {
         std::vector<PropertyValue> values(handles.size(), *value);
         const auto original = handles;

@@ -27,11 +27,12 @@ public:
     /** \brief Scriptは公開Game APIからEntity構造も変更できるため、型一覧だけで並列安全とは扱わない */
     bool HasUnspecifiedComponentAccess() const noexcept override { return true; }
     [[nodiscard]] Result<void> Update(Scene& scene, float deltaTime) override;
+    Result<void> FixedUpdate(Scene& scene, float deltaTime) override;
 private:
     struct Snapshot {
         EntityId entity; std::string type; uint64_t instance, attachment; uint32_t enabled;
     };
-    [[nodiscard]] Result<void> Synchronize(float deltaTime, bool initializeOnly);
+    [[nodiscard]] Result<void> Synchronize(float deltaTime, bool initializeOnly, bool fixedOnly = false);
     Scene* scene_; //< Level所有。Detach後は参照しない
     Level* level_; //< Scene交換・Unload後に旧Sceneをdereferenceしないための所有元照合
     NativeManagedBridge* bridge_; //< CSharpRuntime所有。Stop時に先にDetachして借用を解除する

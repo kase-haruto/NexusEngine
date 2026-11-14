@@ -5,6 +5,10 @@
 #include "Public/Nexus/GameInput.h"
 #include "Public/Nexus/GameAudio.h"
 #include "Public/Nexus/GameWorldControl.h"
+#include "Public/Nexus/GameDebug.h"
+#include "Public/Nexus/GameTime.h"
+#include "Runtime/Scene/Components/PersistentIdComponent.h"
+#include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Application/ApplicationPaths.h"
 #include "Runtime/Level/Level.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
@@ -357,6 +361,7 @@ NexusGameStatus NEXUS_GAME_CALL CloseServices(uint64_t client) noexcept {
     return ClientAccess(client, [&](WorldRegistry& registry, WorldEntry& world, ServiceClient&) {
         if(world.serviceDepth) return NEXUS_GAME_FAILED;
         world.level->StopAudioOwner(client);
+        world.scene->ClearDebugLines(client);
         std::erase_if(registry.commands, [=](const auto& item) { return item.owner == client; });
         registry.clients.erase(client); return NEXUS_GAME_OK;
     });
@@ -499,6 +504,191 @@ NexusGameStatus NEXUS_GAME_CALL WorldControl(void* state,NexusEntityHandle targe
         std::memcpy(response,&exists,sizeof(exists)); return NEXUS_GAME_OK;
     } catch(...) { *length=0; return NEXUS_GAME_FAILED; }
 }
+struct DebugInvocation {
+    WorldEntry* world = nullptr;
+    uint64_t client = 0;
+};
+/** \brief Worldの所有threadで診断値だけを処理する。外部Loggerはrouting lockの外で呼ぶ */
+NexusGameStatus NEXUS_GAME_CALL DebugCommand(void* state, NexusEntityHandle target, NexusGameBytes request,
+    uint8_t* response, uint32_t capacity, uint32_t* length) noexcept {
+    if(request.length < sizeof(NexusDebugRequestV1)) {
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
+    NexusDebugRequestV1 input{};
+    std::memcpy(&input, request.data, sizeof(input));
+    if(input.reserved || !std::isfinite(input.duration) || input.duration < 0) {
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
+    auto& call = *static_cast<DebugInvocation*>(state);
+    auto& scene = *call.world->scene;
+    try {
+        if(input.operation == 4) {
+            if(!target.world || input.count || input.duration || request.length != sizeof(input)) {
+                return NEXUS_GAME_INVALID_ARGUMENT;
+            }
+            // Update途中のLocal値も反映する。cacheやScene全体のTransformSystemを変更せず親を辿る。
+            Matrix4x4 matrix;
+            auto entity = Resolve(*call.world->level, target);
+            std::vector<EntityId> visited;
+            while(entity.IsAlive()) {
+                const auto id = entity.GetId();
+                if(visited.size() >= 4096 || std::ranges::find(visited, id) != visited.end()) {
+                    return NEXUS_GAME_FAILED;
+                }
+                visited.push_back(id);
+                const auto* transform = entity.GetComponent<TransformComponent>();
+                if(!transform) {
+                    return NEXUS_GAME_INVALID_HANDLE;
+                }
+                matrix = Multiply(matrix, MakeAffineMatrix(transform->scale, transform->rotation, transform->translation));
+                const auto* hierarchy = entity.GetComponent<HierarchyComponent>();
+                if(!hierarchy || !scene.IsAlive(hierarchy->parent)) {
+                    break;
+                }
+                entity = scene.GetEntity(hierarchy->parent);
+            }
+            for(float value : matrix.elements) {
+                if(!std::isfinite(value)) {
+                    return NEXUS_GAME_INVALID_ARGUMENT;
+                }
+            }
+            *length = sizeof(matrix);
+            if(capacity < *length) {
+                return NEXUS_GAME_BUFFER_TOO_SMALL;
+            }
+            std::memcpy(response, matrix.elements.data(), sizeof(matrix));
+            return NEXUS_GAME_OK;
+        }
+        if(target.world || target.index || target.generation) {
+            return NEXUS_GAME_INVALID_ARGUMENT;
+        }
+        if(input.operation == 1) {
+            const NexusGameString text{reinterpret_cast<const char*>(request.data + sizeof(input)), request.length - sizeof(input)};
+            if(input.count > 2 || input.duration || !Text(text, 4080, true)) {
+                return NEXUS_GAME_INVALID_ARGUMENT;
+            }
+            const auto severity = input.count == 0 ? LogLevel::Info : input.count == 1 ? LogLevel::Warning : LogLevel::Error;
+            Logger::Get().Log(severity, "Game", std::string_view(text.data, text.length));
+            return NEXUS_GAME_OK;
+        }
+        if(input.operation == 3) {
+            if(input.count || input.duration || request.length != sizeof(input)) {
+                return NEXUS_GAME_INVALID_ARGUMENT;
+            }
+            scene.ClearDebugLines(call.client);
+            return NEXUS_GAME_OK;
+        }
+        if(input.operation != 2 || input.count > 64 || request.length != sizeof(input) + input.count * sizeof(NexusDebugLineV1)) {
+            return NEXUS_GAME_INVALID_ARGUMENT;
+        }
+        std::vector<DebugDrawLine> lines;
+        lines.reserve(input.count);
+        for(uint32_t index = 0; index < input.count; ++index) {
+            NexusDebugLineV1 line{};
+            std::memcpy(&line, request.data + sizeof(input) + index * sizeof(line), sizeof(line));
+            if(line.depthTest > 1) {
+                return NEXUS_GAME_INVALID_ARGUMENT;
+            }
+            DebugDrawLine value;
+            for(size_t axis = 0; axis < 3; ++axis) {
+                if(!std::isfinite(line.start[axis]) || !std::isfinite(line.end[axis])) {
+                    return NEXUS_GAME_INVALID_ARGUMENT;
+                }
+                value.start[axis] = line.start[axis];
+                value.end[axis] = line.end[axis];
+            }
+            for(size_t channel = 0; channel < 4; ++channel) {
+                if(!std::isfinite(line.color[channel]) || line.color[channel] < 0 || line.color[channel] > 1) {
+                    return NEXUS_GAME_INVALID_ARGUMENT;
+                }
+                value.color[channel] = line.color[channel];
+            }
+            value.depthTest = line.depthTest != 0;
+            lines.push_back(value);
+        }
+        return scene.AddDebugLines(call.client, lines, input.duration) ? NEXUS_GAME_OK : NEXUS_GAME_FAILED;
+    } catch(...) {
+        *length = 0;
+        return NEXUS_GAME_FAILED;
+    }
+}
+/** \brief 時計の値と永続IDだけをコピーする。Worldを跨ぐpointerや保存Handleを返さない。 */
+NexusGameStatus NEXUS_GAME_CALL TimeCommand(void* state, NexusEntityHandle target, NexusGameBytes request,
+    uint8_t* response, uint32_t capacity, uint32_t* length) {
+    *length = 0;
+    if(target.world || request.length != sizeof(NexusTimeRequestV1)) {
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
+    NexusTimeRequestV1 input{};
+    std::memcpy(&input, request.data, sizeof(input));
+    if(input.reserved || input.reserved2 || input.operation < 1 || input.operation > 3 || !std::isfinite(input.value)) {
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
+    auto& clock = static_cast<WorldEntry*>(state)->level->GetScene()->Time();
+    if(input.operation != 1) {
+        if(input.operation == 2 && input.value >= 0 && input.value <= 100) {
+            clock.timeScale = input.value;
+        } else if(input.operation == 3 && input.value >= .001f && input.value <= 1) {
+            clock.fixedDeltaTime = input.value;
+        } else {
+            return NEXUS_GAME_INVALID_ARGUMENT;
+        }
+        return NEXUS_GAME_OK;
+    }
+    *length = sizeof(NexusGameTimeV1);
+    if(capacity < *length) {
+        return NEXUS_GAME_BUFFER_TOO_SMALL;
+    }
+    const NexusGameTimeV1 output{clock.elapsed, clock.unscaledElapsed, clock.fixedElapsed,
+        clock.inFixedStep ? clock.activeFixedDelta : clock.deltaTime, clock.unscaledDeltaTime,
+        clock.inFixedStep ? clock.activeFixedDelta : clock.fixedDeltaTime, clock.timeScale, clock.frame, clock.fixedTick, clock.inFixedStep ? 1u : 0u, 0, clock.droppedFixedTime};
+    std::memcpy(response, &output, sizeof(output));
+    return NEXUS_GAME_OK;
+}
+NexusGameStatus NEXUS_GAME_CALL ReferenceCommand(void* state, NexusEntityHandle target, NexusGameBytes request,
+    uint8_t* response, uint32_t capacity, uint32_t* length) {
+    *length = 0;
+    if(request.length != sizeof(NexusEntityReferenceRequestV1)) {
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
+    NexusEntityReferenceRequestV1 input{};
+    std::memcpy(&input, request.data, sizeof(input));
+    auto& level = *static_cast<WorldEntry*>(state)->level;
+    if(input.reserved || input.operation < 1 || input.operation > 2) {
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
+    if(input.operation == 1) {
+        auto entity = Resolve(level, target);
+        if(!entity.IsAlive() || !entity.HasComponent<PersistentIdComponent>() || input.high || input.low) {
+            return NEXUS_GAME_INVALID_HANDLE;
+        }
+        *length = sizeof(NexusEntityReferenceV1);
+        if(capacity < *length) {
+            return NEXUS_GAME_BUFFER_TOO_SMALL;
+        }
+        const auto id = entity.GetComponent<PersistentIdComponent>()->value;
+        const NexusEntityReferenceV1 value{id.high, id.low};
+        std::memcpy(response, &value, sizeof(value));
+    } else {
+        if(target.world) {
+            return NEXUS_GAME_INVALID_ARGUMENT;
+        }
+        *length = sizeof(NexusEntityHandle);
+        if(capacity < *length) {
+            return NEXUS_GAME_BUFFER_TOO_SMALL;
+        }
+        const auto entity = level.FindEntity({input.high, input.low});
+        NexusEntityHandle value{};
+        if(entity.IsAlive()) {
+            const auto id = entity.GetId();
+            value = {static_cast<WorldEntry*>(state)->token, id.index, id.generation};
+        }
+        std::memcpy(response, &value, sizeof(value));
+    }
+    return NEXUS_GAME_OK;
+}
+
+
 /** \brief 例外と再帰をABI内へ閉じ込め、登録済みNative処理を一度だけ呼ぶ */
 NexusGameStatus NEXUS_GAME_CALL InvokeCommand(uint64_t client, NexusGameString id, uint32_t version, NexusEntityHandle target,
     NexusGameBytes request, uint8_t* response, uint32_t capacity, uint32_t* length) noexcept {
@@ -507,6 +697,7 @@ NexusGameStatus NEXUS_GAME_CALL InvokeCommand(uint64_t client, NexusGameString i
     NexusGameCommandFn callback = nullptr; void* state = nullptr; uint64_t token = 0;
     AudioInvocation audioInvocation;
     PhysicsInvocation physicsInvocation;
+    DebugInvocation debugInvocation;
     const bool engineComponent = std::string_view(id.data, id.length) == NEXUS_COMPONENT_COMMAND;
     const bool engineTransforms = std::string_view(id.data, id.length) == NEXUS_TRANSFORM_BATCH_COMMAND;
     const bool engineScripts = std::string_view(id.data, id.length) == NEXUS_SCRIPT_ATTACHMENTS_COMMAND;
@@ -514,7 +705,10 @@ NexusGameStatus NEXUS_GAME_CALL InvokeCommand(uint64_t client, NexusGameString i
     const bool engineInput = std::string_view(id.data, id.length) == NEXUS_INPUT_COMMAND;
     const bool engineAudio = std::string_view(id.data, id.length) == NEXUS_AUDIO_COMMAND;
     const bool engineControl = std::string_view(id.data, id.length) == NEXUS_WORLD_CONTROL_COMMAND;
-    const bool engineValue = engineComponent || engineTransforms || engineScripts || enginePhysics || engineInput || engineAudio || engineControl;
+    const bool engineDebug = std::string_view(id.data, id.length) == NEXUS_DEBUG_COMMAND;
+    const bool engineTime = std::string_view(id.data, id.length) == NEXUS_TIME_COMMAND;
+    const bool engineReference = std::string_view(id.data, id.length) == NEXUS_REFERENCE_COMMAND;
+    const bool engineValue = engineTime || engineReference || engineComponent || engineTransforms || engineScripts || enginePhysics || engineInput || engineAudio || engineControl || engineDebug;
     const auto access = ClientAccess(client, [&](WorldRegistry& registry, WorldEntry& world, ServiceClient& caller) {
         // DLL固有stateの変更だけをfreezeする。共通Sceneへの値操作はReloadのWorld snapshotで
         // 復元できるため、新世代OnCreateでも利用する。旧世代の書込禁止はGameWorldが検査する。
@@ -525,8 +719,19 @@ NexusGameStatus NEXUS_GAME_CALL InvokeCommand(uint64_t client, NexusGameString i
             if(version != (enginePhysics ? NEXUS_PHYSICS_PROTOCOL_VERSION : engineScripts ? NEXUS_SCRIPT_ATTACHMENTS_PROTOCOL_VERSION : NEXUS_COMPONENT_PROTOCOL_VERSION)) return NEXUS_GAME_INCOMPATIBLE_ABI;
             callback = engineControl ? WorldControl : engineAudio ? Audio : engineInput ? Input : enginePhysics ? Physics : engineScripts ? ScriptAttachments : engineComponent ? Components : TransformBatch;
             state = &world;
+            if(engineTime) {
+                callback = TimeCommand;
+            }
+            if(engineReference) {
+                callback = ReferenceCommand;
+            }
             if(enginePhysics) { physicsInvocation={&world,client}; state=&physicsInvocation; }
             if(engineAudio) { audioInvocation={world.level,client}; state=&audioInvocation; }
+            if(engineDebug) {
+                debugInvocation = {&world, client};
+                state = &debugInvocation;
+                callback = DebugCommand;
+            }
             token = caller.world; ++world.serviceDepth; return NEXUS_GAME_OK;
         }
         for(const auto& item : registry.commands) if(item.world == caller.world && item.id == std::string_view(id.data, id.length) && item.version == version) {

@@ -1,4 +1,6 @@
 #pragma once
+// Descriptor.reservedのbit 0。固定stepでもupdateを呼び、時計のinFixedStepで区別する。
+#define NEXUS_NATIVE_SYSTEM_FIXED_UPDATES 1u
 #include "GameApi.h"
 #pragma pack(push, 8)
 /*-----------------------------------------------------------------------------------------
@@ -20,7 +22,7 @@ typedef struct NexusNativeSystemDescriptorV1 {
     uint32_t structSize, version;
     NexusGameString id;
     const NexusGameString* after; //< 同じModuleで先に登録済みのSystem ID。前方参照・循環を拒否する
-    uint32_t afterCount, reserved;
+    uint32_t afterCount, reserved; //< reservedはNEXUS_NATIVE_SYSTEM_FIXED_UPDATESのみ許可。他のbitは0。
     const NexusGameString* reads; //< 既存ComponentReflectionのType ID。RTTI / STLを越境させない
     uint32_t readCount, reservedReads;
     const NexusGameString* writes;

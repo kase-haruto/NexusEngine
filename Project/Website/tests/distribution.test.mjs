@@ -1,9 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { within, renderDoc, publishedDownload } from '../scripts/build.mjs';
+import { within, renderDoc, publishedDownload, launcherCatalog } from '../scripts/build.mjs';
 import { readFile } from 'node:fs/promises';
 const item = { key: 'engines/nexus-1.1.1-Release.zip', bytes: 123, sha256: 'a'.repeat(64) };
 const asset = { url: 'https://github.com/kase-haruto/NexusEngine/releases/download/distribution-abcdef012345/nexus-1.1.1-Release.zip', bytes: 123, sha256: item.sha256 };
+test('launcher versions retain old installers, reject duplicates and exclude unpublished setups', () => {
+  const key = `launcher/${'a'.repeat(64)}/launcherSetup.exe`;
+  const setup = { key, bytes: 123, sha256: 'a'.repeat(64), version: '1.2.0' };
+  const uploaded = { ...asset, url: asset.url.replace('nexus-1.1.1-Release.zip', 'launcherSetup.exe'), version: '1.2.0' };
+  assert.deepEqual(launcherCatalog(setup, {}), []);
+  const catalog = launcherCatalog(setup, { [key]: uploaded });
+  assert.equal(catalog.length, 1);
+  assert.equal(catalog[0].id, 'nexus-launcher');
+  assert.equal(catalog[0].version, '1.2.0');
+  const oldKey = `launcher/${'b'.repeat(64)}/launcherSetup.exe`;
+  const old = { ...uploaded, sha256: 'b'.repeat(64), version: '1.1.0' };
+  assert.deepEqual(launcherCatalog(setup, { [key]: uploaded, [oldKey]: old }).map(r => r.version), ['1.2.0', '1.1.0']);
+  assert.throws(() => launcherCatalog(setup, { [key]: uploaded, [oldKey]: { ...old, version: '1.2.0' } }));
+  assert.match(launcherCatalog(null, { [oldKey]: { ...old, version: undefined } })[0].version, /^1\.0\.0-b{12}$/);
+});
 test('only an uploaded GitHub asset matching the local checksum and size becomes downloadable', () => {
   assert.equal(publishedDownload(item, {}).available, false);
   assert.equal(publishedDownload(item, { [item.key]: asset }).available, true);

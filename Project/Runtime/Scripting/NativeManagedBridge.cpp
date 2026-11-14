@@ -16,6 +16,22 @@ bool ScriptAttachmentFeature(DotNetHost& host, const std::filesystem::path& asse
     Feature feature = nullptr; static_assert(sizeof(feature) == sizeof(void*)); std::memcpy(&feature, &*address, sizeof(feature));
     try { return feature && feature(1) == NEXUS_GAME_OK; } catch(...) { return false; }
 }
+/** 旧Bootstrapへ未定義のTick modeを渡さず、明示対応している場合だけ固定callbackを使う。 */
+bool FixedUpdateFeature(DotNetHost& host, const std::filesystem::path& assembly) {
+    const auto address = host.Resolve(assembly, L"SupportsFixedUpdates");
+    if(!address) {
+        return false;
+    }
+    using Feature = NexusGameStatus(NEXUS_GAME_CALL*)(uint32_t);
+    Feature feature = nullptr;
+    static_assert(sizeof(feature) == sizeof(void*));
+    std::memcpy(&feature, &*address, sizeof(feature));
+    try {
+        return feature && feature(1) == NEXUS_GAME_OK;
+    } catch(...) {
+        return false;
+    }
+}
 }
 NativeManagedBridge::~NativeManagedBridge() { static_cast<void>(Stop()); }
 Result<void> NativeManagedBridge::StartBoundGameplay(DotNetHost& host, const std::filesystem::path& assembly, const NexusManagedGameplayContextV5& context) {
@@ -39,6 +55,7 @@ Result<void> NativeManagedBridge::StartBoundGameplay(DotNetHost& host, const std
     thread_ = std::this_thread::get_id();
     try {
         scriptAttachments_ = ScriptAttachmentFeature(host, assembly);
+        fixedUpdates_ = FixedUpdateFeature(host, assembly);
         const auto status = entry(&context, &session_);
         if(status == NEXUS_GAME_OK && session_) return {};
         return std::unexpected(Error(ErrorCategory::Framework, 238, "Managed Binding Start failed (" + std::to_string(status) + ")."));
@@ -71,7 +88,7 @@ bool NativeManagedBridge::Stop() noexcept {
         }
     }
     // 失敗時にもNative側にManaged callbackを残さない。World tokenは上位が失効させる。
-    session_ = 0; start_ = nullptr; stop_ = nullptr; gameplayStart_ = nullptr; tick_ = nullptr; reload_ = nullptr; suspended_ = false; scriptAttachments_ = false;
+    session_ = 0; start_ = nullptr; stop_ = nullptr; gameplayStart_ = nullptr; tick_ = nullptr; reload_ = nullptr; suspended_ = false; scriptAttachments_ = false; fixedUpdates_ = false;
     host_ = nullptr; bootstrap_.clear(); monoGameAssembly_.clear(); monoContext_ = {}; monoSession_ = false; monoCommitted_ = false;
     if(!stopped) NEXUS_LOG_ERROR("CSharpRuntime", "Managed bootstrap did not stop cleanly. Restart the host process.");
     return stopped;
@@ -93,7 +110,10 @@ Result<void> NativeManagedBridge::StartGameplay(DotNetHost& host, const std::fil
         return std::unexpected(Error(ErrorCategory::Framework, 233, "Managed Gameplay Start failed (" + std::to_string(status) + ")."));
     } catch(...) { return std::unexpected(Error(ErrorCategory::Framework, 233, "Managed Gameplay Start violated the exception contract.")); }
 }
-Result<void> NativeManagedBridge::Tick(std::span<NexusScriptBindingV1> bindings, float deltaTime, bool initializeOnly) {
+Result<void> NativeManagedBridge::Tick(std::span<NexusScriptBindingV1> bindings, float deltaTime, bool initializeOnly, bool fixedOnly) {
+    if(fixedOnly && !fixedUpdates_) {
+        return {};
+    }
     if(!session_ || !tick_ || suspended_ || thread_ != std::this_thread::get_id() || bindings.size() > (std::numeric_limits<uint32_t>::max)())
         return std::unexpected(Error(ErrorCategory::Framework, 233, "Managed Tick requires an active Gameplay session on its owner thread."));
     if(monoSession_) {
@@ -101,7 +121,7 @@ Result<void> NativeManagedBridge::Tick(std::span<NexusScriptBindingV1> bindings,
         auto entered = host_->MonoBackend()->Enter(); if(!entered) return entered;
     }
     try {
-        const auto status = tick_(session_, bindings.data(), static_cast<uint32_t>(bindings.size()), deltaTime, initializeOnly ? 1u : 0u);
+        const auto status = tick_(session_, bindings.data(), static_cast<uint32_t>(bindings.size()), deltaTime, initializeOnly ? 1u : fixedOnly ? 2u : 0u);
         if(status == NEXUS_GAME_OK) return {};
         return std::unexpected(Error(ErrorCategory::Framework, 233, "Managed Tick failed (" + std::to_string(status) + ")."));
     } catch(...) { return std::unexpected(Error(ErrorCategory::Framework, 233, "Managed Tick violated the exception contract.")); }

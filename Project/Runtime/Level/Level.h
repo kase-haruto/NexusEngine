@@ -70,7 +70,7 @@ namespace NexusEngine {
 		std::unique_ptr<Scene> ExchangeScene(std::unique_ptr<Scene> scene) noexcept;
 		/** \brief 現Worldの最近傍衝突を値で取得する。無衝突時のEntityIdは無効。所有threadで呼ぶ */
 		[[nodiscard]] Result<PhysicsWorld::Hit> Raycast(const std::array<float,3>& origin,
-			const std::array<float,3>& direction, float distance);
+			const std::array<float,3>& direction, float distance, uint32_t layerMask = UINT32_MAX);
         /** \brief 起動前にProject資源Rootを設定する。Sceneの保存/交換では変更しない */
         [[nodiscard]] Result<void> SetResourceRoot(std::filesystem::path root);
         const std::filesystem::path& ResourceRoot() const noexcept { return resourceRoot_; }
