@@ -120,6 +120,7 @@
   </ItemGroup>
 <ItemGroup>
     <ClCompile Include="..\Editor\Gui\ReflectedPropertyEditor.cpp" />
+    <ClCompile Include="..\Editor\Services\CollisionLayerEditor.cpp" />
     <ClCompile Include="..\Editor\Gui\Properties\PropertyCategoryRegistry.cpp" />
     <ClCompile Include="..\Editor\Gui\Properties\PropertyPages.cpp" />
     <ClCompile Include="..\Editor\Gui\Properties\MaterialPage.cpp" />

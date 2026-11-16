@@ -31,7 +31,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 12;
+		constexpr uint32_t kFormatVersion = 14;
 
         // 既存の専用レコードは互換性と永続IDによる参照解決を維持する。
         const std::set<std::type_index>& BuiltinComponents() {
@@ -182,6 +182,7 @@ namespace NexusEngine {
 		output << "ENVIRONMENT " << std::quoted(std::string(reinterpret_cast<const char*>(utf8.data()),utf8.size()))
 			<< ' ' << environment.intensity << ' ' << environment.rotation << '\n';
 
+        // 衝突ルールはProjectのConfigだけに保存する。v13の表は読込互換として下で受け取る。
 		// EntityIdは実行ごとに変わるため一切書かず、PersistentIdを参照の唯一の鍵にする。
 		scene->ForEach<PersistentIdComponent, NameComponent, TransformComponent>(
 			[&](Entity entity, PersistentIdComponent& persistent, NameComponent& name, TransformComponent& transform) {
@@ -278,6 +279,27 @@ namespace NexusEngine {
 				lighting->environment.intensity=intensity;lighting->environment.rotation=rotation;
 			}
 		}
+        auto matrix = DefaultCollisionMatrix();
+        if(version == 13) {
+            if(!(input >> token) || token != "COLLISION_MATRIX") {
+                return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Missing collision matrix."));
+            }
+            for(auto& row : matrix) {
+                uint64_t value = 0;
+                if(!(input >> value) || value > UINT32_MAX) {
+                    return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Invalid collision matrix row."));
+                }
+                row = static_cast<uint32_t>(value);
+            }
+            // 反対向きのpairを別設定として読まず、対称性違反はWorld交換前に拒否する。
+            for(size_t row = 0; row < matrix.size(); ++row) {
+                for(size_t column = 0; column < matrix.size(); ++column) {
+                    if(((matrix[row] >> column) & 1u) != ((matrix[column] >> row) & 1u)) {
+                        return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Collision matrix must be symmetric."));
+                    }
+                }
+            }
+        }
 		auto loadedScene = std::make_unique<Scene>();
         ComponentReflection components;
         try {
@@ -432,6 +454,7 @@ namespace NexusEngine {
 		static_cast<void>(level.ExchangeScene(std::move(loadedScene)));
 		level.name_ = std::move(loadedName);
 		level.lighting_ = std::move(lighting);
+        static_cast<void>(level.SetCollisionLayers(matrix));
         level.screenEffects_.clear();
 		level.state_ = LevelState::Loaded;
 		return {};

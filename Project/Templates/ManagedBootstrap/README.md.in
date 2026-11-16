@@ -4,8 +4,8 @@
 Source/Gameは後続のC# Gameplayコード配置先です。Phase 3ではゲームコードやScriptBehaviourを生成・実行しません。
 Assets / Levels / Config / Entity / ComponentはEngineの共通基盤を利用します。
 
-新規ProjectはMono / SGen Backendです。Buildには.NET SDK、net48参照Assembly、公式Mono x64 SDKが必要です。
-`NEXUS_MONO_ROOT`環境変数または`NexusMonoRoot` MSBuild propertyへSDK rootを設定してください。
+新規ProjectはMono / SGen Backendです。Buildには.NET SDKとnet48参照Assemblyが必要です。
+1.2.1以降のInstalled SDKはMono Runtimeを同梱し、初回Buildで自動配置します。Source Engineでは公式Mono x64 SDKのrootを`NEXUS_MONO_ROOT`環境変数または`NexusMonoRoot` MSBuild propertyへ設定してください。
 ホストBuild時に安定BootstrapとdepsをManaged/へ、Mono Runtime / BCL / GACをMono/へ配置します。
 
 Play / 単体起動は実行WorldのGameRuntimeがManaged sessionを所有します。

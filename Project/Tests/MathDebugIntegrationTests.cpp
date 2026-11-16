@@ -33,9 +33,13 @@ int wmain(int argc, wchar_t** argv) {
         ~RemoveSink() { Logger::Get().RemoveSink(sink); }
     } remove{observer};
     try {
-        Require(argc == 4, "Usage: NexusMathDebugTests <nethost.dll> <Bootstrap.dll> <GameScripts.dll>");
+        Require(argc == 4 || argc == 5, "Usage: NexusMathDebugTests <nethost.dll|MonoRoot> <Bootstrap.dll> <GameScripts.dll> [--mono]");
         CSharpRuntimeSettings settings;
-        settings.nethostFile = std::filesystem::absolute(argv[1]);
+        if(argc == 5 && std::wstring_view(argv[4]) == L"--mono") {
+            settings.monoRoot = std::filesystem::absolute(argv[1]);
+        } else {
+            settings.nethostFile = std::filesystem::absolute(argv[1]);
+        }
         settings.bootstrapAssembly = std::filesystem::absolute(argv[2]);
         settings.runtimeConfig = settings.bootstrapAssembly;
         settings.runtimeConfig.replace_extension(".runtimeconfig.json");

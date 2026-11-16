@@ -20,6 +20,7 @@
 #include "Runtime/Audio/AudioWorld.h"
 
 namespace NexusEngine {
+    struct CollisionLayerSettings;
 	struct LevelLightingSettings {
 		std::array<float,3> skyIrradiance{1.5f,1.8f,2.4f};
 		DDGISettings probes;
@@ -77,6 +78,8 @@ namespace NexusEngine {
         /** \brief 必要時に共通Audio Backendを生成する。デバイス生成はPlayでのみ行う */
         AudioWorld& Audio();
         /** \brief Hostが既存CPU asset cacheの同期借用を接続する。稼働中solverの差替えは禁止 */
+        /** Editor用の衝突形状の線を取得する。物理step・接触通知・保存値を変更しない。 */
+        PhysicsWorld::WireframeStats CollectColliderWireframe(const PhysicsWorld::WireframeOptions& options, std::vector<DebugDrawLine>& output);
         [[nodiscard]] bool SetPhysicsModelSource(PhysicsWorld::ModelSource source) {
             if(physics_) return false; physicsModels_=std::move(source); return true;
         }
@@ -94,6 +97,12 @@ namespace NexusEngine {
         [[nodiscard]] Result<void> PauseAudio(bool paused) { return audio_ ? audio_->Pause(paused) : Result<void>{}; }
 		/** \brief 登録済みSystemを1 frame更新する */
 		[[nodiscard]] Result<void> Update(float deltaTime);
+        /** Level全体の対称なlayer関係。個別Collider maskと併用する。 */
+        const CollisionMatrix& CollisionLayers() const noexcept;
+        bool SetCollisionLayers(const CollisionMatrix& matrix) noexcept;
+        /** Project共通設定を読み、以降のLevel読込でも旧Level内の表より優先する。 */
+        Result<void> SetCollisionConfiguration(const std::filesystem::path& file);
+        const std::filesystem::path& CollisionConfiguration() const noexcept;
 
 		[[nodiscard]] LevelState		 GetState() const noexcept { return state_; }
 		[[nodiscard]] const std::string& GetName() const noexcept { return name_; }
@@ -125,6 +134,9 @@ namespace NexusEngine {
         std::optional<std::filesystem::path> nextLevel_; //< Project内の検証済み遷移要求。Scene保存/Cloneの対象外
         std::unique_ptr<AudioWorld> audio_; //< Level所有。Scene snapshotには複製せず、client終了時にvoiceを解除する
         PhysicsWorld::ModelSource physicsModels_; //< Host所有cacheへの借用callback。Game/Managed objectは保持しない
+        CollisionMatrix collisionLayers_ = DefaultCollisionMatrix(); //< Scene交換でも保持し、Level保存とPlayへ複製する
+        std::filesystem::path collisionConfiguration_; //< ProjectのConfig。Levelへ保存しない
+        std::shared_ptr<CollisionLayerSettings> collisionConfigurationValues_; //< 削除済みIDのRaycast用解決表
 		std::unique_ptr<PhysicsWorld> physics_; //< 遅延生成するsolver。Systemより後、Sceneより先に破棄する
 		SystemScheduler		   scheduler_;					  //< Sceneへ処理を適用するSystem群。physics_ slotを借用する
 		PersistentIdGenerator  persistentIds_;				  //< 新規Entityの永続ID発行元

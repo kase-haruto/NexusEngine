@@ -412,11 +412,12 @@ namespace NexusEngine {
                 ImGui::BeginDisabled(context.session.IsPlaying());
                 const auto shelf = toolShelf_.Draw({origin.x+margin,origin.y+margin},
                     {std::max(1.f,size.x-margin*2),std::max(1.f,size.y-margin*2)},context.text,tools_.ToolRegistry());
+                // 表示設定はPlay中も操作可能。編集Tool shelfだけを無効にする。
+                ImGui::EndDisabled();
                 const float headerWidth = std::max(1.f,std::min(size.x-shelf.size.x-margin*3,
                     ViewportHeader::Width()));
                 const auto viewportHeader = ViewportHeader::Draw({origin.x+size.x-margin-headerWidth,origin.y+margin},
                     {headerWidth,std::max(1.f,size.y*.35f)},context.text,[&] { tools_.DrawHeader(context.text); });
-                ImGui::EndDisabled();
 				const float	 requestedWidths[]{220, 320, 480};
 				float		 previewWidth = std::min(requestedWidths[tools_.PreviewSize()] * ImGui::GetFontSize() / 16,
 													 std::min(size.x * .48f, (size.y - header - padding * 4) * 16 / 9));

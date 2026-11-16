@@ -21,6 +21,7 @@
   <ItemGroup>
     <!-- Level.cppを直接コンパイルする既存テストも同じBackend実装を利用する。 -->
     <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsWorld.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\CollisionLayerSettings.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsUpdateSystem.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\GamePhysicsAccess.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)..\Runtime\Physics\PhysicsMeshCooking.cpp" />

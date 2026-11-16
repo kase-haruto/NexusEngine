@@ -48,6 +48,13 @@ namespace NexusEngine {
 		void			RestoreAfterReinstancing(const ReflectionValue& snapshot);
 
 	private:
+        void DrawColliderGuides(float x, float y, float width, float height);
+        int colliderDisplay_ = 2; //< 0:非表示、1:選択のみ、2:全体(既定)。Levelの保存値は変更しない。
+        bool disabledColliders_ = false;
+        std::vector<EntityId> colliderSelection_;
+        std::vector<DebugDrawLine> colliderLines_; //< ImGuiへ投影する値snapshot。Scene/Joltを借用しない。
+        std::string colliderLimitText_ = "Collider preview: line limit reached";
+        std::string colliderSkippedText_ = "Collider preview: invalid shape or missing collision mesh";
 		void DrawSetting(const LocalizationService& text, int item);
 		void ActivateTool(const std::string& id, int transformMode);
 		ViewportToolRegistry toolRegistry_;

@@ -26,6 +26,8 @@ namespace NexusEngine {
 		[[nodiscard]] ReflectionRegistration GetReflectionRegistration() const noexcept { return reflection_; }
 		/** \brief 既存選択を解除して編集用Worldを生成する */
 		[[nodiscard]] Result<void> Create();
+        /** Project独自のConfigパスも新規・読込・Playへ引き継ぐ。 */
+        Result<void> SetCollisionConfiguration(const std::filesystem::path& file);
         /** \brief document再読込後も同じProjectの資源Rootを引き継ぐ。再生中の変更は禁止する */
         [[nodiscard]] Result<void> SetResourceRoot(std::filesystem::path root) {
             if(IsPlaying() || !root.is_absolute()) return std::unexpected(Error(ErrorCategory::Resource,270,"Editor resource Root requires a stopped session and absolute path."));
@@ -111,6 +113,7 @@ namespace NexusEngine {
 	private:
 		ReflectionRegistration reflection_; //< 編集・Play・復元で同じ登録関数を使う
         std::filesystem::path resourceRoot_; //< Editor hostが指定したProject Root。documentを交換しても保持する
+        std::filesystem::path collisionConfiguration_; //< Project共通Physics設定の絶対パス
         PhysicsWorld::ModelSource physicsModels_; //< Editor ApplicationのCPU asset cacheへの同期借用
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
 		GameRuntime playRuntime_; //< Game単体起動と共通の実行基盤

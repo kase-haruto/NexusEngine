@@ -11,6 +11,7 @@
 #include "Runtime/Scene/AnimationUpdateSystem.h"
 #include "Runtime/Physics/PhysicsUpdateSystem.h"
 #include "Runtime/Application/ApplicationPaths.h"
+#include "Runtime/Physics/CollisionLayerSettings.h"
 
 namespace NexusEngine {
 	namespace {
@@ -20,12 +21,21 @@ namespace NexusEngine {
 
 	Level::Level(std::string name, ReflectionRegistration reflection) : reflection_(reflection), name_(std::move(name)) {
 		// 組み込みSystemはLevelごとに所有し、複数World（Editor/PIE）の状態を分離する。
-		scheduler_.AddSystem<PhysicsUpdateSystem>(physics_,physicsModels_);
+		scheduler_.AddSystem<PhysicsUpdateSystem>(physics_,physicsModels_,collisionLayers_);
 		scheduler_.AddSystem<TransformUpdateSystem>();
 		scheduler_.AddSystem<AnimationUpdateSystem>();
 	}
 
 	Result<void> Level::LoadEmpty() {
+        auto configured = collisionConfiguration_.empty() ? Result<CollisionLayerSettings>{CollisionLayerSettings{}} :
+            CollisionLayerSettings::Load(collisionConfiguration_);
+        if(!configured) {
+            return std::unexpected(configured.error());
+        }
+        collisionLayers_ = configured->EffectiveMatrix();
+        if(!collisionConfiguration_.empty()) {
+            collisionConfigurationValues_ = std::make_shared<CollisionLayerSettings>(*configured);
+        }
         nextLevel_.reset();
         audio_.reset();
 		// 同じアドレスへSceneが再配置されても旧bodyを引き継がないよう、破棄前に解除する。
@@ -38,7 +48,17 @@ namespace NexusEngine {
 	}
 
 	Result<void> Level::Load(const std::filesystem::path& path) {
-		return LevelSerializer::Load(path, *this);
+        // 設定ファイルの不正をWorld交換より先に検出する。
+        auto settings = CollisionLayerSettings::Load(collisionConfiguration_);
+        if(!collisionConfiguration_.empty() && !settings) {
+            return std::unexpected(settings.error());
+        }
+        auto result = LevelSerializer::Load(path, *this);
+        if(result && !collisionConfiguration_.empty()) {
+            static_cast<void>(SetCollisionLayers(settings->EffectiveMatrix()));
+            collisionConfigurationValues_ = std::make_shared<CollisionLayerSettings>(*settings);
+        }
+        return result;
 	}
 
 	Result<void> Level::Save(const std::filesystem::path& path) {
@@ -49,6 +69,7 @@ namespace NexusEngine {
 	}
 
 	void Level::Unload() noexcept {
+        collisionLayers_ = DefaultCollisionMatrix();
         nextLevel_.reset();
         audio_.reset();
 		physics_.reset();
@@ -71,13 +92,39 @@ namespace NexusEngine {
 	Result<PhysicsWorld::Hit> Level::Raycast(const std::array<float,3>& origin,
 		const std::array<float,3>& direction, float distance, uint32_t layerMask) {
 		if(!scene_) return std::unexpected(Error(ErrorCategory::Scene, kLevelNotLoaded, "Cannot query an unloaded level."));
-		if(!physics_) physics_ = std::make_unique<PhysicsWorld>(physicsModels_);
+		if(!physics_) physics_ = std::make_unique<PhysicsWorld>(physicsModels_, collisionLayers_);
+        if(collisionConfigurationValues_) {
+            // 削除済み所属IDを持つ古いLevelも、移行先レイヤーへのRaycastで取得できるようにする。
+            uint32_t expanded = 0;
+            for(uint32_t layer = 0; layer < 32; ++layer) {
+                const auto resolved = collisionConfigurationValues_->Resolve(layer);
+                if(resolved < 32 && (layerMask & (uint32_t{1} << resolved)) != 0) {
+                    expanded |= uint32_t{1} << layer;
+                }
+            }
+            layerMask = expanded;
+        }
 		return physics_->Raycast(*scene_, origin, direction, distance, layerMask);
 	}
 
+    PhysicsWorld::WireframeStats Level::CollectColliderWireframe(const PhysicsWorld::WireframeOptions& options, std::vector<DebugDrawLine>& output) {
+        output.clear();
+        if(!scene_) {
+            return {};
+        }
+        if(!physics_) {
+            physics_ = std::make_unique<PhysicsWorld>(physicsModels_, collisionLayers_);
+        }
+        return physics_->CollectWireframe(*scene_, options, output);
+    }
     Result<void> Level::SetResourceRoot(std::filesystem::path root) {
         if(!root.is_absolute() || audio_) return std::unexpected(Error(ErrorCategory::Resource,270,"Resource Root must be absolute and selected before Audio initialization."));
-        resourceRoot_=std::move(root); return {};
+        auto configured = SetCollisionConfiguration(root / "Config/PhysicsLayers.settings");
+        if(!configured) {
+            return configured;
+        }
+        resourceRoot_ = std::move(root);
+        return {};
     }
     AudioWorld& Level::Audio() {
         if(!audio_) audio_=std::make_unique<AudioWorld>(resourceRoot_);
@@ -121,6 +168,38 @@ namespace NexusEngine {
 		return result;
 	}
 
+    const CollisionMatrix& Level::CollisionLayers() const noexcept {
+        return collisionLayers_;
+    }
+    const std::filesystem::path& Level::CollisionConfiguration() const noexcept {
+        return collisionConfiguration_;
+    }
+    Result<void> Level::SetCollisionConfiguration(const std::filesystem::path& file) {
+        auto loaded = CollisionLayerSettings::Load(file);
+        if(!loaded) {
+            return std::unexpected(loaded.error());
+        }
+        static_cast<void>(SetCollisionLayers(loaded->EffectiveMatrix()));
+        collisionConfiguration_ = file;
+        collisionConfigurationValues_ = std::make_shared<CollisionLayerSettings>(*loaded);
+        return {};
+    }
+    bool Level::SetCollisionLayers(const CollisionMatrix& matrix) noexcept {
+        // 対称性を検査してから交換し、無効な読込や編集で現Worldを変更しない。
+        for(size_t row = 0; row < matrix.size(); ++row) {
+            for(size_t column = 0; column < matrix.size(); ++column) {
+                if(((matrix[row] >> column) & 1u) != ((matrix[column] >> row) & 1u)) {
+                    return false;
+                }
+            }
+        }
+        if(matrix != collisionLayers_) {
+            // 既存接触cacheも再生成し、禁止へ変更したpairが残らないようにする。
+            physics_.reset();
+            collisionLayers_ = matrix;
+        }
+        return true;
+    }
 	Result<void> Level::Update(const float deltaTime) {
 		if(scene_ == nullptr) {
 			return std::unexpected(Error(ErrorCategory::Scene, kLevelNotLoaded, "Cannot update an unloaded level."));

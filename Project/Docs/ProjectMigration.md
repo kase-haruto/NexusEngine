@@ -37,6 +37,12 @@ Recovery.json       # Project UUIDと変更前後のhash
 
 ## Launcherでの操作
 
+配布用ランチャーでは「プロジェクト」で既存プロジェクトを選び、「エンジンを変更…」を押す。インストール・登録済みの移行先を明示選択し、「互換性を確認」で変更前後と制約を確認する。Editor / Runtimeを閉じたことと再ビルドの必要性を確認して「確認した変更を適用」を押す。未導入の最新版は先に「エンジンを入手」からインストールする。
+
+適用後は復旧記録の場所が確認欄に表示される。通常の「開く」から選択した版で再ビルドして動作を確認する。「復旧ファイルから元に戻す…」でプロジェクト内の`Recovery.json`を選べば元のEngine要求に戻せる。レビュー用計画は`%LOCALAPPDATA%/NexusEngine/Launcher/MigrationReviews/<uuid>/Review.json`に保存する。実際のバックアップと復旧記録は前述のプロジェクト内Directoryへ保存する。
+
+以下はネイティブ版Launcherでの操作。
+
 Recentの`Change Engine...`から移行先を明示選択し、`Review compatibility`で確認する。変更前後と制約を読み、Projectを閉じて再ビルドすることを確認してから`Apply reviewed Engine change`を押す。適用だけで新版のビルド成功を表示しない。RecentのOpenで選択した版のGameホストをビルド・起動する。
 
 復旧記録を画面に表示する。`Browse recovery...`から以前のRecovery.jsonも選べる。`Restore original Engine requirement`はEngine要求を元へ戻すが、後から編集されたDescriptorは上書きしない。復旧後は旧Engineで再ビルドする必要がある。

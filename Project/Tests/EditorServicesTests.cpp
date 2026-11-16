@@ -4,6 +4,8 @@
 #include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Gui/Panels/PanelRegistry.h"
 #include "Editor/Gui/PropertyDrawerRegistry.h"
+#include "Editor/Gui/ReflectedPropertyEditor.h"
+#include "Editor/Services/CollisionLayerEditor.h"
 #include "Editor/Gui/Widgets/PropertyWidgets.h"
 #include "Editor/Gui/Widgets/SourceAttachment.h"
 #include "Editor/Services/LocalizationService.h"
@@ -24,6 +26,7 @@
 #include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
 
 #include "Runtime/Scene/Components/FogComponent.h"
+#include "Runtime/Scene/Components/ColliderComponent.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
 #include "Editor/Core/EditorWorkspace.h"
 #include "Editor/Gui/Panels/OutlinerPanel.h"
@@ -967,6 +970,281 @@ void CacheAndWorkspaceIntegration() {
     _wputenv_s(L"LOCALAPPDATA",previous ? previous : L""); std::free(previous);
 }
 }
+namespace {
+/** 形状の編集順、表の実描画・クリック、共通履歴とPlay複製を検証する。 */
+void CollisionSettingsEditingTests() {
+    Fixture f;
+    auto entity = f.session.GetLevel()->CreateEntity("Collision settings");
+    assert(entity.AddComponent<ColliderComponent>());
+    const auto id = Id(entity);
+    f.session.Select(id);
+    const PropertyHandle shape{id, "Collider", "shape"};
+    const PropertyHandle mesh{id, "Collider", "meshAsset"};
+    assert(f.properties.Preview(shape, 3));
+    f.properties.Commit();
+    assert(!f.session.GetLevel()->Update(1.f / 60));
+    assert(f.properties.Preview(mesh, std::string("Models/floor.obj")));
+    f.properties.Commit();
+    assert(f.properties.Undo());
+    assert(f.properties.Undo());
+    assert(entity.AddComponent<RigidBodyComponent>());
+    assert(!f.properties.Preview(shape, 3));
+    assert(f.properties.Preview(shape, 4));
+    f.properties.Commit();
+    assert(f.properties.Undo());
+    f.properties.Reset(f.session.GetLevel());
+    const auto root = std::filesystem::absolute("Generated/CollisionEditorTests");
+    const auto file = root / "Config/PhysicsLayers.settings";
+    assert(CollisionLayerSettings{}.Save(file));
+    CollisionLayerEditor editor;
+    assert(editor.Initialize(f.session, file));
+    auto settings = editor.Settings();
+    settings.names[1] = "Player";
+    settings.names[2] = "Enemy";
+    assert(editor.Apply(settings));
+    auto duplicate = settings;
+    duplicate.names[2] = "Player";
+    assert(!editor.Apply(duplicate));
+    assert(editor.Settings() == settings);
+    assert(editor.VisibleLayers().size() == 3);
+    PropertyDrawerRegistry drawers;
+    drawers.RegisterDefaults();
+    LocalizationService text;
+    assert(text.Load("Project/Resources/Editor/Localization"));
+    EditorCommandRegistry commands;
+    EditorContext context{f.session, f.session.Selection(), f.properties, f.types, drawers, text, commands, f.edits, nullptr, nullptr, &editor};
+    CollisionLayersPanel panel(editor);
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO();
+    io.DisplaySize = {1600, 1000};
+    io.DeltaTime = 1.f / 60;
+    io.IniFilename = nullptr;
+    unsigned char* pixels;
+    int width, height;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+    io.Fonts->SetTexID(1);
+    ImGuiTable* pairs = nullptr;
+    const auto frame = [&](ImVec2 mouse, bool down) {
+        io.AddMousePosEvent(mouse.x, mouse.y);
+        io.AddMouseButtonEvent(0, down);
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos({10, 10});
+        ImGui::SetNextWindowSize({1400, 800});
+        ImGui::Begin("Collision settings test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        panel.Draw(context);
+        for(int index = 0; index < GImGui->Tables.GetBufSize(); ++index) {
+            auto* table = GImGui->Tables.GetByIndex(index);
+            if(table->LastFrameActive == ImGui::GetFrameCount() && table->ColumnsCount == 4) {
+                pairs = table;
+            }
+        }
+        ImGui::End();
+        ImGui::Render();
+    };
+    frame({0, 0}, false);
+    frame({0, 0}, false);
+    assert(pairs && pairs->ColumnsCount == 4);
+    const ImVec2 firstPair{pairs->Columns[1].WorkMinX + 5,
+        pairs->WorkRect.Min.y + pairs->InstanceDataFirst.LastTopHeadersRowHeight + ImGui::GetStyle().CellPadding.y + 5};
+    frame(firstPair, true);
+    frame(firstPair, false);
+    assert((editor.Settings().matrix[0] & 1u) == 0);
+    assert(!f.properties.IsDirty());
+    assert(editor.Undo());
+    assert(editor.Settings() == settings);
+    assert(editor.Redo());
+    assert(CollisionLayerSettings::Load(file)->matrix == editor.Settings().matrix);
+    // 削除・所属移行は保存済みLevelの旧IDにも作用し、Raycastも移行先で取得する。
+    entity.GetComponent<ColliderComponent>()->collisionLayer = 1;
+    const auto levelFile = root / "BeforeDelete.level";
+    assert(f.session.GetLevel()->Save(levelFile));
+    assert(editor.DeleteLayer(1, 2));
+    assert(editor.Settings().Resolve(1) == 2);
+    assert(editor.Usage(2) == 1);
+    assert(editor.Undo());
+    assert(editor.Settings().Resolve(1) == 1);
+    assert(editor.Redo());
+    assert(f.session.Open(levelFile));
+    assert(editor.BindLevel());
+    assert(f.session.GetLevel()->CollisionLayers() == editor.Settings().EffectiveMatrix());
+    auto hit = f.session.GetLevel()->Raycast({0, 5, 0}, {0, -1, 0}, 10, uint32_t{1} << 2);
+    assert(hit && hit->entity.IsValid());
+    assert(f.session.StartPlay());
+    assert(f.session.GetPlayLevel()->CollisionLayers() == editor.Settings().EffectiveMatrix());
+    f.session.StopPlay();
+    assert(f.session.Create());
+    assert(f.session.GetLevel()->CollisionLayers() == editor.Settings().EffectiveMatrix());
+    assert(editor.CanUndo());
+    assert(!editor.DeleteLayer(0, 2));
+    auto invalid = editor.Settings();
+    invalid.redirects[2] = 1;
+    assert(!invalid.IsValid());
+    assert(!invalid.Save(file));
+    assert(*CollisionLayerSettings::Load(file) == editor.Settings());
+    auto external = editor.Settings();
+    external.names[2] = "External Enemy";
+    assert(external.Save(file));
+    assert(!editor.Undo());
+    assert(*CollisionLayerSettings::Load(file) == external);
+    // Root設定後も、開いているv13の表を初回のProject設定へ引き継ぐ。
+    std::ifstream beforeDelete(levelFile, std::ios::binary);
+    std::string legacyText{std::istreambuf_iterator<char>(beforeDelete), std::istreambuf_iterator<char>()};
+    legacyText.replace(0, std::string("NEXUS_LEVEL 14").size(), "NEXUS_LEVEL 13");
+    auto importedMatrix = settings.matrix;
+    importedMatrix[0] &= ~uint32_t{1};
+    std::string legacyMatrix = "COLLISION_MATRIX";
+    for(uint32_t row : importedMatrix) {
+        legacyMatrix += " " + std::to_string(row);
+    }
+    legacyMatrix += '\n';
+    legacyText.insert(legacyText.find("ENTITY "), legacyMatrix);
+    const auto legacyFile = root / "LegacyImport.level";
+    {
+        std::ofstream output(legacyFile, std::ios::binary);
+        output << legacyText;
+    }
+    const auto importRoot = root / "ImportProject";
+    const auto importFile = importRoot / "Config/PhysicsLayers.settings";
+    std::error_code removal;
+    std::filesystem::remove(importFile, removal);
+    EditorSession imported;
+    assert(imported.SetResourceRoot(importRoot));
+    assert(imported.Open(legacyFile));
+    CollisionLayerEditor importEditor;
+    assert(importEditor.Initialize(imported, importFile));
+    assert(importEditor.Settings().matrix == importedMatrix);
+    assert(CollisionLayerSettings::Load(importFile)->matrix == importedMatrix);
+    ImGui::DestroyContext();
+    std::cout << "PASS: project collision settings, compact named matrix clicks, persistence, undo/redo, delete redirects, level switch, raycast and Play\n";
+}
+/** 実際のViewport描画経路で選択/全体/非表示、色、Play World追従と表示状態の復元を確認する。 */
+void ColliderViewportTests() {
+    Fixture f;
+    auto* level = f.session.GetLevel();
+    auto entity = level->CreateEntity("Visible collider");
+    auto* collider = entity.AddComponent<ColliderComponent>();
+    entity.GetComponent<TransformComponent>()->translation = {0, 0, 3};
+    f.session.Select(Id(entity));
+    f.session.MarkSaved();
+    ViewportTools tools(f.session, f.properties);
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO();
+    io.DisplaySize = {800, 600};
+    io.DeltaTime = 1.f / 60;
+    io.IniFilename = nullptr;
+    unsigned char* pixels;
+    int width, height;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+    io.Fonts->SetTexID(1);
+    ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
+    const auto settings = [&](int mode, bool disabled) {
+        auto state = tools.CaptureForReinstancing();
+        auto& fields = std::get<ReflectionValue::Object>(state.data);
+        fields["colliderDisplay"] = CaptureReflection(mode);
+        fields["disabledColliders"] = CaptureReflection(disabled);
+        fields["guides"] = CaptureReflection(false);
+        fields["gizmo"] = CaptureReflection(false);
+        tools.RestoreAfterReinstancing(state);
+    };
+    RenderScene render;
+    render.camera = RenderCamera{};
+    std::vector<ImDrawVert> vertices;
+    const auto frame = [&]() {
+        tools.Prepare(render, 4.f / 3);
+        ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
+        ImGui::SetNextWindowPos({0, 0});
+        ImGui::SetNextWindowSize({800, 600});
+        ImGui::Begin("Collider overlay test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::SetCursorScreenPos({100, 100});
+        ImGui::Dummy({400, 300});
+        auto* draw = ImGui::GetWindowDrawList();
+        const int start = draw->VtxBuffer.Size;
+        tools.DrawOverlay(100, 100, 400, 300);
+        vertices.assign(draw->VtxBuffer.begin() + start, draw->VtxBuffer.end());
+        for(const auto& vertex : vertices) {
+            assert(std::isfinite(vertex.pos.x) && std::isfinite(vertex.pos.y));
+        }
+        ImGui::End();
+        ImGui::Render();
+    };
+    // 新規Viewportは未選択でもColliderを描く。従来の選択のみモードは任意設定として残す。
+    f.session.Selection().Clear();
+    frame();
+    assert(!vertices.empty());
+    f.session.Select(Id(entity));
+    settings(1, false);
+    frame();
+    assert(!vertices.empty());
+    const auto selected = vertices;
+    settings(0, false);
+    frame();
+    assert(vertices.empty());
+    settings(1, false);
+    f.session.Selection().Clear();
+    frame();
+    assert(vertices.empty());
+    settings(2, false);
+    frame();
+    assert(!vertices.empty());
+    collider->enabled = false;
+    frame();
+    assert(vertices.empty());
+    settings(2, true);
+    frame();
+    assert(!vertices.empty());
+    const auto gray = ImGui::GetColorU32(ImVec4{.55f, .55f, .55f, .8f});
+    bool grayLine = false;
+    for(const auto& vertex : vertices) {
+        grayLine |= vertex.col == gray;
+    }
+    assert(grayLine);
+    collider->enabled = true;
+    collider->sensor = true;
+    frame();
+    const auto orange = ImGui::GetColorU32(ImVec4{1, .7f, .15f, 1});
+    bool triggerLine = false;
+    for(const auto& vertex : vertices) {
+        triggerLine |= vertex.col == orange;
+    }
+    assert(triggerLine);
+    auto snapshot = tools.CaptureForReinstancing();
+    ViewportTools restored(f.session, f.properties);
+    restored.RestoreAfterReinstancing(snapshot);
+    auto persisted = restored.CaptureForReinstancing();
+    int mode = 0;
+    bool disabled = false;
+    RestoreReflection(persisted.At("colliderDisplay"), mode);
+    RestoreReflection(persisted.At("disabledColliders"), disabled);
+    assert(mode == 2 && disabled);
+    auto& oldFields = std::get<ReflectionValue::Object>(snapshot.data);
+    oldFields.erase("colliderDisplay");
+    oldFields.erase("disabledColliders");
+    ViewportTools legacy(f.session, f.properties);
+    legacy.RestoreAfterReinstancing(snapshot);
+    persisted = legacy.CaptureForReinstancing();
+    RestoreReflection(persisted.At("colliderDisplay"), mode);
+    assert(mode == 2);
+    collider->sensor = false;
+    f.session.Select(Id(entity));
+    settings(1, false);
+    assert(f.session.StartPlay());
+    auto playing = f.session.GetPlayLevel()->FindEntity(Id(entity));
+    playing.GetComponent<TransformComponent>()->translation.x = 3;
+    frame();
+    assert(!vertices.empty());
+    bool moved = vertices.size() != selected.size();
+    for(size_t index = 0; index < std::min(vertices.size(), selected.size()); ++index) {
+        moved |= vertices[index].pos.x != selected[index].pos.x;
+    }
+    assert(moved && entity.GetComponent<TransformComponent>()->translation.x == 0);
+    f.session.StopPlay();
+    assert(!f.session.IsDirty());
+    ImGui::DestroyContext();
+    std::cout << "PASS: collider viewport overlays, visibility/color settings, snapshot compatibility and Play pose isolation\n";
+}
+}
+
 #include "DetailsCategoryTests.inl"
 #include "PrimitiveShapeTests.inl"
 #include "StartupPathTests.inl"
@@ -1080,6 +1358,8 @@ int main() {
     OffsetMeshGizmoInteraction();
     PropertyTransactions(); StructuralHistory(); DocumentsAndPlay(); HistoryBoundsAndCommands(); LazyPanelLifecycle();
     ViewportPickingAndValidation();
+    ColliderViewportTests();
+    CollisionSettingsEditingTests();
     ViewportSceneGuidesTests();
     EnvironmentViewportIconsTests();
     ViewportPreviewTests(); ViewportPreviewOverlayTests();

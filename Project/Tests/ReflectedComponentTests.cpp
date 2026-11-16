@@ -59,7 +59,7 @@ void EditorComponentRoundTrip() {
     std::filesystem::create_directories(file.parent_path());
     assert(session.GetLevel()->Save(file));
     const auto saved = ReadFile(file);
-    assert(saved.starts_with("NEXUS_LEVEL 12\n"));
+    assert(saved.starts_with("NEXUS_LEVEL 14\n"));
     assert(saved.find("COMPONENT \"Game.Move\"") != std::string::npos);
     assert(session.Open(file)); properties.Reset(session.GetLevel());
     assert(session.GetLevel()->FindEntity(id).GetComponent<MoveComponent>()->speed == 7.5f);

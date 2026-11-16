@@ -47,6 +47,8 @@ Result<void> EditorWorkspace::ReloadCSharp(const std::filesystem::path& assembly
 void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions,
                                  const std::filesystem::path& engineRoot, const ProjectContext* project) {
     settings_.Load(root, project); recent_ = settings_.user.recentLevels;
+    const auto collisionFile = (project ? project->Config() : std::filesystem::absolute(root) / "Config") / "PhysicsLayers.settings";
+    Report(collisionLayers_.Initialize(session_, collisionFile));
     renderGraph_.Initialize(root,project ? project->Config() : root/"Config");
     documents_.SetProjectRoot(std::filesystem::absolute(root));
     // 旧Propertiesだけを開いていた利用者も、統合先のDetailsへ移行する。
@@ -73,6 +75,10 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
     panels_.RegisterFactory("Outliner", "panel.outliner", [] { return std::make_unique<OutlinerPanel>(); });
     panels_.RegisterFactory("Details", "panel.details", [this] { return std::make_unique<DetailsPanel>(categories_); });
+    panels_.RegisterFactory("CollisionLayers", "physics.settings", [this] {
+        return std::make_unique<CollisionLayersPanel>(collisionLayers_);
+    }, false);
+    commands_.Register("physics.open", {[this] { panels_.Open("CollisionLayers"); }, {}});
     panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_, logs_); }, settings_.editor.viewport);
     panels_.RegisterFactory("OutputLog", "panel.log", [this] { return std::make_unique<OutputLogPanel>(logs_); });
     panels_.RegisterFactory("PostProcessGraph", "panel.postProcessGraph", [this] { return std::make_unique<PostProcessGraphPanel>(renderGraph_); }, false);
@@ -146,6 +152,7 @@ void EditorWorkspace::ReportDocumentError() {
 void EditorWorkspace::SynchronizeDocument() {
     if(generation_ == session_.Generation()) return;
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
+    static_cast<void>(collisionLayers_.BindLevel());
     previousSelection_ = {}; revision_ = properties_.Revision();
 }
 void EditorWorkspace::OpenLevel(const std::filesystem::path& path) {
@@ -212,10 +219,22 @@ void EditorWorkspace::RegisterCommands() {
     }, [this, editing] { return editing() && session_.GetLevelDocument(); }});
     commands_.Register("file.saveAs", {[this] { fileOperation_ = "saveAs"; filePath_.fill(0); }, editing});
     commands_.Register("file.exit", {[this] { RequestExit(); }, {}});
-    commands_.Register("edit.undo", {[this] { if(!properties_.Undo()) notifications_.Push(text_.Text("edit.rejected"), true); },
-        [this, editing] { return editing() && properties_.CanUndo(); }});
-    commands_.Register("edit.redo", {[this] { if(!properties_.Redo()) notifications_.Push(text_.Text("edit.rejected"), true); },
-        [this, editing] { return editing() && properties_.CanRedo(); }});
+    commands_.Register("edit.undo", {[this] {
+        const bool success = collisionLayers_.focused ? collisionLayers_.Undo() : properties_.Undo();
+        if(!success) {
+            notifications_.Push(text_.Text("edit.rejected"), true);
+        }
+    }, [this, editing] {
+        return editing() && (collisionLayers_.focused ? collisionLayers_.CanUndo() : properties_.CanUndo());
+    }});
+    commands_.Register("edit.redo", {[this] {
+        const bool success = collisionLayers_.focused ? collisionLayers_.Redo() : properties_.Redo();
+        if(!success) {
+            notifications_.Push(text_.Text("edit.rejected"), true);
+        }
+    }, [this, editing] {
+        return editing() && (collisionLayers_.focused ? collisionLayers_.CanRedo() : properties_.CanRedo());
+    }});
     commands_.Register("edit.delete", {[this, sceneResult] { sceneResult(sceneEdits_.DeleteSelection()); },
         [this, editing] { return editing() && session_.GetSelectedEntity().IsAlive(); }});
     commands_.Register("scene.entity", {[this, sceneResult] { sceneResult(sceneEdits_.Create("Entity")); }, editing});
@@ -352,7 +371,9 @@ void EditorWorkspace::Draw() {
         toolbarLayoutRevision_ = toolbar_.LayoutRevision();
     }
     layout_.Draw();
-    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_, sources_.get()};
+    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_, sources_.get(), &collisionLayers_};
+    // Panelを閉じた後にProject履歴へUndoを送り続けないよう、実際のfocusを毎frame確認する。
+    collisionLayers_.focused = false;
     viewport_.SetCameraPreviewVisible(false);
     renderGraph_.capturesKeyboard = false;
     panels_.Draw(context, session_.IsPlaying());

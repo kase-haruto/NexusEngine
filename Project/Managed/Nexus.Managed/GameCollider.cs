@@ -38,6 +38,7 @@ public sealed class GameCollider
     public float HalfHeight { get => Component.Get<float>("halfHeight"); set => Component.Set("halfHeight", value); }
     public bool IsTrigger { get => Component.Get<bool>("sensor"); set => Component.Set("sensor", value); }
     public int Layer { get => Component.Get<int>("collisionLayer"); set => Component.Set("collisionLayer", value); }
+    /// <summary>旧保存データとの互換用。接触可否には影響しません。Project共通の衝突マトリクスを使用してください。</summary>
     public uint CollisionMask { get => unchecked((uint)Component.Get<int>("collisionMask")); set => Component.Set("collisionMask", unchecked((int)value)); }
     /// <summary>形状とmeshを検証して追加する。既存Colliderがある場合も設定する。</summary>
     public static GameCollider Add(Entity entity, ColliderShape shape = ColliderShape.Box, string meshAsset = "")

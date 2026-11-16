@@ -1,27 +1,50 @@
 {
   "engines/nexus-1.2.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-2f2d369c9882/nexus-1.2.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/nexus-1.2.0-Release.zip",
     "bytes": 109079692,
     "sha256": "865cc5fb58199067518c61541447325cfa1bb64a831ec35ea1651e438ec46416"
   },
   "engines/nexus-1.1.1-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-2f2d369c9882/nexus-1.1.1-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/nexus-1.1.1-Release.zip",
     "bytes": 107321912,
     "sha256": "0a67419a1fa772126d6f19884d4297a16ec68246160af8ade336f55e67427e77"
   },
   "engines/nexus-1.1.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-2f2d369c9882/nexus-1.1.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/nexus-1.1.0-Release.zip",
     "bytes": 107137056,
     "sha256": "8979163e81f241fe49afb6bea37144e7c3616e171d109d9cb2ee015d1945c6d2"
   },
   "engines/nexus-1.0.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-2f2d369c9882/nexus-1.0.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/nexus-1.0.0-Release.zip",
     "bytes": 76096459,
     "sha256": "12125680e59a7afc410d364634824502b8b63ecbd9c63f43f5494d2bfef478c8"
   },
   "launcher/dffe159ef2b582bbe1d4bfbe0ad227d395c1f722499b0f02962c49ed275b9d2f/launcherSetup.exe": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-2f2d369c9882/launcherSetup.exe",
-    "bytes": 175081638,
-    "sha256": "dffe159ef2b582bbe1d4bfbe0ad227d395c1f722499b0f02962c49ed275b9d2f"
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-93667918dc43/launcherSetup.exe",
+    "sha256": "dffe159ef2b582bbe1d4bfbe0ad227d395c1f722499b0f02962c49ed275b9d2f",
+    "bytes": 175081638
+  },
+  "engines/nexus-1.2.1-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/nexus-1.2.1-Release.zip",
+    "bytes": 165928742,
+    "sha256": "099e37f3a00a1c654a39f6bdead9588554021b298dd07fae9d6e34876476ad14"
+  },
+  "engines/nexus-1.3.0-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/nexus-1.3.0-Release.zip",
+    "bytes": 168098050,
+    "sha256": "eaf8123234fd44c0adfe308758f41cd49b14f9f19be4cc8c8749cf1e30bec916"
+  },
+  "launcher/bc33138ac35b5fd77186acc264b076d71deaa732be56e48937e2247942fb01b6/launcherSetup.exe": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-10943520599d/launcherSetup.exe",
+    "bytes": 177043622,
+    "sha256": "bc33138ac35b5fd77186acc264b076d71deaa732be56e48937e2247942fb01b6",
+    "version": "1.1.0"
+  },
+  "launcher/73fdfd33950ac096ec433b05ff26bfb371acd6c253a069144e8fe1c70ae04e0c/launcherSetup.exe": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-bce4d31df585/launcherSetup.exe",
+    "bytes": 177051814,
+    "sha256": "73fdfd33950ac096ec433b05ff26bfb371acd6c253a069144e8fe1c70ae04e0c",
+    "version": "1.2.0",
+    "changes": "# NexusEngine Launcher 1.2.0\n\n2026-11-16 / Windows x64\n\n## 新機能\n\n- 「プロジェクト」に「エンジンを変更…」を追加。既存プロジェクトから、インストール・登録済みの別バージョンのエンジンを選択できます。\n- 「互換性を確認」で、変更前後のエンジン、Level形式、移行の制約を確認できます。確認した計画と終了・再ビルドの了承がある場合だけ適用できます。移行先を選び直すと再確認が必要です。\n- 適用前に元のプロジェクト設定と復旧記録を保存します。「復旧ファイルから元に戻す…」から元のエンジン設定へ戻せます。レビュー後のファイル変更や、復旧後に上書きされる編集がある場合は適用・復旧を拒否します。\n- ウィンドウ幅が狭い場合、プロジェクトの操作ボタンを折り返して表示します。\n- ランチャー更新一覧に、このバージョンの変更点を表示します。\n\n## 更新方法と使い方\n\n1. 既存ランチャーの「ランチャーの管理」→「ランチャーのバージョン一覧を取得」から1.2.0を選び、「選択したランチャーをインストール」を押します。Webサイトから新しいlauncherSetup.exeを取得して実行することもできます。\n2. 移行先のエンジンをインストールします。\n3. 「プロジェクト」で対象を選び、「エンジンを変更…」→移行先を選択→「互換性を確認」を押します。\n4. 対象のEditor / Runtimeを終了し、確認欄にチェックして「確認した変更を適用」を押します。\n5. 一覧の「開く」から移行先のSDKで再ビルドし、動作を確認します。\n\n## 互換性と制約\n\n- ランチャーのみの更新です。公開済みエンジンSDKのバージョン・内容は変更しません。旧ランチャー・SDKの配布も保持します。\n- 移行処理はプロジェクト設定のエンジン要求を変更します。Level・Asset・Sourceの自動変換やゲーム固有APIの修正は行いません。\n- 形式の事前検査が通っても、API・インポーター・ゲーム固有データの互換性を保証しません。ビルドや動作に問題がある場合はコードの修正、または元の設定への復旧が必要です。\n- 復旧は元の設定ファイルだけが対象です。移行後のソースやアセットの編集は巻き戻しません。\n- 検証は1.2.0→1.3.0のSDK移行と復旧を含みます。すべてのユーザープロジェクト・DPIでの動作は未検証です。\n"
   }
 }

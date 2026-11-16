@@ -2,7 +2,7 @@
 
 公開先: https://nexus-engine.nexus-engine-website.workers.dev/
 
-紹介・Launcher setup.exe・1.0.0〜1.2.0の変更点・導入手順・開発ドキュメントをまとめた日本語サイト。UEのビジュアルと導入導線、Blenderのダウンロードとリリース案内を参考にし、独自の配色とNexusEngine自身のPBR描画画像を使っています。
+紹介・Launcher setup.exe・SDK 1.0.0〜1.3.0とLauncher 1.2.0の変更点・導入手順・開発ドキュメントをまとめた日本語サイト。UEのビジュアルと導入導線、Blenderのダウンロードとリリース案内を参考にし、独自の配色とNexusEngine自身のPBR描画画像を使っています。
 
 ## 従量課金を使わない構成
 
@@ -32,7 +32,7 @@ npm.cmd run dev
 Cloudflare CLIとGit Credential ManagerのGitHub認証を使用。認証情報をソースやWebへ埋め込みません。
 
 ```powershell
-.\scripts\Publish-Website.cmd -LauncherSetup "C:\MyProject\NexusEngine\Generated\LauncherDistribution\Release-1.2.0\Setup\launcherSetup.exe"
+.\scripts\Publish-Website.cmd -LauncherSetup "C:\MyProject\NexusEngine\Generated\LauncherDistribution\Launcher-1.2.0\Setup\launcherSetup.exe"
 ```
 
 `-LauncherSetup`を省略すると公開URLを埋め込んだsetupを新規生成します。Visual Studio C++ / Windows SDK / .NET SDKが必要。ローカルカタログのパスを設定したReview用setupは公開しません。
@@ -55,3 +55,12 @@ dotnet run --project ..\Tests\LauncherDistribution\DistributionTests.csproj -c R
 ## 開発資料と画像
 
 `Project/Docs/*.md`をHTML化し、危険なHTML・URLを除去して`/docs/`へ出力。現行ソースの資料と公開SDKの機能範囲は異なるため注意書きを表示します。画像`public/render-preview.png`の元は`Generated/PBRGridPreview.png`です。
+
+
+## 2026-11-15 公開記録
+
+SDK 1.3.0とLauncher 1.1.0を公開。SDK 6版と新setupの計7ファイルを公開URLから取得し、サイズ・SHA-256を照合済み。従来のSDKと旧setupを保持しています。詳細は[1.3.0配布検証](../Docs/Release-1.3.0-Verification.md)。
+
+## 2026-11-16 公開記録
+
+プロジェクト移行機能を追加したLauncher 1.2.0を公開。エンジンSDKの版数・内容は維持しています。旧ランチャー1.1.0の実コードから更新一覧・変更点・新Setupの取得とSHA-256検査が成功。SDK 6版と新Setupの計7ファイルも公開URLから照合済みです。旧ランチャー2版と既存SDKを保持しています。詳細は[Launcher 1.2.0配布検証](../Docs/Launcher-Release-1.2.0-Verification.md)。

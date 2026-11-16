@@ -12,7 +12,7 @@ namespace NexusEngine {
 class PhysicsUpdateSystem final : public ISceneSystem {
 public:
     /** \brief Level所有のsolver slotを借用する。LevelはSystem破棄後までslotを保持する */
-    explicit PhysicsUpdateSystem(std::unique_ptr<PhysicsWorld>& world,const PhysicsWorld::ModelSource& models) noexcept : world_(world),models_(models) {}
+    explicit PhysicsUpdateSystem(std::unique_ptr<PhysicsWorld>& world, const PhysicsWorld::ModelSource& models, const CollisionMatrix& matrix) noexcept;
     /** \brief ゲームロジック実行後、派生Matrix確定前の段階を返す */
     SystemPhase GetPhase() const noexcept override { return SystemPhase::Physics; }
     /** \brief 親子関係を検証するための読み取り対象を返す */
@@ -24,5 +24,6 @@ public:
 private:
     std::unique_ptr<PhysicsWorld>& world_; //< Level所有slotの借用。System解除でLevel側の参照をdanglingにしない
     const PhysicsWorld::ModelSource& models_; //< Levelが保持するHostの同期CPU読込。Systemより長く生存する
+    const CollisionMatrix& matrix_; //< Level所有の共通layer設定。solver生成時にコピーする
 };
 }

@@ -1,6 +1,8 @@
 #include "ReflectedPropertyEditor.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Services/PropertyEditService.h"
+#include "Editor/Services/CollisionLayerEditor.h"
+#include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Gui/PropertyDrawerRegistry.h"
 #include "Editor/Gui/Widgets/AssetPropertyWidget.h"
 #include "Foundation/Logging/Logger.h"
@@ -9,8 +11,36 @@
 #include <cstring>
 #include "Runtime/Scene/EntityReference.h"
 #include "Runtime/Scene/Components/NameComponent.h"
+#include "Runtime/Scene/Components/ColliderComponent.h"
 
 namespace NexusEngine {
+namespace {
+/** 所属だけを編集する。衝突相手の編集はProject共通Panelへ集約する。 */
+UI::ItemResult DrawCollisionLayers(const EditorContext& context, const UI::ItemOptions& options, PropertyValue& value) {
+    auto* layer = std::get_if<int>(&value);
+    if(!layer) {
+        return {};
+    }
+    const CollisionLayerSettings fallback;
+    const auto& settings = context.collisionLayers ? context.collisionLayers->Settings() : fallback;
+    const auto resolved = settings.Resolve(static_cast<uint32_t>(*layer));
+    bool changed = false;
+    ImGui::SetNextItemWidth(options.size.x);
+    if(ImGui::BeginCombo("##Membership", settings.Label(resolved).c_str())) {
+        for(uint32_t index = 0; index < 32; ++index) {
+            if(settings.Resolve(index) != index || (settings.names[index].empty() && index != resolved)) {
+                continue;
+            }
+            if(ImGui::Selectable(settings.Label(index).c_str(), resolved == index)) {
+                *layer = static_cast<int>(index);
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return {changed ? UI::ItemStatus::Edited | UI::ItemStatus::EditCompleted : UI::ItemStatus::None};
+}
+}
 ////////////////////////////////////////////////////////////////////////////////////////////
 // 値の解決から確定まで共通化し、複数Panelで同じUndo・検証・Asset Drop経路を使う。
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -18,6 +48,20 @@ void DrawReflectedProperty(const EditorContext& context, std::string_view typeId
     bool primaryOnly, PersistentId instance) {
     // 型IDの値編集はDetailsのScript pickerへ統一する。公開Propertyは従来の共通Drawerで編集する。
     if(typeId == "Script" && propertyId == "scriptType") return;
+    if((typeId == "Collider" || typeId == "RigidBody") && propertyId == "collisionMask") {
+        return;
+    }
+    // Collider同居時の旧RigidBody形状値は互換用fallbackであり、無効な編集欄を表示しない。
+    const auto hasCollider = [&](PersistentId selected) {
+        auto* level = context.session.GetLevel();
+        return level && level->FindEntity(selected).HasComponent<ColliderComponent>();
+    };
+    if(typeId == "RigidBody" && std::ranges::any_of(context.selection.All(), hasCollider)) {
+        constexpr std::string_view overridden[] = {"shape", "halfExtent", "radius", "halfHeight", "friction", "restitution", "sensor", "collisionLayer", "collisionMask"};
+        if(std::ranges::find(overridden, propertyId) != std::end(overridden)) {
+            return;
+        }
+    }
     const auto* type = context.types.Find(typeId);
     if(!type) return;
     const auto found = std::ranges::find(type->properties, propertyId, &PropertyDescriptor::id);
@@ -166,13 +210,67 @@ void DrawReflectedProperty(const EditorContext& context, std::string_view typeId
             referenceResult.status = UI::ItemStatus::Edited | UI::ItemStatus::EditCompleted;
         }
     }
-    const auto result = reference ? referenceResult : asset && context.assets ? context.assets->Draw(options, *value, descriptor, context.text, mesh, node) :
-        context.drawers.Draw(options, *value, descriptor, context.text);
+    // 複数選択でも一つでもDynamicなら三角形Meshを候補から外す。setterの制約と一致させる。
+    auto drawingDescriptor = descriptor;
+    if(typeId == "Collider" && propertyId == "shape") {
+        const bool dynamic = std::ranges::any_of(context.selection.All(), [&](PersistentId selected) {
+            const auto entity = context.session.GetLevel()->FindEntity(selected);
+            const auto* body = entity.GetComponent<RigidBodyComponent>();
+            return body && body->motion == 1;
+        });
+        if(dynamic) {
+            std::erase_if(drawingDescriptor.enumValues, [](const auto& item) {
+                return item.first == 3;
+            });
+        }
+    }
+    if(typeId == "RigidBody" && propertyId == "motion") {
+        const bool triangleMesh = std::ranges::any_of(context.selection.All(), [&](PersistentId selected) {
+            const auto* collider = context.session.GetLevel()->FindEntity(selected).GetComponent<ColliderComponent>();
+            return collider && collider->shape == 3;
+        });
+        if(triangleMesh) {
+            std::erase_if(drawingDescriptor.enumValues, [](const auto& item) {
+                return item.first == 1;
+            });
+        }
+    }
+    const auto result = descriptor.kind == PropertyKind::CollisionLayer ? DrawCollisionLayers(context, options, *value) :
+        reference ? referenceResult : asset && context.assets ? context.assets->Draw(options, *value, descriptor, context.text, mesh, node) :
+        context.drawers.Draw(options, *value, drawingDescriptor, context.text);
     if(propertyRow) ImGui::EndTable();
+    if(descriptor.kind == PropertyKind::CollisionLayer) {
+        const CollisionLayerSettings fallback;
+        const auto& settings = context.collisionLayers ? context.collisionLayers->Settings() : fallback;
+        const auto layer = settings.Resolve(static_cast<uint32_t>(std::get<int>(*value)));
+        std::string summary;
+        const auto visible = context.collisionLayers ? context.collisionLayers->VisibleLayers() : std::vector<uint32_t>{0};
+        for(uint32_t target : visible) {
+            if(layer < 32 && (settings.matrix[layer] & (uint32_t{1} << target)) != 0) {
+                if(!summary.empty()) {
+                    summary += ", ";
+                }
+                summary += settings.Label(target);
+            }
+        }
+        ImGui::TextWrapped("%s: %s", context.text.Text("physics.summary").c_str(),
+            summary.empty() ? context.text.Text("physics.none").c_str() : summary.c_str());
+        ImGui::BeginDisabled(!context.commands.CanExecute("physics.open"));
+        if(ImGui::Button(context.text.Text("physics.matrix.open").c_str())) {
+            if(context.collisionLayers) {
+                context.collisionLayers->selected = layer;
+            }
+            context.commands.Execute("physics.open");
+        }
+        ImGui::EndDisabled();
+    }
     if(typeId == "Collider" && propertyId == "shape") {
         ImGui::PushTextWrapPos(0);
-        ImGui::TextDisabled("Mesh: set Collision Mesh first. Dynamic bodies use Convex Mesh.");
+        ImGui::TextWrapped("%s", context.text.Text(mesh.empty() ? "physics.mesh.missing" : "physics.mesh.help").c_str());
         ImGui::PopTextWrapPos();
+    }
+    if(typeId == "RigidBody" && propertyId == "motion" && std::ranges::any_of(context.selection.All(), hasCollider)) {
+        ImGui::TextWrapped("%s", context.text.Text("physics.rigidbody.help").c_str());
     }
     if(result.Changed() && descriptor.kind == PropertyKind::MeshAsset && !nodeProperty.empty()) {
         std::vector<PropertyValue> values(handles.size(), *value);

@@ -39,13 +39,15 @@ const versions = uploads
     return item.key.replace(/^engines\/nexus-/, '').replace(/-Release\.zip$/, '');
   })
   .join(' / ');
-const body = 'NexusEngine Windows x64配布物。SDK ' + versions + 'とLauncher setupを添付しています。\n\n導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、このバッチの登録時点のソースであり、各旧SDKを生成した履歴の保証ではありません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
+const launcher = uploads.find(item => item.key.startsWith('launcher/'));
+const body = 'NexusEngine Windows x64配布物。SDK ' + versions + 'とLauncher ' + (launcher.version || '') + ' setupを添付しています。\n\n' + (launcher.changes ? launcher.changes + '\n\n' : '') + '導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、タグが指すコミットのソースであり、SDK生成時の作業ツリーや各旧SDKのソースとの一致を保証しません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
 if (!release) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: resolve(root, '../..'), encoding: 'utf8' }).trim();
   release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: commit, name: 'NexusEngine Windows SDK / Launcher', body, draft: true }) });
   console.log(`Created draft release: ${tag}`);
 }
-const published = {};
+// 前のsetupも版一覧から導入できるよう、検証済みの公開履歴を残す。
+const published = JSON.parse(await readFile(resolve(root, 'published-assets.json'), 'utf8'));
 for (const item of uploads) {
   const name = item.key.split('/').at(-1);
   let asset = release.assets.find(a => a.name === name);
@@ -55,7 +57,7 @@ for (const item of uploads) {
     asset = await call(`https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(item.bytes) }, body: createReadStream(item.file), duplex: 'half' });
   }
   if (asset.size !== item.bytes || asset.digest !== `sha256:${item.sha256}` || asset.state !== 'uploaded') throw new Error(`Uploaded asset verification failed: ${name}`);
-  published[item.key] = { url: asset.browser_download_url, bytes: asset.size, sha256: item.sha256, ...(item.version ? { version: item.version } : {}) };
+  published[item.key] = { url: asset.browser_download_url, bytes: asset.size, sha256: item.sha256, ...(item.version ? { version: item.version } : {}), ...(item.changes ? { changes: item.changes } : {}) };
   console.log(`Verified ${name}`);
 }
 if (release.draft) release = await call(api + `/releases/${release.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft: false, make_latest: 'true' }) });

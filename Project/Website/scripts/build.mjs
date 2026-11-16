@@ -42,7 +42,7 @@ export function launcherCatalog(launcher, published) {
     const version = item.version || `1.0.0-${item.sha256.slice(0, 12)}`;
     if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version) || versions.has(version)) throw new Error('Assign a unique launcher version before publishing.');
     versions.add(version);
-    return { id: 'nexus-launcher', version, configuration: 'Release', changes: 'NexusEngine Launcher のインストーラー', url: item.url, sha256: item.sha256, bytes: item.bytes };
+    return { id: 'nexus-launcher', version, configuration: 'Release', changes: item.changes || 'NexusEngine Launcher のインストーラー', url: item.url, sha256: item.sha256, bytes: item.bytes };
   }).sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
 }
 async function build() {
@@ -73,7 +73,7 @@ async function build() {
     const sha256 = await hash(file), bytes = (await stat(file)).size;
     const version = settings.launcherVersion || '1.0.0';
     if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Invalid launcher version.');
-    launcher = { key: `launcher/${sha256}/launcherSetup.exe`, bytes, sha256, version };
+    launcher = { key: `launcher/${sha256}/launcherSetup.exe`, bytes, sha256, version, ...(settings.launcherChanges ? { changes: settings.launcherChanges } : {}) };
     uploads.push({ ...launcher, file });
   }
   else {

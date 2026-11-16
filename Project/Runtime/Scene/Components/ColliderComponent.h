@@ -11,13 +11,13 @@ namespace NexusEngine {
  *---------------------------------------------------------------------------------------*/
 struct ColliderComponent {
     bool enabled=true; //< falseなら同じEntityのphysics bodyを解除する
-    std::string meshAsset; //< 既存ModelAssetLibraryの参照。Mesh/Convex選択前に設定する
+    std::string meshAsset; //< 既存ModelAssetLibraryの参照。空のMesh/Convexは編集中の未設定状態
     int shape=0; //< 0=Box、1=Sphere、2=Capsule、3=Triangle Mesh、4=Convex Hull
     std::array<float,3> halfExtent{0.5f,0.5f,0.5f}; //< scale適用前のBox半寸法
     float radius=0.5f,halfHeight=0.5f; //< Sphere/Capsuleの形状寸法
     float friction=0.5f,restitution=0; //< 接触材質。RigidBodyの運動パラメータと分離する
     bool sensor=false; //< 物理接触応答を抑制する
-    int collisionLayer = 0, collisionMask = -1; //< Colliderがある場合はこちらのlayer/maskを使用する
+    int collisionLayer = 0, collisionMask = -1; //< 所属layer。maskは旧保存データ互換用で、接触判定には使わない
     /** \brief backend非依存の計算用settingsへ形状・材質を反映する */
     void ApplyTo(RigidBodyComponent& body) const noexcept {
         body.shape=shape; body.halfExtent=halfExtent; body.radius=radius; body.halfHeight=halfHeight;
@@ -25,9 +25,12 @@ struct ColliderComponent {
         body.collisionLayer = collisionLayer;
         body.collisionMask = collisionMask;
     }
-    /** \brief 既存のPhysics値検証を共通利用し、保存とsimulationの検証範囲を一致させる */
+    /** \brief 保存・編集可能な形状値を検証する。Meshの設定完了はsimulation開始時に別途検査する */
     bool IsValid() const noexcept {
-        if(shape<0 || shape>4 || meshAsset.size()>4096 || (shape>=3 && meshAsset.empty())) return false;
+        // 形状を先に選び、後からAssetを割り当てる編集を許可する。実行時の未設定検出はPhysicsWorldが行う。
+        if(shape < 0 || shape > 4 || meshAsset.size() > 4096) {
+            return false;
+        }
         for(unsigned char value:meshAsset) if(value<32) return false;
         RigidBodyComponent value; ApplyTo(value); if(shape>=3) value.shape=0;
         return value.IsValid();

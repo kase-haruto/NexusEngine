@@ -109,6 +109,18 @@ public sealed class LauncherForm : Form
             await Task.Run(() => Distribution.Run(tool, ["open", p.File, EngineRegistry, configuration], token), token);
         }, "プロジェクトをビルドしてエディタを起動しています…", allowNavigation: true);
         projects.RefreshProjects += () => Work(_ => { RefreshLocal(); return Task.CompletedTask; });
+        projects.ChangeEngine += () =>
+        {
+            try
+            {
+                EnsureTool();
+                var project = projects.Selected ?? throw new IOException("プロジェクトを選択してください。");
+                using var dialog = new ProjectMigrationDialog(project, installed, Tool);
+                dialog.ShowDialog(this);
+                RefreshLocal();
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "エンジンの変更", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        };
         projects.RemoveProject += () => RemoveSelectedProject(false);
         projects.DeleteProject += () => RemoveSelectedProject(true);
         projects.CreateProject += () => SelectPage(pages[2].Page);

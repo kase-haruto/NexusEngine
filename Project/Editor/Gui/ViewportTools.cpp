@@ -50,6 +50,7 @@ ReflectionValue ViewportTools::CaptureForReinstancing() {
         {"localSpace", CaptureReflection(localSpace_)}, {"snapping", CaptureReflection(snapping_)},
         {"guides", CaptureReflection(guidesVisible_)}, {"diagnostics", CaptureReflection(showDiagnostics_)},
         {"previewSize", CaptureReflection(previewSize_)},
+        {"colliderDisplay", CaptureReflection(colliderDisplay_)}, {"disabledColliders", CaptureReflection(disabledColliders_)},
         {"activeTool", CaptureReflection(activeTool_)}, {"mode", CaptureReflection(mode_)}, {"gizmo", CaptureReflection(gizmoVisible_)}});
 }
 void ViewportTools::RestoreAfterReinstancing(const ReflectionValue& snapshot) {
@@ -70,6 +71,13 @@ void ViewportTools::RestoreAfterReinstancing(const ReflectionValue& snapshot) {
         RestoreReflection(snapshot.At("localSpace"), localSpace_); RestoreReflection(snapshot.At("snapping"), snapping_);
         RestoreReflection(snapshot.At("guides"), guidesVisible_); RestoreReflection(snapshot.At("diagnostics"), showDiagnostics_);
         RestoreReflection(snapshot.At("previewSize"), previewSize_);
+    }
+    if(fields.contains("colliderDisplay")) {
+        RestoreReflection(fields.at("colliderDisplay"), colliderDisplay_);
+        colliderDisplay_ = std::clamp(colliderDisplay_, 0, 2);
+    }
+    if(fields.contains("disabledColliders")) {
+        RestoreReflection(fields.at("disabledColliders"), disabledColliders_);
     }
     generation_ = session_.Generation();
 }
@@ -334,6 +342,8 @@ bool ViewportTools::Pick(float x, float y, bool toggle) {
     if(!toggle) session_.Selection().Clear(); return false;
 }
 void ViewportTools::DrawHeader(const LocalizationService& text) {
+    colliderLimitText_ = text.Text("viewport.colliderLimit");
+    colliderSkippedText_ = text.Text("viewport.colliderSkipped");
     const auto style = UI::CurrentEditorTheme().viewportTools;
     const float side = style.button * ImGui::GetFontSize()/18;
     const float pairWidth = side + style.detailArrowWidth*ImGui::GetFontSize()/18;
@@ -346,7 +356,7 @@ void ViewportTools::DrawHeader(const LocalizationService& text) {
     }
 }
 void ViewportTools::DrawSetting(const LocalizationService& text, int item) {
-    ImGui::BeginDisabled(IsManipulating());
+    ImGui::BeginDisabled(IsManipulating() || (session_.IsPlaying() && item != 6));
     const float side = UI::CurrentEditorTheme().viewportTools.button * ImGui::GetFontSize()/18;
     static constexpr const char* keys[]{"viewport.translate","viewport.rotate","viewport.scale"};
     if(item < 0 || item == 3) {
@@ -413,6 +423,17 @@ void ViewportTools::DrawSetting(const LocalizationService& text, int item) {
             if(ImGui::CollapsingHeader(text.Label("viewport.overlayGuides","OverlayGuides").c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Checkbox(text.Text("settings.gizmo").c_str(), &gizmoVisible_);
             ImGui::Checkbox(text.Text("viewport.guides").c_str(), &guidesVisible_);
+            ImGui::SeparatorText(text.Text("viewport.colliders").c_str());
+            const char* colliderModes[]{"viewport.collidersOff", "viewport.collidersSelected", "viewport.collidersAll"};
+            for(int mode = 0; mode < 3; ++mode) {
+                if(ImGui::RadioButton(text.Text(colliderModes[mode]).c_str(), colliderDisplay_ == mode)) {
+                    colliderDisplay_ = mode;
+                }
+            }
+            ImGui::Checkbox(text.Text("viewport.collidersDisabled").c_str(), &disabledColliders_);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetFontSize() * 22);
+            ImGui::TextDisabled("%s", text.Text("viewport.colliderLegend").c_str());
+            ImGui::PopTextWrapPos();
             }
             if(ImGui::CollapsingHeader(text.Label("viewport.overlayText","OverlayText").c_str(),ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Checkbox(text.Text("viewport.diagnostics").c_str(), &showDiagnostics_);
@@ -621,9 +642,55 @@ void ViewportTools::DrawSceneGuides(float x, float y, float width, float height)
         }
     }
 }
+void ViewportTools::DrawColliderGuides(float x, float y, float width, float height) {
+    colliderLines_.clear();
+    auto* level = session_.GetPreviewLevel();
+    if(colliderDisplay_ == 0 || !level || !level->GetScene() || !frame_ || !frame_->camera) {
+        return;
+    }
+    // Playでも永続IDから実行Worldを解決し、編集Worldに残ったTransformを表示しない。
+    colliderSelection_.clear();
+    for(const auto persistent : session_.Selection().All()) {
+        const auto entity = level->FindEntity(persistent);
+        if(entity.IsAlive()) {
+            colliderSelection_.push_back(entity.GetId());
+        }
+    }
+    if(colliderDisplay_ == 1 && colliderSelection_.empty()) {
+        return;
+    }
+    PhysicsWorld::WireframeOptions options;
+    options.selected = colliderSelection_;
+    options.all = colliderDisplay_ == 2;
+    options.includeDisabled = disabledColliders_;
+    const auto stats = level->CollectColliderWireframe(options, colliderLines_);
+    auto& draw = *ImGui::GetWindowDrawList();
+    draw.PushClipRect({x, y}, {x + width, y + height}, true);
+    // Colliderは診断overlay。遮蔽物の後ろも確認でき、near planeを跨ぐ線は同次座標でclipする。
+    for(const auto& line : colliderLines_) {
+        GuideLine(draw, {line.start[0], line.start[1], line.start[2]}, {line.end[0], line.end[1], line.end[2]},
+            frame_->camera->viewProjectionMatrix, x, y, width, height,
+            ImGui::GetColorU32(ImVec4{line.color[0], line.color[1], line.color[2], line.color[3]}));
+    }
+    float textY = y + height - ImGui::GetFontSize() - 6;
+    if(stats.truncated) {
+        draw.AddText({x + 6, textY}, IM_COL32(255, 190, 60, 255), colliderLimitText_.c_str());
+        textY -= ImGui::GetFontSize() + 3;
+    }
+    if(stats.skipped) {
+        draw.AddText({x + 6, textY}, IM_COL32(255, 190, 60, 255), colliderSkippedText_.c_str());
+    }
+    draw.PopClipRect();
+}
 void ViewportTools::DrawOverlay(float x, float y, float width, float height, bool inputBlocked) {
     viewportWidth_=width; viewportHeight_=height;
-    if(session_.IsPlaying() || !frame_ || !frame_->camera || !std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0) return;
+    if(!frame_ || !frame_->camera || !std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0) {
+        return;
+    }
+    DrawColliderGuides(x, y, width, height);
+    if(session_.IsPlaying()) {
+        return;
+    }
     inputBlocked |= ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
     const auto& io = ImGui::GetIO(); const bool hovered = !inputBlocked && ImGui::IsItemHovered();
     if(guidesVisible_) DrawSceneGuides(x,y,width,height);

@@ -1,4 +1,5 @@
 #include "GameApplication.h"
+#include "Runtime/Project/ProjectContext.h"
 #include <exception>
 
 namespace NexusEngine {
@@ -11,6 +12,12 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
     if(!resourceRoot) return resourceRoot;
     auto result = level->Load(path);
     if(!result) return result;
+    if(paths_.project) {
+        auto configured = level->SetCollisionConfiguration(paths_.project->Config() / "PhysicsLayers.settings");
+        if(!configured) {
+            return configured;
+        }
+    }
     // Script OnCreateのMesh queryより先に同じCPU asset cacheを用意し、描画側も再利用する。
     try {
         library_=std::make_unique<ModelAssetLibrary>(std::make_shared<ModelAssetData>(),root,loadStartup);

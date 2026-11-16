@@ -33,6 +33,11 @@
 #include <tuple>
 
 namespace NexusEngine {
+CollisionMatrix DefaultCollisionMatrix() noexcept {
+    CollisionMatrix matrix;
+    matrix.fill(UINT32_MAX);
+    return matrix;
+}
 namespace {
 Error Failure(const char* message) { return Error(ErrorCategory::Scene, 260, message); }
 JPH::Vec3 Vector(const std::array<float,3>& value) { return {value[0],value[1],value[2]}; }
@@ -60,15 +65,16 @@ struct JoltRegistration {
         JPH::Factory::sInstance = nullptr;
     }
 };
-/** 所属layerをSubGroup、相手maskをGroupとして値で渡す。BodyやSceneのpointerをfilterへ保存しない。 */
+/** 所属layerとWorld専用の共通表だけで接触を決める。旧個別maskやSceneへのpointerは参照しない。 */
 class CollisionMaskFilter final : public JPH::GroupFilter {
 public:
+    CollisionMatrix matrix = DefaultCollisionMatrix(); //< solver専用の不変コピー。Editor Worldへ参照しない
     bool CanCollide(const JPH::CollisionGroup& first, const JPH::CollisionGroup& second) const override;
 };
 bool CollisionMaskFilter::CanCollide(const JPH::CollisionGroup& first, const JPH::CollisionGroup& second) const {
     return first.GetSubGroupID() < 32 && second.GetSubGroupID() < 32 &&
-        (first.GetGroupID() & (uint32_t{1} << second.GetSubGroupID())) != 0 &&
-        (second.GetGroupID() & (uint32_t{1} << first.GetSubGroupID())) != 0;
+        (matrix[first.GetSubGroupID()] & (uint32_t{1} << second.GetSubGroupID())) != 0 &&
+        (matrix[second.GetSubGroupID()] & (uint32_t{1} << first.GetSubGroupID())) != 0;
 }
 class RayLayerFilter final : public JPH::BodyFilter {
 public:
@@ -113,6 +119,7 @@ struct PhysicsWorld::Impl {
     ModelSource models; //< Hostが所有する既存ModelAssetLibraryへの同期借用
     using MeshKey=std::tuple<std::string,int,std::array<float,3>>;
     std::map<MeshKey,CookedPhysicsMesh> meshShapes; //< 同じ参照・形状・scaleのcookingをWorld内で共有する
+    std::map<MeshKey, JPH::ShapeRefC> wireframeMeshes; //< 編集中もcooked形状を保持し、同じmeshを毎frame再cookingしない。
     uint32_t meshTriangles=0; //< cache全体の上限。未参照shapeは追加時に回収する
     /** \brief filterをsolverより先に確定し、CPU solverを初期化する */
     explicit Impl(ModelSource source):models(std::move(source)) {
@@ -128,6 +135,7 @@ struct PhysicsWorld::Impl {
     /** \brief 旧Sceneを参照せずに全Bodyを解除・破棄する */
     void Clear() {
         auto& api=physics.GetBodyInterface(); for(auto& [key,body]:bodies) { static_cast<void>(key); api.RemoveBody(body.id); api.DestroyBody(body.id); } bodies.clear();
+        wireframeMeshes.clear();
         meshShapes.clear(); meshTriangles=0;
         contacts.Clear();
     }
@@ -152,7 +160,7 @@ struct PhysicsWorld::Impl {
     static bool Same(const Body& body,const RigidBodyComponent& value,const std::array<float,3>& scale) {
         const auto& old=body.settings;
         return old.motion==value.motion && old.shape==value.shape && old.halfExtent==value.halfExtent && old.radius==value.radius && old.halfHeight==value.halfHeight &&
-            old.mass==value.mass && old.friction==value.friction && old.restitution==value.restitution && old.gravityScale==value.gravityScale && old.sensor==value.sensor && old.continuous==value.continuous && body.scale==scale && old.collisionLayer==value.collisionLayer && old.collisionMask==value.collisionMask;
+            old.mass==value.mass && old.friction==value.friction && old.restitution==value.restitution && old.gravityScale==value.gravityScale && old.sensor==value.sensor && old.continuous==value.continuous && body.scale==scale && old.collisionLayer==value.collisionLayer;
     }
     /** \brief 全入力を検証後、同じScene内の世代付きEntityIdをBodyへ同期する */
     Result<void> Sync(Scene& value) {
@@ -167,7 +175,12 @@ struct PhysicsWorld::Impl {
             const auto* transform=entity.GetComponent<TransformComponent>();
             const auto* rigid=entity.GetComponent<RigidBodyComponent>();
             const auto* collider=entity.GetComponent<ColliderComponent>();
-            if((rigid && !rigid->IsValid()) || (collider && !collider->IsValid()) || !transform || (component.shape==3 && component.motion==1)) { valid=false; return; }
+            if((rigid && !rigid->IsValid()) ||
+                (collider && (!collider->IsValid() || (collider->shape >= 3 && collider->meshAsset.empty()))) ||
+                !transform || (component.shape == 3 && component.motion == 1)) {
+                valid = false;
+                return;
+            }
             if(const auto* hierarchy=entity.GetComponent<HierarchyComponent>(); hierarchy && hierarchy->parent.IsValid()) { valid=false; return; }
             const float pose[]{transform->translation.x,transform->translation.y,transform->translation.z,
                 transform->rotation.x,transform->rotation.y,transform->rotation.z,transform->rotation.w};
@@ -186,7 +199,9 @@ struct PhysicsWorld::Impl {
             const JPH::Quat rotation(transform->rotation.x,transform->rotation.y,transform->rotation.z,transform->rotation.w);
             if(!rotation.IsNormalized()) valid=false;
         });
-        if(!valid || count>16384) return std::unexpected(Failure("Invalid RigidBody/Collider or pose. Bodies require root Entities; Triangle Mesh requires Static/Kinematic motion."));
+        if(!valid || count > 16384) {
+            return std::unexpected(Failure("Invalid RigidBody/Collider or pose. Bodies require root Entities; Mesh/Convex requires Collision Mesh; Triangle Mesh requires Static/Kinematic motion."));
+        }
         if(scene!=&value) { Clear(); scene=&value; }
         auto& api=physics.GetBodyInterface(); std::optional<Error> cookingError; bool wakeDynamics=false;
         // 削除済みEntityを生成より先に解放する。上限数のWorldでもslotを再利用できるようにする。
@@ -219,7 +234,7 @@ struct PhysicsWorld::Impl {
                 else shape=new JPH::CapsuleShape(component.halfHeight*scale[1],component.radius*(std::max)(scale[0],scale[2]));
                 const auto motion=component.motion==0?JPH::EMotionType::Static:component.motion==1?JPH::EMotionType::Dynamic:JPH::EMotionType::Kinematic;
                 JPH::BodyCreationSettings settings(shape,position,rotation,motion,static_cast<JPH::ObjectLayer>(component.motion==0?0:1));
-                settings.mCollisionGroup = JPH::CollisionGroup(collisionMasks, static_cast<uint32_t>(component.collisionMask), static_cast<uint32_t>(component.collisionLayer));
+                settings.mCollisionGroup = JPH::CollisionGroup(collisionMasks, UINT32_MAX, static_cast<uint32_t>(component.collisionLayer));
                 settings.mFriction=component.friction; settings.mRestitution=component.restitution; settings.mGravityFactor=component.gravityScale; settings.mIsSensor=component.sensor;
                 settings.mMotionQuality=component.continuous && component.motion==1 ? JPH::EMotionQuality::LinearCast : JPH::EMotionQuality::Discrete;
                 settings.mCollideKinematicVsNonDynamic=component.motion==2;
@@ -247,10 +262,205 @@ struct PhysicsWorld::Impl {
         return {};
     }
 };
-PhysicsWorld::PhysicsWorld(ModelSource models) {
+PhysicsWorld::WireframeStats PhysicsWorld::CollectWireframe(Scene& scene, const WireframeOptions& options, std::vector<DebugDrawLine>& output) {
+    output.clear();
+    WireframeStats stats;
+    const size_t budget = std::min(options.maxLines, size_t{65536});
+    std::set<uint64_t> selected;
+    for(const auto id : options.selected) {
+        selected.insert(Key(id));
+    }
+    const auto collect = [&](Entity entity) {
+        if(!entity.IsAlive()) {
+            return;
+        }
+        const auto* rigid = entity.GetComponent<RigidBodyComponent>();
+        const auto* collider = entity.GetComponent<ColliderComponent>();
+        if(!rigid && !collider) {
+            return;
+        }
+        const bool enabled = (!rigid || rigid->enabled) && (!collider || collider->enabled);
+        if(!enabled && !options.includeDisabled) {
+            return;
+        }
+        if(stats.truncated) {
+            return;
+        }
+        auto settings = rigid ? *rigid : RigidBodyComponent{};
+        if(!rigid) {
+            settings.motion = 0;
+        }
+        if(collider) {
+            collider->ApplyTo(settings);
+        }
+        const auto* transform = entity.GetComponent<TransformComponent>();
+        const auto* hierarchy = entity.GetComponent<HierarchyComponent>();
+        if(!transform || (rigid && !rigid->IsValid()) || (collider && !collider->IsValid()) ||
+            (hierarchy && hierarchy->parent.IsValid()) || (settings.shape == 3 && settings.motion == 1)) {
+            ++stats.skipped;
+            return;
+        }
+        // solverと同じroot座標・正scale・正規化回転を要求する。無効な形状を実体があるように描かない。
+        const std::array<float, 3> scale{transform->scale.x, transform->scale.y, transform->scale.z};
+        const JPH::Vec3 position(transform->translation.x, transform->translation.y, transform->translation.z);
+        const JPH::Quat rotation(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
+        const auto supported = [](float dimension) {
+            return std::isfinite(dimension) && dimension >= .0001f && dimension <= 100000;
+        };
+        bool valid = std::isfinite(position.GetX()) && std::isfinite(position.GetY()) && std::isfinite(position.GetZ()) &&
+            std::isfinite(rotation.GetX()) && std::isfinite(rotation.GetY()) && std::isfinite(rotation.GetZ()) && std::isfinite(rotation.GetW()) && rotation.IsNormalized();
+        for(float axis : scale) {
+            valid &= std::isfinite(axis) && axis >= .0001f && axis <= 10000;
+        }
+        const float radius = settings.radius * (settings.shape == 1 ? std::max({scale[0], scale[1], scale[2]}) : std::max(scale[0], scale[2]));
+        const float height = settings.halfHeight * scale[1];
+        if(settings.shape == 0) {
+            for(size_t axis = 0; axis < 3; ++axis) {
+                valid &= supported(settings.halfExtent[axis] * scale[axis]);
+            }
+        } else if(settings.shape < 3) {
+            valid &= supported(radius) && (settings.shape != 2 || settings.halfHeight == 0 || supported(height));
+        }
+        if(!valid) {
+            ++stats.skipped;
+            return;
+        }
+        const std::array<float, 4> color = !enabled ? std::array<float, 4>{.55f, .55f, .55f, .8f} :
+            settings.sensor ? std::array<float, 4>{1, .7f, .15f, 1} : std::array<float, 4>{.2f, 1, .35f, 1};
+        const auto before = output.size();
+        std::set<std::array<float, 6>> edges;
+        const auto line = [&](std::array<float, 3> first, std::array<float, 3> second) {
+            if(first == second || stats.truncated) {
+                return;
+            }
+            if(second < first) {
+                std::swap(first, second);
+            }
+            if(!edges.insert({first[0], first[1], first[2], second[0], second[1], second[2]}).second) {
+                return;
+            }
+            if(output.size() >= budget) {
+                stats.truncated = true;
+                return;
+            }
+            const auto start = Array(position + rotation * Vector(first));
+            const auto end = Array(position + rotation * Vector(second));
+            output.push_back({start, end, color, false});
+        };
+        constexpr float pi = 3.14159265359f;
+        constexpr int segments = 32;
+        if(settings.shape == 0) {
+            std::array<std::array<float, 3>, 8> corners{};
+            for(size_t corner = 0; corner < corners.size(); ++corner) {
+                for(size_t axis = 0; axis < 3; ++axis) {
+                    corners[corner][axis] = (corner & (size_t{1} << axis) ? 1.f : -1.f) * settings.halfExtent[axis] * scale[axis];
+                }
+            }
+            for(size_t corner = 0; corner < corners.size(); ++corner) {
+                for(size_t axis = 0; axis < 3; ++axis) {
+                    const auto other = corner ^ (size_t{1} << axis);
+                    if(corner < other) {
+                        line(corners[corner], corners[other]);
+                    }
+                }
+            }
+        } else if(settings.shape == 1 || (settings.shape == 2 && settings.halfHeight == 0)) {
+            // 非一様scaleでもJolt Sphereは最大軸の半径。楕円体を表示して判定と食い違わせない。
+            for(size_t plane = 0; plane < 3; ++plane) {
+                for(int segment = 0; segment < segments; ++segment) {
+                    const float a = 2 * pi * segment / segments, b = 2 * pi * (segment + 1) / segments;
+                    std::array<float, 3> first{}, second{};
+                    first[plane] = radius * std::cos(a);
+                    first[(plane + 1) % 3] = radius * std::sin(a);
+                    second[plane] = radius * std::cos(b);
+                    second[(plane + 1) % 3] = radius * std::sin(b);
+                    line(first, second);
+                }
+            }
+        } else if(settings.shape == 2) {
+            for(float sign : {-1.f, 1.f}) {
+                for(int segment = 0; segment < segments; ++segment) {
+                    const float a = 2 * pi * segment / segments, b = 2 * pi * (segment + 1) / segments;
+                    line({radius * std::cos(a), sign * height, radius * std::sin(a)},
+                         {radius * std::cos(b), sign * height, radius * std::sin(b)});
+                }
+                for(size_t plane = 0; plane < 2; ++plane) {
+                    for(int segment = 0; segment < segments / 2; ++segment) {
+                        const float a = pi * segment / (segments / 2), b = pi * (segment + 1) / (segments / 2);
+                        std::array<float, 3> first{}, second{};
+                        first[plane * 2] = radius * std::cos(a);
+                        first[1] = sign * (height + radius * std::sin(a));
+                        second[plane * 2] = radius * std::cos(b);
+                        second[1] = sign * (height + radius * std::sin(b));
+                        line(first, second);
+                    }
+                }
+            }
+            for(int side = 0; side < 4; ++side) {
+                const float angle = pi * side / 2;
+                line({radius * std::cos(angle), -height, radius * std::sin(angle)},
+                     {radius * std::cos(angle), height, radius * std::sin(angle)});
+            }
+        } else {
+            const Impl::MeshKey key{collider->meshAsset, settings.shape, scale};
+            auto found = impl_->wireframeMeshes.find(key);
+            if(found == impl_->wireframeMeshes.end()) {
+                // debug用の借用も上限付き。solverのBody・速度・接触cacheには触れない。
+                if(impl_->wireframeMeshes.size() >= 32) {
+                    impl_->wireframeMeshes.erase(impl_->wireframeMeshes.begin());
+                }
+                auto shape = impl_->Mesh(collider->meshAsset, settings.shape, scale);
+                if(!shape) {
+                    ++stats.skipped;
+                    return;
+                }
+                found = impl_->wireframeMeshes.emplace(key, *shape).first;
+            }
+            const auto& shape = *found->second;
+            JPH::Shape::GetTrianglesContext triangles;
+            // Joltの三角形は重心基準。COM offsetを戻してからEntityのposeを適用する。
+            shape.GetTrianglesStart(triangles, JPH::AABox::sBiggest(), shape.GetCenterOfMass(), JPH::Quat::sIdentity(), JPH::Vec3::sReplicate(1));
+            JPH::Float3 vertices[96];
+            while(!stats.truncated) {
+                const int count = shape.GetTrianglesNext(triangles, 32, vertices);
+                if(count == 0) {
+                    break;
+                }
+                for(int triangle = 0; triangle < count; ++triangle) {
+                    for(int edge = 0; edge < 3; ++edge) {
+                        const auto& first = vertices[triangle * 3 + edge];
+                        const auto& second = vertices[triangle * 3 + (edge + 1) % 3];
+                        line({first.x, first.y, first.z}, {second.x, second.y, second.z});
+                    }
+                }
+            }
+        }
+        if(output.size() > before) {
+            ++stats.drawn;
+        }
+    };
+    // 線数制限がある全体表示でも、選択対象を先に描き編集箇所を見失わないようにする。
+    std::set<uint64_t> visited;
+    for(const auto id : options.selected) {
+        if(visited.insert(Key(id)).second) {
+            collect(scene.GetEntity(id));
+        }
+    }
+    if(options.all) {
+        scene.ForEachEntity([&](Entity entity) {
+            if(!selected.contains(Key(entity.GetId()))) {
+                collect(entity);
+            }
+        });
+    }
+    return stats;
+}
+
+PhysicsWorld::PhysicsWorld(ModelSource models, CollisionMatrix matrix) {
     // 登録はProcess共通だがWorld/solverは個別所有。DLL/Managed callbackをJoltへ登録しない。
     static JoltRegistration registration;
     impl_=std::make_unique<Impl>(std::move(models));
+    impl_->collisionMasks->matrix = matrix;
 }
 PhysicsWorld::~PhysicsWorld()=default;
 Result<void> PhysicsWorld::Step(Scene& scene,float deltaTime) {

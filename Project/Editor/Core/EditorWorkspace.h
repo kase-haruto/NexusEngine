@@ -1,4 +1,5 @@
 #pragma once
+#include "Editor/Services/CollisionLayerEditor.h"
 #include "Editor/Gui/DockingLayout.h"
 #include "Editor/Gui/EditorToolbarRegistry.h"
 #include "Editor/Gui/MainMenuBar.h"
@@ -113,6 +114,7 @@ namespace NexusEngine {
 		EditorToolbarRegistry			   toolbar_;					   //< コマンドボタンと機能別UIの登録先
 		ConsoleService					   console_;					   //< 登録済みConsoleのみ
         PostProcessGraphDocument renderGraph_;
+        CollisionLayerEditor collisionLayers_; //< Levelと独立したProject共通設定・履歴
         std::function<void()> reloadPoller_; //< Workspace寿命の監視callback。Shutdown / patch前に解除する
         std::vector<std::function<void()>> framePollers_; //< 拡張初期化時だけ登録する。旧コードとworkerの所有をpatch前に解除する
 		PanelRegistry					   panels_;						   //< Panel所有

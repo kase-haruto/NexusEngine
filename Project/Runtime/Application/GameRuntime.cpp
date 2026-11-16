@@ -196,6 +196,12 @@ Result<void> GameRuntime::Update(float deltaTime) {
         // callbackのstackとScheduler実行guardが戻った後だけ次のWorldを準備する。
         auto next=std::make_unique<Level>("Level",level_->GetReflectionRegistration());
         auto root=next->SetResourceRoot(level_->ResourceRoot()); if(!root) return root;
+        if(!level_->CollisionConfiguration().empty()) {
+            auto configured = next->SetCollisionConfiguration(level_->CollisionConfiguration());
+            if(!configured) {
+                return configured;
+            }
+        }
         if(!next->SetPhysicsModelSource(level_->PhysicsModels())) return std::unexpected(Error(ErrorCategory::Resource,260,"Cannot configure the next Level collision assets."));
         auto loaded=next->Load(*requested);
         if(!loaded) { NEXUS_LOG_ERROR("Level",loaded.error().GetMessageText()); return {}; }

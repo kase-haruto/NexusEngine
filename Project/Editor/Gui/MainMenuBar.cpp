@@ -49,7 +49,8 @@ void MainMenuBar::Draw(const LocalizationService& text, const EditorCommandRegis
         ImGui::Separator(); item("edit.create", "scene.entity"); item("scene.model", "scene.model"); item("scene.camera", "scene.camera"); item("scene.light", "scene.light"); item("scene.sky", "scene.sky");
         ImGui::Separator(); item("edit.cut", "edit.cut"); item("edit.copy", "edit.copy"); item("edit.paste", "edit.paste");
         item("edit.duplicate", "edit.duplicate"); item("edit.delete", "edit.delete");
-        ImGui::Separator(); item("edit.preferences", "edit.preferences"); ImGui::EndMenu();
+        ImGui::Separator(); item("physics.settings", "physics.open");
+        item("edit.preferences", "edit.preferences"); ImGui::EndMenu();
     }
     if(ImGui::BeginMenu(text.Label("menu.play", "Play").c_str())) {
         if(ImGui::BeginMenu(text.Label("play.mode", "PlayMode").c_str())) {

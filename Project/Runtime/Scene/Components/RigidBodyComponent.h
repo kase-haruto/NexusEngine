@@ -20,7 +20,7 @@ struct RigidBodyComponent {
     std::array<float, 3> velocity{}, angularVelocity{}; //< World座標のm/s、rad/s
     bool sensor = false; //< 接触応答のないtrigger body
     bool continuous = false; //< DynamicでLinearCast CCDを使い、高速移動時のすり抜けを抑制する
-    int collisionLayer = 0, collisionMask = -1; //< 0～31の所属layerと相手layerの32bit mask。双方が許可した接触だけを作る
+    int collisionLayer = 0, collisionMask = -1; //< 所属layer。maskは保存互換用。接触可否はProject共通マトリクスで決める
     std::array<float, 3> force{}, impulse{}; //< 次Physics stepで消費する値。保存対象外
     /** \brief solverへ非有限値・不正形状を渡さない。Editorの共通setterも同じ検証を使う */
     bool IsValid() const noexcept {

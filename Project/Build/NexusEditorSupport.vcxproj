@@ -34,6 +34,7 @@
     <ClCompile Include="..\Editor\Gui\Properties\PropertyPages.cpp" />
     <ClCompile Include="..\Editor\Gui\PropertyDrawerRegistry.cpp" />
     <ClCompile Include="..\Editor\Gui\ReflectedPropertyEditor.cpp" />
+    <ClCompile Include="..\Editor\Services\CollisionLayerEditor.cpp" />
     <ClCompile Include="..\Editor\Gui\ViewportTools.cpp" />
     <ClCompile Include="..\Editor\Gui\Widgets\AssetPropertyWidget.cpp" />
     <ClCompile Include="..\Editor\Gui\Widgets\PropertyWidgets.cpp" />

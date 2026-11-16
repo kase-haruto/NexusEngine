@@ -13,6 +13,7 @@ class EditorCommandRegistry;
 class SceneEditService;
 class AssetPropertyWidget;
 class AssetCatalog;
+class CollisionLayerEditor;
 struct EditorContext {
     EditorSession& session; //< 既存編集documentの非所有参照
     SelectionService& selection; //< 全Panel共通の選択
@@ -24,6 +25,7 @@ struct EditorContext {
     SceneEditService& sceneEdits; //< 共通履歴に接続する構造編集
     AssetPropertyWidget* assets = nullptr; //< Application接続時にAsset編集を有効にする
     AssetCatalog* sources = nullptr; //< Workspace所有のSource範囲。drop時に外部パスと未登録型を拒否する
+    CollisionLayerEditor* collisionLayers = nullptr; //< Project共通のPhysics設定と履歴
 };
 /*-----------------------------------------------------------------------------------------
  * IEditorPanel

@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 const origin = process.env.NEXUS_SITE_ORIGIN || 'https://nexus-engine.nexus-engine-website.workers.dev';
 const get = async path => { const response = await fetch(new URL(path, origin), { cache: 'no-store' }); if (!response.ok) throw new Error(`HTTP ${response.status}: ${path}`); return response.json(); };
+const setupCatalog = await get('/launcher-releases.json');
+const expectedSetups = JSON.parse(await readFile(new URL('../dist/launcher-releases.json', import.meta.url), 'utf8'));
+if (setupCatalog.schemaVersion !== 1 || setupCatalog.releases.length !== expectedSetups.releases.length || expectedSetups.releases.some(item => !setupCatalog.releases.some(actual => actual.id === item.id && actual.version === item.version && actual.url === item.url && actual.sha256 === item.sha256 && actual.bytes === item.bytes && actual.changes === item.changes))) {
+  throw new Error('Public launcher version catalog does not match this deployment.');
+}
 const catalog = await get('/data/catalog.json');
 const launcherCatalog = await get('/releases.json');
 // 公開直後の古いカタログ同士が一致しても、新版の検証成功とはしない。

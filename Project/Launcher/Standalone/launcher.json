@@ -1,4 +1,5 @@
 {
   "catalogUrl": "",
-  "projectTool": "Tools/NexusProjectTool.exe"
+  "projectTool": "Tools/NexusProjectTool.exe",
+  "launcherVersion": "1.2.0"
 }

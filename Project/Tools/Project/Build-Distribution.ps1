@@ -3,7 +3,8 @@ param(
     [uri]$CatalogUrl,
     [string]$CatalogFile,
     [uri]$LauncherCatalogUrl,
-    [ValidatePattern('^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$')][string]$LauncherVersion = '1.0.0',
+    [ValidatePattern('^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$')][string]$LauncherVersion = '1.2.0',
+    [string]$LauncherChangesFile,
     [string]$ProjectToolDirectory,
     [string]$OutputDirectory = (Join-Path $PSScriptRoot ('../../../Generated/LauncherDistribution/' + [guid]::NewGuid().ToString('N'))),
     [switch]$FrameworkDependent
@@ -34,7 +35,9 @@ New-Item -ItemType Directory -Path $output | Out-Null
 if($LASTEXITCODE -ne 0) { throw 'Launcher publish failed.' }
 $catalogAddress = if($CatalogUrl) { $CatalogUrl.AbsoluteUri } else { '' }
 $launcherCatalogAddress = if($LauncherCatalogUrl) { $LauncherCatalogUrl.AbsoluteUri } elseif($CatalogUrl) { [uri]::new($CatalogUrl, 'launcher-releases.json').AbsoluteUri } else { '' }
-@{catalogUrl=$catalogAddress;catalogFile=$CatalogFile;projectTool='Tools/NexusProjectTool.exe';launcherCatalogUrl=$launcherCatalogAddress;launcherVersion=$LauncherVersion} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $launcherOutput 'launcher.json') -Encoding UTF8
+$launcherSettings = @{catalogUrl=$catalogAddress;catalogFile=$CatalogFile;projectTool='Tools/NexusProjectTool.exe';launcherCatalogUrl=$launcherCatalogAddress;launcherVersion=$LauncherVersion}
+if($LauncherChangesFile) { $launcherSettings.launcherChanges = Get-Content -LiteralPath $LauncherChangesFile -Raw -Encoding UTF8 }
+$launcherSettings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $launcherOutput 'launcher.json') -Encoding UTF8
 $tools = Join-Path $launcherOutput 'Tools'
 New-Item -ItemType Directory -Path $tools | Out-Null
 Copy-Item -LiteralPath (Join-Path $toolRoot 'NexusProjectTool.exe') -Destination $tools
@@ -43,7 +46,7 @@ $payload = Join-Path $output 'payload.zip'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 try {
     [IO.Compression.ZipFile]::CreateFromDirectory($launcherOutput, $payload)
-    & dotnet publish (Join-Path $launcherSource 'Setup/LauncherSetup.csproj') -c Release -r win-x64 --self-contained $selfContained "-p:PayloadZip=$payload" -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $setupOutput
+    & dotnet publish (Join-Path $launcherSource 'Setup/LauncherSetup.csproj') -c Release -r win-x64 --self-contained $selfContained "-p:Version=$LauncherVersion" "-p:PayloadZip=$payload" -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $setupOutput
     if($LASTEXITCODE -ne 0) { throw 'Setup publish failed.' }
 } finally {
     if(Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload }

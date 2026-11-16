@@ -11,11 +11,12 @@ internal sealed class ProjectBrowser : UserControl
     readonly Label detail = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Padding = new(12, 8, 12, 4) };
     readonly Button configuration = new() { Width = 108, Height = 36, Text = "Release" };
     readonly Button open = ActionButton("開く", 92), remove = ActionButton("一覧から外す", 120), delete = ActionButton("ごみ箱へ移動", 138);
+    readonly Button migrate = ActionButton("エンジンを変更…", 146);
     readonly List<ProjectEntry> entries = [];
     readonly ImageList rowHeight = new() { ImageSize = new(1, 42) };
     public ProjectEntry? Selected => list.SelectedItems.Count == 0 ? null : list.SelectedItems[0].Tag as ProjectEntry;
     public string Configuration => configuration.Text;
-    public event Action? OpenProject, AddProject, RefreshProjects, RemoveProject, DeleteProject, CreateProject;
+    public event Action? OpenProject, AddProject, RefreshProjects, RemoveProject, DeleteProject, CreateProject, ChangeEngine;
 
     public ProjectBrowser()
     {
@@ -23,7 +24,7 @@ internal sealed class ProjectBrowser : UserControl
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new(24, 0, 24, 20) };
         layout.ColumnStyles.Add(new(SizeType.Percent, 100));
         layout.RowStyles.Add(new(SizeType.Absolute, 54)); layout.RowStyles.Add(new(SizeType.Absolute, 46));
-        layout.RowStyles.Add(new(SizeType.Percent, 100)); layout.RowStyles.Add(new(SizeType.Absolute, 100)); layout.RowStyles.Add(new(SizeType.Absolute, 50));
+        layout.RowStyles.Add(new(SizeType.Percent, 100)); layout.RowStyles.Add(new(SizeType.Absolute, 100)); layout.RowStyles.Add(new(SizeType.AutoSize));
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         var create = ActionButton("＋ 新規作成", 126); var add = ActionButton("既存を追加…", 132); var refresh = ActionButton("更新", 74);
         create.Click += (_, _) => CreateProject?.Invoke(); add.Click += (_, _) => AddProject?.Invoke(); refresh.Click += (_, _) => RefreshProjects?.Invoke();
@@ -54,8 +55,9 @@ internal sealed class ProjectBrowser : UserControl
         list.Resize += (_, _) => { if (list.ClientSize.Width > 0) { list.Columns[0].Width = Math.Clamp(list.ClientSize.Width / 3, 150, 260); list.Columns[3].Width = Math.Max(150, list.ClientSize.Width - list.Columns[0].Width - 244); } };
         search.TextChanged += (_, _) => Rebuild();
         Choice(configuration, ["Release", "Develop", "Debug"], _ => { });
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        actions.Controls.AddRange([configuration, open, remove, delete]);
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+        actions.Controls.AddRange([configuration, open, migrate, remove, delete]);
+        migrate.Click += (_, _) => ChangeEngine?.Invoke();
         open.Click += (_, _) => OpenProject?.Invoke(); remove.Click += (_, _) => RemoveProject?.Invoke(); delete.Click += (_, _) => DeleteProject?.Invoke();
         var content = new Panel { Dock = DockStyle.Fill };
         content.Controls.Add(list); content.Controls.Add(count); count.Visible = false;
@@ -100,7 +102,7 @@ internal sealed class ProjectBrowser : UserControl
     void UpdateSelection()
     {
         var p = Selected;
-        open.Enabled = delete.Enabled = p != null && File.Exists(p.File); remove.Enabled = p != null;
+        open.Enabled = migrate.Enabled = delete.Enabled = p != null && File.Exists(p.File); remove.Enabled = p != null;
         if (p != null) configuration.Text = p.Configuration;
         detail.Text = p == null ? $"PROJECT LIBRARY   /   {entries.Count} プロジェクト\n\n一覧から選択すると詳細と起動・削除の操作が表示されます。" : $"{p.Name}   /   {p.EngineId} {p.Version} ({p.Association})\n{p.File}\nごみ箱へ移動すると、プロジェクトのフォルダー全体が対象になります。";
     }

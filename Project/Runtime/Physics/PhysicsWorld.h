@@ -6,10 +6,15 @@
 #include <functional>
 #include <string_view>
 #include <span>
+#include <vector>
+#include "Foundation/Math/DebugDrawLine.h"
 
 namespace NexusEngine {
 class Scene;
 struct ModelAssetData;
+using CollisionMatrix = std::array<uint32_t, 32>;
+/** 旧Levelは全layer間を許可し、既存の個別maskの挙動を維持する。 */
+CollisionMatrix DefaultCollisionMatrix() noexcept;
 /*-----------------------------------------------------------------------------------------
  * PhysicsWorld
  * - 既存SceneのRigidBody値とJolt solverを同期する。Entity/ComponentはSceneが所有する
@@ -18,6 +23,19 @@ struct ModelAssetData;
  *---------------------------------------------------------------------------------------*/
 class PhysicsWorld final {
 public:
+    /** 表示だけの診断要求。Entityの選択順を優先し、線数を制限して重いAssetでもUIを保護する。 */
+    struct WireframeOptions {
+        std::span<const EntityId> selected;
+        bool all = false;
+        bool includeDisabled = false;
+        size_t maxLines = 32768;
+    };
+    struct WireframeStats {
+        uint32_t drawn = 0, skipped = 0;
+        bool truncated = false;
+    };
+    /** simulationを進めず形状を抽出する。meshはsolverと同じcooking結果を使い、出力だけを所有側へコピーする。 */
+    WireframeStats CollectWireframe(Scene& scene, const WireframeOptions& options, std::vector<DebugDrawLine>& output);
     using ModelSource=std::function<Result<const ModelAssetData*>(std::string_view)>; //< Hostの既存CPU asset cacheを同期借用する
     struct Hit { EntityId entity; std::array<float,3> point{}, normal{}; float distance=0; }; //< 外部へ返す値コピー
     /** Entity pair単位の接触値。kindは1=Enter、2=Stay、3=Exit。ExitではEntityが破棄済みの場合もある。 */
@@ -28,7 +46,7 @@ public:
         bool sensor=false; //< どちらかのColliderがsensorの場合にtrue
     };
     /** \brief Process共通のJolt登録を確立し、このWorld専用のsolverを生成する */
-    explicit PhysicsWorld(ModelSource models = {});
+    explicit PhysicsWorld(ModelSource models = {}, CollisionMatrix matrix = DefaultCollisionMatrix());
     /** \brief bodyをsolverから解除・破棄した後、solverと作業領域を解放する */
     ~PhysicsWorld();
     PhysicsWorld(const PhysicsWorld&)=delete;

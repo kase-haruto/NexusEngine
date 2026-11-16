@@ -35,6 +35,12 @@ CoreCLRを全面削除する案は既存Projectのtargetと配布契約を破壊
 
 前提はWindows x64、Visual Studio C++環境、.NET SDK、.NET Framework 4.8参照Assembly、Mono x64 SDK。Mono RuntimeはC#言語のcompilerではないためSDK / Roslynを併用する。
 
+Installed SDKを発行する場合は、発行者が `Publish-Engine.ps1 -MonoRoot <Mono x64 SDKのルート>` または `NEXUS_MONO_ROOT` でMonoを指定する。発行前にRuntime / BCL / GAC / Configを検証し、`SDK/ThirdParty/Mono/Runtime` へライセンスとともに同梱する。この配置もEngine inventoryの対象となる。Monoを欠くSDKはリリースZIPの生成時にも拒否する。
+
+修正版のInstalled SDKでは利用者によるMono SDKの別途設定は不要。新規ProjectのBuildは明示した `NexusMonoRoot`、`NEXUS_MONO_ROOT`、Engine同梱Runtime、既存Project出力の `Mono` の順に解決する。.NET SDKと.NET Framework 4.8参照Assemblyは引き続き必要。
+
+1.2.0の配布版にはMono Runtimeが同梱されていないため、`Set NexusMonoRoot or NEXUS_MONO_ROOT` で停止する。暫定的には公式Mono x64 SDKの配置先を `NEXUS_MONO_ROOT` に設定し、ランチャーを再起動して再ビルドする。同梱修正の適用にはInstalled SDKと配布ZIPの再発行が必要で、既存インストールはソース修正だけでは更新されない。
+
 ```powershell
 $env:NEXUS_MONO_ROOT='C:/SDK/Mono'
 powershell -NoProfile -ExecutionPolicy Bypass -File Project/Tools/Project/Build-Game.ps1 `

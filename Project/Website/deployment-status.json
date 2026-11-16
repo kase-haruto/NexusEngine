@@ -1,21 +1,30 @@
 {
   "site_url": "https://nexus-engine.nexus-engine-website.workers.dev",
   "worker_name": "nexus-engine",
-  "deployment_version": "eed495d8-a7ef-4d4f-94e5-54eac79a9651",
+  "deployment_version": "bd475366-23b8-4794-9491-a47187f8d0dc",
   "site_verified": true,
   "downloads_published": true,
   "hosting": "Cloudflare Workers Free static assets only",
   "distribution": "GitHub Releases",
-  "release_url": "https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-2f2d369c9882",
+  "release_url": "https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-bce4d31df585",
   "r2_used": false,
   "verified_versions": [
+    "1.3.0",
+    "1.2.1",
     "1.2.0",
     "1.1.1",
     "1.1.0",
     "1.0.0"
   ],
-  "installer": "Generated/LauncherDistribution/Release-1.2.0/Setup/launcherSetup.exe",
-  "verified_at": "2026-11-13T17:42:57.0525737+09:00",
-  "verified_download_count": 5,
-  "locally_installed": false
+  "launcher_version": "1.2.0",
+  "launcher_catalog_verified": true,
+  "installer": "Generated/LauncherDistribution/Launcher-1.2.0/Setup/launcherSetup.exe",
+  "verified_at": "2026-11-16T01:35:02.6250462Z",
+  "verified_download_count": 7,
+  "locally_installed": false,
+  "launcher_client_verified": true,
+  "public_verification_document_verified": true,
+  "launcher_update_client_verified": true,
+  "launcher_update_from": "1.1.0",
+  "launcher_verification_document": "Project/Docs/Launcher-Release-1.2.0-Verification.md"
 }

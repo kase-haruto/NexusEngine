@@ -6,13 +6,15 @@ const item = { key: 'engines/nexus-1.1.1-Release.zip', bytes: 123, sha256: 'a'.r
 const asset = { url: 'https://github.com/kase-haruto/NexusEngine/releases/download/distribution-abcdef012345/nexus-1.1.1-Release.zip', bytes: 123, sha256: item.sha256 };
 test('launcher versions retain old installers, reject duplicates and exclude unpublished setups', () => {
   const key = `launcher/${'a'.repeat(64)}/launcherSetup.exe`;
-  const setup = { key, bytes: 123, sha256: 'a'.repeat(64), version: '1.2.0' };
+  const setup = { key, bytes: 123, sha256: 'a'.repeat(64), version: '1.2.0', changes: '既存プロジェクトのエンジン移行機能を追加。' };
   const uploaded = { ...asset, url: asset.url.replace('nexus-1.1.1-Release.zip', 'launcherSetup.exe'), version: '1.2.0' };
   assert.deepEqual(launcherCatalog(setup, {}), []);
   const catalog = launcherCatalog(setup, { [key]: uploaded });
   assert.equal(catalog.length, 1);
   assert.equal(catalog[0].id, 'nexus-launcher');
   assert.equal(catalog[0].version, '1.2.0');
+  assert.equal(catalog[0].changes, setup.changes);
+  assert.equal(launcherCatalog(null, { [key]: { ...uploaded, changes: setup.changes } })[0].changes, setup.changes);
   const oldKey = `launcher/${'b'.repeat(64)}/launcherSetup.exe`;
   const old = { ...uploaded, sha256: 'b'.repeat(64), version: '1.1.0' };
   assert.deepEqual(launcherCatalog(setup, { [key]: uploaded, [oldKey]: old }).map(r => r.version), ['1.2.0', '1.1.0']);

@@ -49,7 +49,7 @@ async function load() {
     $('setup-size').textContent = setup ? size(setup.bytes) : '公開時に表示';
     if (setup?.available) {
       const link = downloadLink(setup, 'Windows版をダウンロード ↓'); link.id = 'setup-download'; link.className = 'button primary'; $('setup-download').replaceWith(link);
-      $('setup-status').textContent = 'Windows x64 / GitHub Releasesからダウンロードします。';
+      $('setup-status').textContent = `${setup.version ? `Launcher ${setup.version} / ` : ''}Windows x64 / GitHub Releasesからダウンロードします。`;
       $('setup-hash').textContent = setup.sha256; $('setup-checksum').hidden = false;
       $('copy-setup').onclick = () => copy(setup.sha256, $('copy-setup'));
     } else {

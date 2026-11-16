@@ -84,13 +84,13 @@ Collider自体は既存の実装を利用し、Detailsの形状選択を名前�
 | Mesh | Triangle Mesh。Static／Kinematic専用 |
 | Convex Mesh | 凸包。Dynamicにも利用可能 |
 
-Mesh／Convex Meshは、先にCollision MeshへモデルAssetを指定してから形状を選びます。Collider単独はStatic、同じEntityにRigidBodyを追加するとその運動設定を使います。Colliderがある場合、形状・材質・Layer／MaskはCollider側の設定を優先します。RigidBodyだけの既存EntityにもLayer／Maskを設定できます。親付きRigidBodyなど、既存物理backendで未対応の配置は引き続き非対応です。
+Mesh／Convex Meshは、形状とCollision Meshをどちらからでも設定できます。未指定のCollision Meshは編集中の状態として保存できますが、シミュレーション開始前にはモデルAssetの指定が必要です。DynamicのRigidBodyでは三角形Meshを選択できず、Convex Meshを使います。Collider単独はStatic、同じEntityにRigidBodyを追加するとその運動設定を使います。Colliderがある場合、形状・材質・所属LayerはCollider側の設定を優先し、RigidBody側の重複欄は非表示になります。RigidBodyだけの既存Entityにも所属Layerを設定できます。親付きRigidBodyなど、既存物理backendで未対応の配置は引き続き非対応です。
 
 ```csharp
 var collider = GameCollider.Add(Entity, ColliderShape.Box);
 collider.HalfExtent = new Vector3(.5f, 1, .5f);
 collider.Layer = 1; // 0～31。0はDefault。
-collider.CollisionMask = CollisionLayers.Mask(0, 2);
+// 衝突相手はProject共通のPhysics設定で編集します。
 collider.IsTrigger = false;
 
 // 動く複雑な形状にはConvex Mesh。
@@ -103,13 +103,30 @@ if (World.Raycast(Entity.WorldPosition, -Vector3.UnitY, 10,
 }
 ```
 
-DetailsのCollision Layerで所属、Collides Withで相手を選択します。32レイヤーで、両方のmaskが互いの所属を許可した場合だけ衝突します。既定はLayer 0／Everythingなので既存Levelの挙動を維持します。Triggerにも同じfilterを適用します。Static同士の接触は従来どおり生成しません。
+DetailsのCollision Layerで所属レイヤーを選び、読み取り専用の衝突相手一覧を確認します。「衝突レイヤー設定を開く」または編集メニューの「Physics / 衝突レイヤー」から共通設定画面を開きます。名前付きの三角形マトリクスと選択レイヤーのチェック一覧は同じ設定を編集します。
 
+衝突可否はProject共通のマトリクスだけで決まります。旧Collider／RigidBodyの`collisionMask`は保存互換のため保持しますが、接触判定には使用せず、Inspectorにも表示しません。共通設定は`Config/PhysicsLayers.settings`に自動保存し、すべてのレベルとPlay／単体Runtimeへ反映します。独自のConfigパスを持つProjectも対応します。詳細は[衝突レイヤーの設定](CollisionLayersREADME.md)を参照してください。
+
+Level保存形式は`NEXUS_LEVEL 14`です。共通ルールをLevelファイルへ重複保存しません。旧v1～13は読込に対応し、Project設定がある場合は旧v13のLevel内マトリクスより優先します。新形式はv14未対応エンジンでは開けません。
 Raycastのmaskは対象の所属Layerで絞り込みます。maskを省略すると全Layerです。C++の`NexusGame::Physics::Raycast`も最後の引数にmaskを指定できます。
 
 ## 検証
 
-- EditorTests：参照のLevel保存／再読込、削除とslot再利用、32bit maskの保存、bilateral衝突filter、mask付きRaycast、時計の入力制約。
+- EditorTests：参照のLevel保存／再読込、削除とslot再利用、32bit maskの保存、bilateral衝突filter、mask付きRaycast、時計の入力制約。衝突マトリクスのクリック／Undo／Redo／Play複製、bit31の衝突禁止と再許可、v14保存／v13読込、未設定Meshの編集順と実行拒否、未選択Colliderの既定描画も検証。
 - 実CoreCLR：参照・Collider API、タイマー登録／取消、固定更新回数、TimeScale=0と復帰、Pause、Reload後の時計とcallback寿命。
 - 生成した実C++ DLL：OnCreate／OnUpdate／OnFixedUpdate、空Behaviour、登録と停止。
-- C#：CoreCLRとMono用net48をビルド。Mono runtime実行は未検証。
+- C#：CoreCLRとMono用net48をビルド。1.3.0配布時にはSDK同梱Mono上でも参照・時計・タイマー・固定更新・Reloadを実行検証済み（Release-1.3.0-Verification参照）。
+
+## ビューポートでコライダーを表示する
+
+Collider、または形状を内蔵したRigidBodyを持つEntityは、未選択でもビューポートへワイヤーフレームを表示します。右上の「表示」（目のアイコン）の詳細矢印から「コライダー」を開き、「非表示」「選択したコライダー」「すべてのコライダー」を切り替えられます。既定はすべてのコライダーです。既存のreinstancingスナップショットに表示モードがある場合は、その明示設定を維持します。
+
+- 緑：通常の衝突形状
+- 橙：Trigger（sensor）
+- 灰：無効化された形状。「無効なコライダーも表示」で確認できます。
+
+Box・Sphere・Capsuleに加え、MeshとConvex Meshを表示します。プリミティブはJoltと同じ寸法・scale規則で描き、Mesh／Convexは衝突用にcookingしたJolt形状を使います。モデルのnode transformとConvexの重心offsetにも対応します。物体の背後の線も表示する診断用overlayです。
+
+Play中も表示でき、実行World内の移動・回転・scaleや動的生成に追従します。表示設定はPlay中も変更できます。表示だけでシミュレーションを進めたり、力・速度・接触通知・Level保存値を変更したりすることはありません。単体ゲームの画面には表示しません。
+
+全体表示では選択対象を優先し、最大32,768本まで描画します。上限に達した場合や、衝突meshの取得失敗・不正な寸法・未対応の親付き物理Entityなどは、ビューポート下部へ表示します。対応していない形状を別の外枠で代用しません。表示モードはエディタのreinstancing時にも保持します。

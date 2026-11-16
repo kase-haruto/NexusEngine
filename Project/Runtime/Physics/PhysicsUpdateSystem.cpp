@@ -6,6 +6,9 @@
 #include <cmath>
 
 namespace NexusEngine {
+PhysicsUpdateSystem::PhysicsUpdateSystem(std::unique_ptr<PhysicsWorld>& world, const PhysicsWorld::ModelSource& models, const CollisionMatrix& matrix) noexcept
+    : world_(world), models_(models), matrix_(matrix) {
+}
 std::span<const std::type_index> PhysicsUpdateSystem::GetReadComponents() const noexcept {
     static const std::array types{std::type_index(typeid(HierarchyComponent)),std::type_index(typeid(ColliderComponent))};
     return types;
@@ -22,7 +25,9 @@ Result<void> PhysicsUpdateSystem::Update(Scene& scene, float deltaTime) {
     bool required = false;
     scene.ForEachEntity([&](Entity entity) { RigidBodyComponent body; required |= ResolvePhysicsBody(entity,body); });
     if(!required && !world_) return {};
-    if(!world_) world_ = std::make_unique<PhysicsWorld>(models_);
+    if(!world_) {
+        world_ = std::make_unique<PhysicsWorld>(models_, matrix_);
+    }
     return world_->Step(scene, deltaTime);
 }
 }

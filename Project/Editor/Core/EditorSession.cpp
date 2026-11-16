@@ -63,12 +63,31 @@ bool NexusEngine::EditorSession::SetStaticLighting(PersistentId id, bool enabled
 }
 
 
+NexusEngine::Result<void> NexusEngine::EditorSession::SetCollisionConfiguration(const std::filesystem::path& file) {
+    if(IsPlaying()) {
+        return std::unexpected(Error(ErrorCategory::Resource, 274, "Stop Play before editing collision settings."));
+    }
+    if(GetLevel()) {
+        auto configured = GetLevel()->SetCollisionConfiguration(file);
+        if(!configured) {
+            return configured;
+        }
+    }
+    collisionConfiguration_ = file;
+    return {};
+}
 NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
 	auto document = std::make_unique<LevelDocument>(reflection_);
 	auto result = document->Create("EditorLevel");
 	if(!result) return result;
     if(!document->GetLevel()->SetPhysicsModelSource(physicsModels_)) return std::unexpected(Error(ErrorCategory::Resource,260,"Cannot configure document collision assets."));
     if(!resourceRoot_.empty()) { auto resources=document->GetLevel()->SetResourceRoot(resourceRoot_); if(!resources) return resources; }
+    if(!collisionConfiguration_.empty()) {
+        auto configured = document->GetLevel()->SetCollisionConfiguration(collisionConfiguration_);
+        if(!configured) {
+            return configured;
+        }
+    }
 	Close();
 	levelDocument_ = std::move(document);
 	return {};
@@ -96,6 +115,16 @@ bool NexusEngine::EditorSession::StartPlay() {
         if(!resources) { playError_=resources.error(); return false; }
     }
 	level->Lighting() = GetLevel()->Lighting();
+    if(!level->SetCollisionLayers(GetLevel()->CollisionLayers())) {
+        return false;
+    }
+    if(!collisionConfiguration_.empty()) {
+        auto configured = level->SetCollisionConfiguration(collisionConfiguration_);
+        if(!configured) {
+            playError_ = configured.error();
+            return false;
+        }
+    }
 	level->ExchangeScene(std::move(scene));
 	auto result = playRuntime_.Start(std::move(level));
 	if(!result) { playError_ = std::move(result.error()); return false; }
@@ -122,6 +151,12 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem
 	if(!result) return result;
     if(!document->GetLevel()->SetPhysicsModelSource(physicsModels_)) return std::unexpected(Error(ErrorCategory::Resource,260,"Cannot configure document collision assets."));
     if(!resourceRoot_.empty()) { auto resources=document->GetLevel()->SetResourceRoot(resourceRoot_); if(!resources) return resources; }
+    if(!collisionConfiguration_.empty()) {
+        auto configured = document->GetLevel()->SetCollisionConfiguration(collisionConfiguration_);
+        if(!configured) {
+            return configured;
+        }
+    }
 	Close();
 	levelDocument_ = std::move(document);
 	return {};

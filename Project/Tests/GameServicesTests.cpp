@@ -10,6 +10,7 @@
 #include "Public/Nexus/ScriptAttachments.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
 #include "Runtime/Level/Level.h"
+#include "Runtime/Physics/CollisionLayerSettings.h"
 #include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/RigidBodyComponent.h"
 #include "Runtime/Scene/Components/ColliderComponent.h"
@@ -17,6 +18,7 @@
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Platform/Development/LiveCodingAgent.h"
 #include <cassert>
+#include <cfloat>
 #include <cstring>
 #include <thread>
 #include <stdexcept>
@@ -472,8 +474,14 @@ void TimeAndReferenceOperations() {
 }
 /** bilateral maskを実simulationで確認し、ray maskと保存値にも同じ32bit契約を適用する。 */
 void CollisionLayerOperations() {
+    const auto root = std::filesystem::absolute("Generated/GameServicesTests/CollisionProject");
+    const auto config = root / "Config/PhysicsLayers.settings";
+    CollisionLayerSettings settings;
+    settings.names[31] = "Player";
+    assert(settings.Save(config));
     Level level;
     assert(level.LoadEmpty());
+    assert(level.SetResourceRoot(root));
     auto floor = level.CreateEntity("Layer floor");
     auto* collider = floor.AddComponent<ColliderComponent>();
     collider->halfExtent = {10, .5f, 10};
@@ -498,8 +506,8 @@ void CollisionLayerOperations() {
     for(int step = 0; step < 90; ++step) {
         assert(level.Update(1.f / 60));
     }
-    assert(ball.GetComponent<TransformComponent>()->translation.y < -1);
-    // 一方のmaskだけが許可しても通過した。両方を許可すると床で停止する。
+    assert(ball.GetComponent<TransformComponent>()->translation.y > .4f);
+    // 旧個別maskは0でも接触を妨げない。共通表が唯一の接触ルール。
     collider->collisionMask = static_cast<int32_t>(0x80000000u);
     ball.GetComponent<TransformComponent>()->translation.y = 2;
     body->velocity = {};
@@ -507,18 +515,194 @@ void CollisionLayerOperations() {
         assert(level.Update(1.f / 60));
     }
     assert(ball.GetComponent<TransformComponent>()->translation.y > .4f);
+    // 全体表は個別maskの許可より優先する。bit31と対称pair、稼働中cacheの再生成を検証する。
+    auto matrix = level.CollisionLayers();
+    matrix[0] &= ~(uint32_t{1} << 31);
+    assert(!level.SetCollisionLayers(matrix));
+    assert(level.CollisionLayers() == DefaultCollisionMatrix());
+    matrix[31] &= ~uint32_t{1};
+    settings.matrix = matrix;
+    assert(settings.Save(config));
+    assert(level.SetCollisionConfiguration(config));
+    ball.GetComponent<TransformComponent>()->translation.y = 2;
+    body->velocity = {};
+    for(int step = 0; step < 90; ++step) {
+        assert(level.Update(1.f / 60));
+    }
+    assert(ball.GetComponent<TransformComponent>()->translation.y < -1);
     const auto id = floor.GetComponent<PersistentIdComponent>()->value;
     const auto path = std::filesystem::path("Generated/GameServicesTests/Layers.level");
     assert(level.Save(path));
     Level restored;
+    assert(restored.SetResourceRoot(root));
     assert(restored.Load(path));
+    assert(restored.CollisionLayers() == matrix);
+    std::ifstream savedFile(path, std::ios::binary);
+    std::string savedText{std::istreambuf_iterator<char>(savedFile), std::istreambuf_iterator<char>()};
+    assert(savedText.starts_with("NEXUS_LEVEL 14\n"));
+    assert(savedText.find("COLLISION_MATRIX") == std::string::npos);
+    auto legacyText = savedText;
+    legacyText.replace(0, std::string("NEXUS_LEVEL 14").size(), "NEXUS_LEVEL 13");
+    std::string legacyMatrix = "COLLISION_MATRIX";
+    for(uint32_t row : DefaultCollisionMatrix()) {
+        legacyMatrix += " " + std::to_string(row);
+    }
+    legacyMatrix += '\n';
+    legacyText.insert(legacyText.find("ENTITY "), legacyMatrix);
+    const auto legacyPath = path.parent_path() / "LegacyLayers.level";
+    {
+        std::ofstream legacyFile(legacyPath, std::ios::binary);
+        legacyFile << legacyText;
+    }
+    Level legacy;
+    assert(legacy.Load(legacyPath));
+    assert(legacy.CollisionLayers() == DefaultCollisionMatrix());
+    assert(legacy.SetResourceRoot(root));
+    assert(legacy.Load(legacyPath));
+    assert(legacy.CollisionLayers() == matrix);
+    const auto invalidPath = root / "Config/InvalidPhysics.settings";
+    {
+        std::ofstream invalidFile(invalidPath, std::ios::binary);
+        invalidFile << "NEXUS_COLLISION_LAYERS 1\n\"Default\" 0 4294967296\n";
+    }
+    assert(!restored.SetCollisionConfiguration(invalidPath));
+    assert(restored.CollisionLayers() == matrix);
+    assert(restored.FindEntity(id).IsAlive());
+    // 許可へ戻すと同じWorldで再び衝突する。設定変更後にsolverの旧filterを残さない。
+    assert(level.SetCollisionLayers(DefaultCollisionMatrix()));
+    ball.GetComponent<TransformComponent>()->translation.y = 2;
+    body->velocity = {};
+    for(int step = 0; step < 180; ++step) {
+        assert(level.Update(1.f / 60));
+    }
+    assert(ball.GetComponent<TransformComponent>()->translation.y > .4f);
     const auto* saved = restored.FindEntity(id).GetComponent<ColliderComponent>();
     assert(saved && saved->collisionLayer == 0 && static_cast<uint32_t>(saved->collisionMask) == 0x80000000u);
     assert(GameApiBridge::Services().close(client) == NEXUS_GAME_OK);
 }
 }
 
+namespace {
+/** 見た目の境界ではなく、Joltと同じ寸法規則・cooking・重心offsetで線を作ることを確認する。 */
+void ColliderWireframeOperations() {
+    Level level;
+    assert(level.LoadEmpty());
+    auto entity = level.CreateEntity("Collider preview");
+    auto* collider = entity.AddComponent<ColliderComponent>();
+    auto* transform = entity.GetComponent<TransformComponent>();
+    collider->halfExtent = {1, 2, 3};
+    transform->scale = {2, 3, 4};
+    transform->translation = {10, 20, 30};
+    transform->rotation = Quaternion::FromEulerRadians({0, 0, 1.57079632679f});
+    std::array<EntityId, 1> selection{entity.GetId()};
+    PhysicsWorld::WireframeOptions options;
+    options.selected = selection;
+    std::vector<DebugDrawLine> lines;
+    const auto bounds = [&]() {
+        std::array<float, 6> result{FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX};
+        for(const auto& line : lines) {
+            for(const auto& point : {line.start, line.end}) {
+                for(size_t axis = 0; axis < 3; ++axis) {
+                    assert(std::isfinite(point[axis]));
+                    result[axis] = std::min(result[axis], point[axis]);
+                    result[axis + 3] = std::max(result[axis + 3], point[axis]);
+                }
+            }
+        }
+        return result;
+    };
+    auto stats = level.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 1 && stats.skipped == 0 && !stats.truncated && lines.size() == 12);
+    auto extent = bounds();
+    const float box[]{4, 18, 18, 16, 22, 42};
+    for(size_t axis = 0; axis < 6; ++axis) {
+        assert(std::abs(extent[axis] - box[axis]) < 1e-4f);
+    }
+    transform->rotation = Quaternion::Identity();
+    collider->shape = 1;
+    stats = level.CollectColliderWireframe(options, lines);
+    extent = bounds();
+    assert(lines.size() == 96 && extent[0] == 8 && extent[3] == 12 && extent[1] == 18 && extent[4] == 22);
+    collider->shape = 2;
+    stats = level.CollectColliderWireframe(options, lines);
+    extent = bounds();
+    assert(stats.drawn == 1 && std::abs(extent[1] - 16.5f) < 1e-4f && std::abs(extent[4] - 23.5f) < 1e-4f);
+    collider->enabled = false;
+    stats = level.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 0 && lines.empty());
+    options.includeDisabled = true;
+    stats = level.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 1 && lines.front().color[0] == lines.front().color[1]);
+    collider->enabled = true;
+    collider->sensor = true;
+    stats = level.CollectColliderWireframe(options, lines);
+    assert(lines.front().color[0] == 1 && lines.front().color[1] == .7f);
+    auto* body = entity.AddComponent<RigidBodyComponent>();
+    body->velocity = {1, 2, 3};
+    body->force = {4, 5, 6};
+    const auto position = transform->translation;
+    const auto frame = level.GetScene()->Time().frame;
+    stats = level.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 1 && transform->translation == position && body->force[0] == 4 && body->velocity[0] == 1);
+    assert(level.GetScene()->Time().frame == frame && level.PhysicsContacts().empty());
+    // RigidBodyだけの旧Entityも対象。Colliderがあればそちらの形状を優先する。
+    assert(entity.RemoveComponent<ColliderComponent>());
+    stats = level.CollectColliderWireframe(options, lines);
+    assert(lines.size() == 12);
+    assert(entity.RemoveComponent<RigidBodyComponent>());
+    collider = entity.AddComponent<ColliderComponent>();
+    collider->shape = 3;
+    collider->meshAsset = "offset-box";
+    auto model = PrimitiveMeshBuilder::Build(PrimitiveShape::Cube);
+    assert(model);
+    model->nodes[0].localTransform.translation = {3, 0, 0};
+    Level meshLevel;
+    assert(meshLevel.LoadEmpty());
+    int loads = 0;
+    assert(meshLevel.SetPhysicsModelSource([&](std::string_view asset) -> Result<const ModelAssetData*> {
+        ++loads;
+        assert(asset == "offset-box");
+        return &*model;
+    }));
+    auto mesh = meshLevel.CreateEntity("Offset mesh");
+    auto* meshCollider = mesh.AddComponent<ColliderComponent>();
+    meshCollider->meshAsset = "offset-box";
+    meshCollider->shape = 3;
+    mesh.GetComponent<TransformComponent>()->scale = {2, 1, 1};
+    mesh.GetComponent<TransformComponent>()->translation = {10, 0, 0};
+    selection[0] = mesh.GetId();
+    stats = meshLevel.CollectColliderWireframe(options, lines);
+    extent = bounds();
+    assert(stats.drawn == 1 && std::abs(extent[0] - 15) < 1e-4f && std::abs(extent[3] - 17) < 1e-4f);
+    stats = meshLevel.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 1 && loads == 1);
+    meshCollider->shape = 4;
+    stats = meshLevel.CollectColliderWireframe(options, lines);
+    extent = bounds();
+    assert(stats.drawn == 1 && loads == 2 && std::abs(extent[0] - 15) < 1e-4f && std::abs(extent[3] - 17) < 1e-4f);
+    // 欠損Assetや未対応poseが混ざっても、有効な他の形状を表示する。
+    auto invalid = meshLevel.CreateEntity("Invalid collider");
+    invalid.AddComponent<ColliderComponent>()->shape = 9;
+    options.all = true;
+    stats = meshLevel.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 1 && stats.skipped == 1);
+    options.maxLines = 5;
+    stats = meshLevel.CollectColliderWireframe(options, lines);
+    assert(stats.truncated && lines.size() == 5);
+    // staleな選択はslot再利用後の別Entityを表示しない。
+    options.all = false;
+    options.maxLines = 32768;
+    assert(meshLevel.DestroyEntity(mesh));
+    auto replacement = meshLevel.CreateEntity("Replacement");
+    assert(replacement.AddComponent<ColliderComponent>());
+    stats = meshLevel.CollectColliderWireframe(options, lines);
+    assert(stats.drawn == 0 && lines.empty());
+    std::cout << "PASS: collider wireframes, scaled primitives, cooked Mesh/Convex COM, cache, disabled/trigger, limits and read-only preview\n";
+}
+}
+
 void RunGameServicesTests() {
+    ColliderWireframeOperations();
     TimeAndReferenceOperations();
     CollisionLayerOperations();
     std::cout << "PASS: persistent Entity/Component reference values, deletion/reuse/load, clock limits, bilateral collision layers and masked rays\n";
