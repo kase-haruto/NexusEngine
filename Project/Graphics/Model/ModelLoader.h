@@ -26,8 +26,9 @@ namespace NexusEngine {
 		/**
 		 * \brief glTF 2.0（.gltf/.glb）からMesh、Node、Skin、Animationを読み込む
 		 * \param filePath 読み込むglTFまたはGLBファイル
+		 * \param requireDrawableMesh falseならMeshを持たないアニメーション専用sourceも受け入れる
 		 * \return Graphics API非依存のModelデータ
 		 */
-		[[nodiscard]] Result<ModelAssetData> LoadGltf(const std::filesystem::path& filePath) const;
+		[[nodiscard]] Result<ModelAssetData> LoadGltf(const std::filesystem::path& filePath, bool requireDrawableMesh = true) const;
 	};
 } // namespace NexusEngine

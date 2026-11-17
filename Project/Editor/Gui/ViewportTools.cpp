@@ -219,7 +219,7 @@ void ViewportTools::SetModel(const ModelAssetData& model, const ModelInstance& p
 }
 void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     frame_ = &frame;
-    if(session_.IsPlaying()) return;
+    if(session_.IsPlaying() || session_.HasAnimationPreview()) return;
     PrepareCameraGuides(aspect);
     if(generation_ != session_.Generation()) {
         generation_ = session_.Generation(); position_ = {0,2,-10}; yaw_ = pitch_ = 0;
@@ -247,7 +247,7 @@ void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     frame.camera = RenderCamera{{}, *view, projection, Multiply(*view,projection)};
 }
 bool ViewportTools::Pick(float x, float y, bool toggle) {
-    if(session_.IsPlaying() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera ||
+    if(session_.IsPlaying() || session_.HasAnimationPreview() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera ||
         !std::isfinite(x) || !std::isfinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
     auto* level = session_.GetLevel();
     if(guidesVisible_ && level && level->GetScene() && viewportWidth_>0 && viewportHeight_>0) {
@@ -499,7 +499,7 @@ std::optional<Matrix4x4> ViewportTools::GetSelectionPivot() const {
     return pivot;
 }
 void ViewportTools::FocusSelection() {
-    if(session_.IsPlaying()) return;
+    if(session_.IsPlaying() || session_.HasAnimationPreview()) return;
     auto pivotMatrix = GetSelectionPivot();
     if(!pivotMatrix) return;
     const auto pivot = Point({},*pivotMatrix);
@@ -688,7 +688,7 @@ void ViewportTools::DrawOverlay(float x, float y, float width, float height, boo
         return;
     }
     DrawColliderGuides(x, y, width, height);
-    if(session_.IsPlaying()) {
+    if(session_.IsPlaying() || session_.HasAnimationPreview()) {
         return;
     }
     inputBlocked |= ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);

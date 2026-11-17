@@ -325,7 +325,7 @@ Type / Property IDは各512 byte、文字列値は3072 byteまで。合計reques
 
 ### Game Module
 
-任意export `NexusGetGameComponentMetadata(uint32_t abi, NexusGameString* output)`はゲーム開始前に値Metadataを宣言する。ABI1、UTF-8 JSON最大1 MiB、返却文字列はDLL解放まで有効。Engineがコピーし、共通Reflectionへ登録する。ゲームobjectを生成せず、宣言省略は従来DLLと互換。サンプルは[GameComponents.h.in](../Templates/NativeModule/GameComponents.h.in)。
+任意export `NexusGetGameComponentMetadata(uint32_t abi, NexusGameString* output)`はゲーム開始前に値Metadataを宣言する。ABI1、UTF-8 JSON最大1 MiB、返却文字列はDLL解放まで有効。Engineがコピーし、共通Reflectionへ登録する。ゲームobjectを生成せず、宣言省略は従来DLLと互換。サンプルは[GameComponents.h.in](../Templates/Samples/NativeModule/GameComponents.h.in)。
 
 定義: [GameModule.h](../Public/Nexus/GameModule.h)。
 
@@ -480,7 +480,7 @@ _ = setTarget.Invoke(
     NativeValue.From(new System.Numerics.Vector3(5, 0, 0)));
 ```
 
-Module / Systemが登録済みであることが前提。Game Projectの型付きFacadeへこの処理を包む例は[Hybrid/CrowdSimulation.cs.in](../Templates/Hybrid/CrowdSimulation.cs.in)。
+Module / Systemが登録済みであることが前提。Game Projectの型付きFacadeへこの処理を包む例は[Hybrid/CrowdSimulation.cs.in](../Templates/Samples/Hybrid/CrowdSimulation.cs.in)。
 
 ### 追加Component APIを使うC++（実行未検証）
 

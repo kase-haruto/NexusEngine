@@ -2,7 +2,7 @@
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Core/EditorSession.h"
 #include "Foundation/Utility/String/ConvertString.h"
-#include "ThirdParty/imnodes/imnodes.h"
+#include "ThirdParty/imgui/imgui.h"
 #include <cstring>
 #include <cmath>
 #include <cfloat>
@@ -26,55 +26,29 @@ namespace NexusEngine {
             if(!ImGui::InputText(label,buffer.data(),buffer.size())) return false;
             text=buffer.data(); return true;
         }
-        ImVec2 Scaled(ImVec2 v,float scale) { return {v.x*scale,v.y*scale}; }
-        struct CanvasScale {
-            ImGuiStyle gui=ImGui::GetStyle();
-            ImNodesStyle nodes=ImNodes::GetStyle();
-            explicit CanvasScale(float zoom) {
-                ImGui::GetStyle().ScaleAllSizes(zoom);
-                ImGui::PushFont(nullptr,gui.FontSizeBase*zoom);
-                auto& s=ImNodes::GetStyle();
-                s.GridSpacing*=zoom; s.NodeCornerRounding*=zoom; s.NodePadding=Scaled(s.NodePadding,zoom);
-                s.NodeBorderThickness*=zoom; s.LinkThickness*=zoom; s.LinkHoverDistance*=zoom;
-                s.PinCircleRadius*=zoom; s.PinQuadSideLength*=zoom; s.PinTriangleSideLength*=zoom;
-                s.PinLineThickness*=zoom; s.PinHoverRadius*=zoom; s.PinOffset*=zoom;
-                s.MiniMapPadding=Scaled(s.MiniMapPadding,zoom); s.MiniMapOffset=Scaled(s.MiniMapOffset,zoom);
-            }
-            ~CanvasScale() { ImGui::PopFont(); ImGui::GetStyle()=gui; ImNodes::GetStyle()=nodes; }
-        };
+
     }
-    PostProcessGraphPanel::~PostProcessGraphPanel() { if(nodes_) ImNodes::DestroyContext(nodes_); }
+    PostProcessGraphPanel::~PostProcessGraphPanel() = default;
     void PostProcessGraphPanel::SetZoom(float value,const std::array<float,2>& anchor) {
         if(!std::isfinite(value)) return;
         value=std::clamp(value,0.25f,2.0f);
         if(value==zoom_) return;
-        const auto pan=ImNodes::EditorContextGetPanning();
-        const float ratio=value/zoom_;
-        ImNodes::EditorContextResetPanning({anchor[0]-(anchor[0]-pan.x)*ratio,anchor[1]-(anchor[1]-pan.y)*ratio});
-        zoom_=value; positioned_.clear();
+        zoom_ = editor_.ZoomAt(zoom_, value, anchor);
+        positioned_.clear();
     }
     void PostProcessGraphPanel::FrameAll() {
         if(document_.Graph().nodes.empty() || canvasSize_[0]<=0 || canvasSize_[1]<=0) return;
-        ImVec2 minimum{FLT_MAX,FLT_MAX}, maximum{-FLT_MAX,-FLT_MAX};
-        for(const auto& node:document_.Graph().nodes) {
-            if(!positioned_.contains(node.id)) continue;
-            const auto size=ImNodes::GetNodeDimensions(node.id);
-            minimum.x=std::min(minimum.x,node.position[0]); minimum.y=std::min(minimum.y,node.position[1]);
-            maximum.x=std::max(maximum.x,node.position[0]+size.x/zoom_); maximum.y=std::max(maximum.y,node.position[1]+size.y/zoom_);
+        std::vector<UI::NodeEditor::Layout> layouts;
+        for(const auto& node : document_.Graph().nodes) {
+            if(positioned_.contains(node.id)) {
+                layouts.push_back({node.id, node.position});
+            }
         }
-        if(minimum.x==FLT_MAX) return;
-        const float fit=std::min((canvasSize_[0]-64)/std::max(maximum.x-minimum.x,1.0f),
-            (canvasSize_[1]-64)/std::max(maximum.y-minimum.y,1.0f));
-        zoom_=std::clamp(fit,0.25f,2.0f);
-        ImNodes::EditorContextResetPanning({canvasSize_[0]*0.5f-(minimum.x+maximum.x)*0.5f*zoom_,
-            canvasSize_[1]*0.5f-(minimum.y+maximum.y)*0.5f*zoom_});
+        zoom_ = editor_.FrameAll(layouts, canvasSize_, zoom_);
         positioned_.clear();
     }
     void PostProcessGraphPanel::Draw(const EditorContext& context) {
-        auto* previous = ImNodes::GetCurrentContext();
-        if(!nodes_) nodes_ = ImNodes::CreateContext();
-        ImNodes::SetCurrentContext(nodes_);
-        ImNodes::GetIO().LinkDetachWithModifierClick.Modifier = &ImGui::GetIO().KeyCtrl;
+        UI::NodeEditorSession session(editor_);
         auto& graph = document_.Graph(); const auto before = graph;
         const bool editable=!context.session.IsPlaying();
         bool changed = false, remove = false, frameAll = false, resetZoom = false;
@@ -98,8 +72,8 @@ namespace NexusEngine {
             for(auto kind : {PostProcessNodeKind::Bloom,PostProcessNodeKind::ToneMapping,PostProcessNodeKind::Vignette,
                             PostProcessNodeKind::Shader,PostProcessNodeKind::Fxaa}) {
                 if(ImGui::MenuItem(text.Text(Name(kind)).c_str())) {
-                    const auto pan=ImNodes::EditorContextGetPanning();
-                    addNode(kind,{(80-pan.x)/zoom_,(80-pan.y)/zoom_});
+                    const auto pan=editor_.Panning();
+                    addNode(kind,{(80-pan[0])/zoom_,(80-pan[1])/zoom_});
                 }
             }
             ImGui::EndPopup();
@@ -135,27 +109,25 @@ namespace NexusEngine {
         const float drawZoom=zoom_;
         bool canvasHovered=false;
         {
-        CanvasScale scale(drawZoom);
-        ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);
-        ImNodes::BeginNodeEditor();
+        UI::NodeEditorCanvas canvas(editor_, drawZoom);
         auto origin=ImGui::GetCursorScreenPos(), size=ImGui::GetWindowSize();
         canvasOrigin_={origin.x,origin.y}; canvasSize_={size.x,size.y};
         for(auto& node : graph.nodes) {
-            if(positioned_.insert(node.id).second) ImNodes::SetNodeGridSpacePos(node.id,{node.position[0]*drawZoom,node.position[1]*drawZoom});
+            if(positioned_.insert(node.id).second) editor_.SetNodePosition(node.id,{node.position[0]*drawZoom,node.position[1]*drawZoom});
             const bool hdr = PostProcessGraph::OutputsHdr(node.kind);
-            ImNodes::PushColorStyle(ImNodesCol_TitleBar,hdr ? IM_COL32(105,70,35,255) : IM_COL32(35,72,100,255));
-            ImNodes::BeginNode(node.id); ImGui::PushID(node.id);
-            ImNodes::SetNodeDraggable(node.id,editable);
-            ImNodes::BeginNodeTitleBar(); ImGui::TextUnformatted(text.Text(Name(node.kind)).c_str()); ImNodes::EndNodeTitleBar();
+            editor_.PushTitleColor(hdr ? IM_COL32(105,70,35,255) : IM_COL32(35,72,100,255));
+            editor_.BeginNode(node.id); ImGui::PushID(node.id);
+            editor_.SetDraggable(node.id,editable);
+            editor_.BeginTitle(); ImGui::TextUnformatted(text.Text(Name(node.kind)).c_str()); editor_.EndTitle();
             if(node.kind != PostProcessNodeKind::Scene) {
-                ImNodes::BeginInputAttribute(node.id*3);
-                ImGui::TextUnformatted(PostProcessGraph::InputsHdr(node.kind)?"HDR":"Color"); ImNodes::EndInputAttribute();
+                editor_.BeginInput(node.id*3);
+                ImGui::TextUnformatted(PostProcessGraph::InputsHdr(node.kind)?"HDR":"Color"); editor_.EndInput();
             }
             // An empty ImGui group can inherit the title's previous-frame rectangle.
             // With imnodes' padded title this feeds its old width back into node sizing.
             // Source/output nodes have no controls, so do not emit an empty attribute.
             if(node.kind!=PostProcessNodeKind::Scene && node.kind!=PostProcessNodeKind::Output) {
-            ImNodes::BeginStaticAttribute(node.id*3+2); ImGui::PushItemWidth(195*drawZoom);
+            editor_.BeginStatic(node.id*3+2); ImGui::PushItemWidth(195*drawZoom);
             if(node.kind!=PostProcessNodeKind::Scene && node.kind!=PostProcessNodeKind::Output && node.kind!=PostProcessNodeKind::ToneMapping)
                 changed |= ImGui::Checkbox(text.Text("graph.enabled").c_str(),&node.enabled);
             auto& s=graph.settings;
@@ -183,27 +155,27 @@ namespace NexusEngine {
             }
             default: break;
             }
-            ImGui::PopItemWidth(); ImNodes::EndStaticAttribute();
+            ImGui::PopItemWidth(); editor_.EndStatic();
             }
             if(node.kind != PostProcessNodeKind::Output) {
-                ImNodes::BeginOutputAttribute(node.id*3+1); ImGui::TextUnformatted(hdr?"HDR":"Color"); ImNodes::EndOutputAttribute();
+                editor_.BeginOutput(node.id*3+1); ImGui::TextUnformatted(hdr?"HDR":"Color"); editor_.EndOutput();
             }
-            ImGui::PopID(); ImNodes::EndNode(); ImNodes::PopColorStyle();
+            ImGui::PopID(); editor_.EndNode(); editor_.PopTitleColor();
         }
-        for(const auto& link:graph.links) ImNodes::Link(link.to,link.from*3+1,link.to*3);
-        ImNodes::MiniMap(0.15f,ImNodesMiniMapLocation_BottomRight);
+        for(const auto& link:graph.links) editor_.Link(link.to,link.from*3+1,link.to*3);
+        editor_.MiniMap(0.15f);
         canvasHovered=ImGui::IsWindowHovered() && !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
-        ImNodes::EndNodeEditor(); ImNodes::PopAttributeFlag();
+        canvas.Close();
         }
         document_.capturesKeyboard = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
         int start=0,end=0,destroyed=0;
-        if(editable && ImNodes::IsLinkCreated(&start,&end)) {
+        if(editable && editor_.LinkCreated(start,end)) {
             if(start%3==0) std::swap(start,end);
             if(start%3==1 && end%3==0) {
                 auto connected=graph.Connect(start/3,end/3); if(!connected) document_.Applied(connected); else changed=true;
             }
         }
-        if(editable && ImNodes::IsLinkDestroyed(&destroyed)) { std::erase_if(graph.links,[&](auto l){return l.to==destroyed;}); changed=true; }
+        if(editable && editor_.LinkDestroyed(destroyed)) { std::erase_if(graph.links,[&](auto l){return l.to==destroyed;}); changed=true; }
         if(editable && document_.capturesKeyboard && !ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl) {
             const bool redoing=ImGui::GetIO().KeyShift || ImGui::IsKeyPressed(ImGuiKey_Y,false);
             if(ImGui::IsKeyPressed(ImGuiKey_Z,false) || ImGui::IsKeyPressed(ImGuiKey_Y,false)) {
@@ -212,13 +184,14 @@ namespace NexusEngine {
             if(ImGui::IsKeyPressed(ImGuiKey_S,false)) { auto saved=document_.Save(); if(!saved) document_.Applied(saved); }
         }
         if(canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !ImGui::IsAnyItemActive()) {
-            const auto mouse=ImGui::GetMousePos(), pan=ImNodes::EditorContextGetPanning();
-            contextPosition_={(mouse.x-canvasOrigin_[0]-pan.x)/drawZoom,(mouse.y-canvasOrigin_[1]-pan.y)/drawZoom};
+            const auto mouse = ImGui::GetMousePos();
+            const auto pan = editor_.Panning();
+            contextPosition_={(mouse.x-canvasOrigin_[0]-pan[0])/drawZoom,(mouse.y-canvasOrigin_[1]-pan[1])/drawZoom};
             contextNode_=0; int link=0;
-            if(ImNodes::IsNodeHovered(&contextNode_)) {
-                if(!ImNodes::IsNodeSelected(contextNode_)) { ImNodes::ClearNodeSelection(); ImNodes::ClearLinkSelection(); ImNodes::SelectNode(contextNode_); }
-            } else if(ImNodes::IsLinkHovered(&link)) {
-                if(!ImNodes::IsLinkSelected(link)) { ImNodes::ClearNodeSelection(); ImNodes::ClearLinkSelection(); ImNodes::SelectLink(link); }
+            if(editor_.HoveredNode(contextNode_)) {
+                if(!editor_.NodeSelected(contextNode_)) { editor_.ClearSelection(); editor_.SelectNode(contextNode_); }
+            } else if(editor_.HoveredLink(link)) {
+                if(!editor_.LinkSelected(link)) { editor_.ClearSelection(); editor_.SelectLink(link); }
             }
             ImGui::OpenPopup("GraphContext");
         }
@@ -230,9 +203,8 @@ namespace NexusEngine {
                 ImGui::EndMenu();
             }
             auto* clicked=graph.Find(contextNode_);
-            const bool canDelete=ImNodes::NumSelectedLinks()>0 || [&] {
-                std::vector<int> selection(static_cast<size_t>(ImNodes::NumSelectedNodes()));
-                if(!selection.empty()) ImNodes::GetSelectedNodes(selection.data());
+            const bool canDelete=!editor_.SelectedLinks().empty() || [&] {
+                auto selection = editor_.SelectedNodes();
                 for(int id:selection) { const auto* n=graph.Find(id); if(n && n->kind!=PostProcessNodeKind::Scene && n->kind!=PostProcessNodeKind::Output) return true; }
                 return false;
             }();
@@ -251,8 +223,7 @@ namespace NexusEngine {
         }
         remove |= document_.capturesKeyboard && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete,false);
         if(editable && remove) {
-            std::vector<int> selected(static_cast<size_t>(ImNodes::NumSelectedNodes()));
-            if(!selected.empty()) ImNodes::GetSelectedNodes(selected.data());
+            auto selected = editor_.SelectedNodes();
             for(int id:selected) {
                 const auto* node=graph.Find(id);
                 if(node && node->kind!=PostProcessNodeKind::Scene && node->kind!=PostProcessNodeKind::Output) {
@@ -260,14 +231,13 @@ namespace NexusEngine {
                     std::erase_if(graph.links,[&](auto l){return l.from==id||l.to==id;}); positioned_.erase(id); changed=true;
                 }
             }
-            selected.resize(static_cast<size_t>(ImNodes::NumSelectedLinks()));
-            if(!selected.empty()) ImNodes::GetSelectedLinks(selected.data());
+            selected = editor_.SelectedLinks();
             for(int id:selected) { std::erase_if(graph.links,[&](auto l){return l.to==id;}); changed=true; }
-            ImNodes::ClearNodeSelection(); ImNodes::ClearLinkSelection();
+            editor_.ClearSelection();
         }
         for(auto& node:graph.nodes) if(positioned_.contains(node.id)) {
-            auto p=ImNodes::GetNodeGridSpacePos(node.id);
-            const std::array<float,2> position{p.x/drawZoom,p.y/drawZoom};
+            auto p=editor_.NodePosition(node.id);
+            const std::array<float,2> position{p[0]/drawZoom,p[1]/drawZoom};
             if(std::abs(node.position[0]-position[0])>0.01f || std::abs(node.position[1]-position[1])>0.01f) { node.position=position; document_.Changed(false); }
         }
         if(frameAll) FrameAll();
@@ -278,6 +248,5 @@ namespace NexusEngine {
             SetZoom(zoom_*std::pow(1.15f,std::clamp(ImGui::GetIO().MouseWheel,-20.0f,20.0f)),{mouse.x-canvasOrigin_[0],mouse.y-canvasOrigin_[1]});
         }
         if(changed) { undo_.push_back(before); if(undo_.size()>64) undo_.erase(undo_.begin()); redo_.clear(); document_.Changed(); }
-        ImNodes::SetCurrentContext(previous);
     }
 }

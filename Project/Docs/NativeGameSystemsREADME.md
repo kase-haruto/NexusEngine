@@ -177,11 +177,11 @@ Module.updateは目標(5, 0, 0)を渡し、後続SchedulerのSystem.Updateが速
 | Runtime/Application/GameRuntime.cpp | 既存LevelをLoaderへ渡し、Native Systemの更新失敗もframe境界で停止する |
 | Runtime/Scene/SystemScheduler.h | 所有adapter登録・解除、実行中確認とアクセス制約 |
 | Runtime/Scene/SystemScheduler.cpp | 既存phase順への登録と実行中解除拒否 |
-| Templates/NativeModule/CrowdSimulationSystem.h.in | サンプルSystem宣言 |
-| Templates/NativeModule/CrowdSimulationSystem.cpp.in | 共通ECSを操作するサンプル実装 |
-| Templates/NativeModule/Main.cpp.in | 登録・署名宣言・取得・利用例 |
-| Templates/NativeModule/README.md.in | 生成Projectの説明 |
-| Templates/native-module.nxtemplate | 生成ファイルを追加 |
+| Templates/Samples/NativeModule/CrowdSimulationSystem.h.in | サンプルSystem宣言 |
+| Templates/Samples/NativeModule/CrowdSimulationSystem.cpp.in | 共通ECSを操作するサンプル実装 |
+| Templates/Samples/NativeModule/Main.cpp.in | 登録・署名宣言・取得・利用例 |
+| Templates/Samples/NativeModule/README.md.in | 生成Projectの説明 |
+| Templates/Samples/native-module.nxtemplate | 生成ファイルを追加 |
 | Tests/NativeGameSystemTests.cpp | 順序・失効・Thread・再入・部分生成失敗などの検証ソース |
 | Tests/Fixtures/NativeModule/Module.cpp | 独立DLLによる登録とModule以前のSystem破棄を観測 |
 | Tests/NativeGameModuleTests.cpp | Runtimeの既存Schedulerへの追加を確認するassert |

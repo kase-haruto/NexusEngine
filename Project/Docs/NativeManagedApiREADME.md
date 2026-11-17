@@ -185,16 +185,16 @@ Framework内の単純な値box・pin用allocationは残る。毎Entity / 毎Prop
 | Managed/Nexus.Managed/GameWorld.cs | session単位の関数表受渡し・失効 |
 | Managed/Nexus.Managed.Bootstrap/EntryPoints.cs | 世代Worldへdispatchを渡し停止時に解除 |
 | Managed/Nexus.Managed.Bootstrap/GameplayEntryPoints.cs | V5 layout検証、旧entryを維持した共通開始 |
-| Templates/NativeModule/CrowdBinding.h.in | Game固有の明示Binding |
-| Templates/NativeModule/Main.cpp.in | V2登録exportへ移行 |
-| Templates/NativeModule/README.md.in | 公開方法とModule ID |
-| Templates/native-module.nxtemplate | Bindingヘッダー生成 |
-| Templates/Hybrid/NativeCombat.cpp.in | 既存commandに加えてCrowd登録 |
-| Templates/Hybrid/CrowdSimulation.cs.in | 型付きFacade |
-| Templates/Hybrid/EnemyController.cs.in | Facadeを使う最小Script |
-| Templates/Hybrid/PlayerController.cs.in | 既存初期Levelでも呼出経路を利用 |
-| Templates/Hybrid/README.md.in | 寿命・更新順・失敗・使用方法 |
-| Templates/hybrid-gameplay.nxtemplate | 共通SystemとFacade / Scriptの生成 |
+| Templates/Samples/NativeModule/CrowdBinding.h.in | Game固有の明示Binding |
+| Templates/Samples/NativeModule/Main.cpp.in | V2登録exportへ移行 |
+| Templates/Samples/NativeModule/README.md.in | 公開方法とModule ID |
+| Templates/Samples/native-module.nxtemplate | Bindingヘッダー生成 |
+| Templates/Samples/Hybrid/NativeCombat.cpp.in | 既存commandに加えてCrowd登録 |
+| Templates/Samples/Hybrid/CrowdSimulation.cs.in | 型付きFacade |
+| Templates/Samples/Hybrid/EnemyController.cs.in | Facadeを使う最小Script |
+| Templates/Samples/Hybrid/PlayerController.cs.in | 既存初期Levelでも呼出経路を利用 |
+| Templates/Samples/Hybrid/README.md.in | 寿命・更新順・失敗・使用方法 |
+| Templates/Samples/hybrid-gameplay.nxtemplate | 共通SystemとFacade / Scriptの生成 |
 | Tools/Engine/Publish-Engine.ps1 | 既存SDKの明示配布一覧へNativeBindings.csを追加。発行は実行しない |
 | Tests/NativeGameSystemTests.cpp | Public ABIの型・値・世代・例外・再入等の検証ソース |
 | Tests/Fixtures/NativeModule/Module.cpp | 独立DLLで型付きSystem APIを明示公開 |

@@ -160,14 +160,14 @@ Module用propsはLivePP.propsをimportせず、ModuleをLiveCodingAgentへ自動
 | `Build/Nexus.GameModule.props` | Public includeだけを持つDLL用Build契約 |
 | `Build/NexusRuntime.vcxproj` | Bridge / Loaderのコンパイル対象追加 |
 | `NexusEngine.vcxproj` | 互換ホストにも同じ実装を追加 |
-| `Templates/native-module.nxtemplate` | 独立DLLテンプレート登録 |
-| `Templates/NativeModule/Main.cpp.in` | DLL内stateと共通Entity / Transformを利用するゲームコード |
-| `Templates/NativeModule/Host.cpp.in` | Module配置を明示するホスト結合コード |
-| `Templates/NativeModule/GameModule.vcxproj.in` | Game.dll生成 |
-| `Templates/NativeModule/GameRuntime.vcxproj.in` | RuntimeホストとDLLのBuild依存 |
-| `Templates/NativeModule/GameEditor.vcxproj.in` | EditorホストとDLLのBuild依存 |
-| `Templates/NativeModule/Game.slnx.in` | 三つのProjectのSolution |
-| `Templates/NativeModule/BuildTargets.json.in` | ホストとDLLの構成別配置 |
+| `Templates/Samples/native-module.nxtemplate` | 独立DLLテンプレート登録 |
+| `Templates/Samples/NativeModule/Main.cpp.in` | DLL内stateと共通Entity / Transformを利用するゲームコード |
+| `Templates/Samples/NativeModule/Host.cpp.in` | Module配置を明示するホスト結合コード |
+| `Templates/Samples/NativeModule/GameModule.vcxproj.in` | Game.dll生成 |
+| `Templates/Samples/NativeModule/GameRuntime.vcxproj.in` | RuntimeホストとDLLのBuild依存 |
+| `Templates/Samples/NativeModule/GameEditor.vcxproj.in` | EditorホストとDLLのBuild依存 |
+| `Templates/Samples/NativeModule/Game.slnx.in` | 三つのProjectのSolution |
+| `Templates/Samples/NativeModule/BuildTargets.json.in` | ホストとDLLの構成別配置 |
 | `Tools/Project/ProjectTemplates.cpp` | DLL Project用UUIDのトークン展開 |
 | `Tools/Project/ProjectBuild.h` / `.cpp` | nativeModule配置解決とDLL stamp照合 |
 | `Tools/Project/Write-GameBuildStamp.ps1` | 任意のnativeModule項目とDLL hash記録。旧形式維持 |

@@ -47,7 +47,7 @@ void PanelRegistry::Draw(const EditorContext& context, bool disableEditing) {
         if(ImGui::Begin(title.c_str(), &entry.isOpen, flags)) {
             // DisabledAlpha also dims Image vertices. Keep the runtime viewport at full
             // brightness while preventing edits in the other panels during Play.
-            ImGui::BeginDisabled(disableEditing && entry.Id() != "Viewport");
+            ImGui::BeginDisabled(disableEditing && entry.Id() != "Viewport" && entry.Id() != "AnimationStudio");
             entry.panel->Draw(context);
             ImGui::EndDisabled();
         }

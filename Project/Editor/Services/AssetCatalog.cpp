@@ -38,6 +38,15 @@ std::vector<AssetEntry> AssetCatalog::List(const std::filesystem::path& path) co
         std::ranges::transform(extension, extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         std::string type = directory ? "asset.folder" : "asset.file";
         if(extension == ".gltf" || extension == ".glb" || extension == ".obj") type = "asset.model";
+        if(extension == ".nxanim") {
+            type = "asset.animation";
+        }
+        if(extension == ".nxcontroller") {
+            type = "asset.animator";
+        }
+        if(extension == ".nxtimeline") {
+            type = "asset.timeline";
+        }
         if(extension == ".cs") type = "asset.csharp";
         if(extension == ".cpp" || extension == ".cc" || extension == ".cxx" || extension == ".h" || extension == ".hpp" || extension == ".hxx") type = "asset.cpp";
         if(extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".bmp" || extension == ".tif" || extension == ".tiff") type = "asset.texture";

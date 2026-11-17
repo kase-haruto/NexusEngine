@@ -16,6 +16,7 @@
 #include "Editor/Services/NotificationService.h"
 #include "Editor/Services/PropertyEditService.h"
 #include "Editor/Services/PostProcessGraphDocument.h"
+#include "Editor/Services/AnimationStudioDocument.h"
 #include "Editor/Services/SceneEditService.h"
 #include "EditorSession.h"
 #include "Foundation/Logging/BufferedLogSink.h"
@@ -56,6 +57,7 @@ namespace NexusEngine {
 		void							   RestoreAfterReinstancing(const ReflectionValue& snapshot);
 		PanelRegistry&					   Panels() { return panels_; }
         PostProcessGraphDocument& RenderGraph() noexcept { return renderGraph_; }
+        AnimationStudioDocument& AnimationStudio() noexcept;
 		const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
 		MainMenuBar&					   Menu() { return menu_; }
 		EditorCommandRegistry&			   Commands() { return commands_; }
@@ -113,6 +115,7 @@ namespace NexusEngine {
 		EditorCommandRegistry			   commands_;					   //< Menuの操作窓口
 		EditorToolbarRegistry			   toolbar_;					   //< コマンドボタンと機能別UIの登録先
 		ConsoleService					   console_;					   //< 登録済みConsoleのみ
+        AnimationStudioDocument animationStudio_;
         PostProcessGraphDocument renderGraph_;
         CollisionLayerEditor collisionLayers_; //< Levelと独立したProject共通設定・履歴
         std::function<void()> reloadPoller_; //< Workspace寿命の監視callback。Shutdown / patch前に解除する

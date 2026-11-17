@@ -135,17 +135,18 @@ chore: ビルド設定を更新
 
 Windows x64、C++23/v145を含むVisual Studio、Windows SDK（DXC）、PowerShell 7を使用します。リポジトリRootから、必要なターゲットだけを順にビルドできます。
 
-ランチャーとエンジンを一緒に開発するときは、リポジトリ直下の **[NexusEngine.slnx](NexusEngine.slnx)** をVisual Studioで開きます。.NET 10のWindowsデスクトップ開発環境も必要です。`Launcher/Launcher`が新しいC#ランチャー、`Engine`がC++エンジン・エディタ、`Legacy Launcher/NexusLauncher`が既存C++ランチャーです。スタートアップ切り替えと構成別のビルド方法は[Visual Studio共通ソリューション](Project/Docs/VisualStudioDevelopment.md)にまとめています。
+ランチャーとエンジンを一緒に開発するときは、リポジトリ直下の **[NexusEngine.slnx](NexusEngine.slnx)** をVisual Studioで開きます。.NET 10のWindowsデスクトップ開発環境も必要です。`Launcher/Launcher`が新しいC#ランチャー、`Engine`がC++エンジン・エディタです（C++版Launcherは削除済み）。スタートアップ切り替えと構成別のビルド方法は[Visual Studio共通ソリューション](Project/Docs/VisualStudioDevelopment.md)にまとめています。
 
 ```powershell
-foreach($target in @('NexusProjectTool','NexusEditor','NexusRuntimeHost','NexusLauncher')) {
+foreach($target in @('NexusProjectTool','NexusEditor','NexusRuntimeHost')) {
     & ./Project/Tests/Invoke-GraphicsBuild.ps1 -Project "Project/Build/$target.vcxproj" -Configuration Debug
     if($LASTEXITCODE -ne 0) { throw "Build failed: $target" }
 }
-& ./Generated/Modules/x64/Debug/NexusLauncher/NexusLauncher.exe
+dotnet build ./Project/Launcher/Standalone/Launcher.csproj -c Debug -p:NexusDevelopmentBuild=true
+& ./Project/Launcher/Standalone/bin/Debug/net10.0-windows/NexusLauncher.exe
 ```
 
-初回はLauncherのEngine library → Add an engineでDevelopment repositoryとしてこのリポジトリを登録するか、Installed SDKのmanifestを登録します。Create projectでEngineとテンプレートを明示選択し、作成後にProjectsからOpenします。SDK同梱の`Bin/NexusLauncher.exe`も利用できます。
+初回は配布Launcherの「インストール済み」からDevelopmentまたはInstalled SDKの`.nxengine`を登録します。Create projectでEngineとテンプレートを明示選択し、作成後にProjectsからOpenします。LauncherはSDKとは独立した配布版を利用します。
 
 作成後のC++開発はGame側の`Game.slnx`をVisual Studioで開き、`GameEditor`をスタートアップにしてF5実行できます。単体ゲームのデバッグは`GameRuntime`を選びます。毎回Launcherから開く必要はありません。Engine登録は共有ID/バージョンをPC内のSource/SDK配置へ結び付けるローカル情報で、オンライン認証ではありません。
 
@@ -153,7 +154,7 @@ foreach($target in @('NexusProjectTool','NexusEditor','NexusRuntimeHost','NexusL
 
 Editorの`実行 → 実行モード`で`エディタ内`または`別ウィンドウ`を選び、共通の`実行 / 停止`ボタン（F5 / Shift+F5）を使います。別ウィンドウではGameRuntimeだけを非同期に増分ビルド・検証して保存済み起動Levelを実行します。停止ボタンはビルド取消にも対応し、一時停止はエディタ内の再生だけが対象です。
 
-VSで`Project/Build/NexusEngineModules.slnx`を開く場合は、NexusLauncherをスタートアップProjectに指定します。既存サンプル用のSampleGameEditor/Runtimeも保持しています。通常のGameは生成されたGameEditor/GameRuntimeで起動し、特定Gameの型を汎用ホストへ暗黙に混在させません。
+Launcherの開発・起動にはルートの`NexusEngine.slnx`を使用します。既存サンプル用のSampleGameEditor/Runtimeも保持しています。通常のGameは生成されたGameEditor/GameRuntimeで起動し、特定Gameの型を汎用ホストへ暗黙に混在させません。
 
 ここに示す手順は個別ターゲットのビルドです。この作業中は指示どおりSolution全体のビルドや既存成果物のCleanを実行していません。
 
@@ -172,7 +173,7 @@ Phase 1の実装構成、個別ビルド、独立Gameの参照方法と制限は
 [Project Workflow](Project/Docs/ProjectWorkflow.md)、Project Browserの操作と検証は
 [Launcher](Project/Docs/Launcher.md)を参照してください。
 
-配布用の独立ランチャーは`Project/Launcher/Standalone`、セットアップは`Project/Launcher/Setup`にあります。`Project/Tools/Project/Build-Distribution.ps1`または`Project/Build/NexusDistribution.proj`でReleaseのCLIと.NETランタイムを含む`launcherSetup.exe`を生成できます。既存C++ランチャーは開発・エンジン移行用として保持しています。Cloudflare R2での版別配布、ビルド・起動方法、検証状況は[ランチャー配布手順](Project/Docs/LauncherDistribution.md)を参照してください。
+配布用の独立ランチャーは`Project/Launcher/Standalone`、セットアップは`Project/Launcher/Setup`にあります。`Project/Tools/Project/Build-Distribution.ps1`または`Project/Build/NexusDistribution.proj`でReleaseのCLIと.NETランタイムを含む`launcherSetup.exe`を生成できます。C++版Launcherは削除済みです。エンジン移行もWinForms版で行います。Cloudflare R2での版別配布、ビルド・起動方法、検証状況は[ランチャー配布手順](Project/Docs/LauncherDistribution.md)を参照してください。
 
 普段の起動、エンジン・ランチャーの更新、旧版への復旧、配布時の手順は[ランチャー運用ガイド](Project/Docs/LauncherOperations.md)にまとめています。
 安定版SDKの発行とDevelopment / Installedの参照方法は

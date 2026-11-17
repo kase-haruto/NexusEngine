@@ -568,7 +568,22 @@ namespace {
                 Require(std::abs(transform.At(3,0) - (i == 0 ? .4f : .2f)) < .0001f,
                     "Shadow pose does not match the individual animation time.");
             }
-            scene.primitives.resize(1); scene.primitives[0].animation.reset();
+            scene.primitives.resize(1);
+            scene.primitives[0].animation->blendIndex = 0;
+            scene.primitives[0].animation->blendTime = .25f;
+            scene.primitives[0].animation->blendWeight = .5f;
+            render(ShadowMode::ShadowMap, true);
+            const auto& blendDraws = GraphicsBackendTestAccess::ShadowDraws(renderer);
+            Require(blendDraws.size() == 1, "Blended instance did not generate a shadow draw.");
+            const auto& blendTransform = animationTest == 2 ? blendDraws[0].jointPalette[0] : blendDraws[0].world;
+            Require(std::abs(blendTransform.At(3,0) - .3f) < .0001f, "Shadow did not use the blended pose.");
+            scene.primitives[0].animation->layers = {{"",0,.5f,.25f,true},{"",0,.25f,.75f,true}};
+            render(ShadowMode::ShadowMap,true);
+            const auto& layerDraws = GraphicsBackendTestAccess::ShadowDraws(renderer);
+            Require(layerDraws.size() == 1,"Layered animation did not generate a shadow draw.");
+            const auto& layerTransform = animationTest == 2 ? layerDraws[0].jointPalette[0] : layerDraws[0].world;
+            Require(std::abs(layerTransform.At(3,0)-.25f)<.0001f,"Shadow did not use the multi-layer mixer pose.");
+            scene.primitives[0].animation.reset();
             Require(render(ShadowMode::ShadowMap, false) == bind, "Removing animation did not restore bind pose.");
             Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
             Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
@@ -1025,10 +1040,16 @@ namespace {
 #include "MeshAssignmentProfileTests.inl"
 #include "IncrementalAssetTests.inl"
 
+namespace NexusEngine::Tests { void RunAnimationAssetTests(const char* externalModel); }
+
 int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+        if(argc >= 2 && std::strcmp(argv[1], "--animation-assets") == 0) {
+            NexusEngine::Tests::RunAnimationAssetTests(argc >= 3 ? argv[2] : nullptr);
+            return 0;
+        }
         if(argc==2 && std::strcmp(argv[1],"--shadow-stability")==0) {
             Run(false); Run(true); Run(true,true); return 0;
         }

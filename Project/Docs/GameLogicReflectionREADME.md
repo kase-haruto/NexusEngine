@@ -142,9 +142,9 @@ Versionエラーが表示された場合は対応するMetadata / Gameコード�
 | Runtime/Reflection/ManagedScriptMetadata.cpp | 既知ID / AliasのVersion検証、書戻し拒否と理由accessor |
 | Managed/Nexus.Managed/ScriptMetadata.cs | Restore / Capture前の同じVersion検証 |
 | Editor/Gui/ReflectedPropertyEditor.cpp | 共通Descriptorの理由を既存Details経路で表示 |
-| Templates/Hybrid/EnemyController.cs.in | Native APIへ渡すTargetをExpose |
-| Templates/Hybrid/PlayerController.cs.in | 初期LevelでもTargetを共通編集・保存可能にする |
-| Templates/Hybrid/README.md.in | 所有者・編集フロー・Version失敗時の説明 |
+| Templates/Samples/Hybrid/EnemyController.cs.in | Native APIへ渡すTargetをExpose |
+| Templates/Samples/Hybrid/PlayerController.cs.in | 初期LevelでもTargetを共通編集・保存可能にする |
+| Templates/Samples/Hybrid/README.md.in | 所有者・編集フロー・Version失敗時の説明 |
 | Tests/ManagedReflectionTests.cpp | 同一EntityのC++ / C#編集・共通Drawer・履歴・Document保存・将来Version・Metadata更新の検証ソース |
 | Tests/ManagedGameplayTests.cpp | 将来VersionのPlay拒否で編集Worldを保つ検証ソース |
 | Docs/ManagedReflectionREADME.md | 旧実装記録から改訂仕様への案内 |

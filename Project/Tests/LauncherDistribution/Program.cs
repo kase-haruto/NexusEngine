@@ -5,6 +5,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+if (args.Length == 4 && args[0] == "--verify-project-creation")
+{
+    await ProjectCreationTests.Run(args[1], args[2], args[3]);
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--verify-public-download")
 {
     var catalog = await Distribution.LoadCatalog("https://nexus-engine.nexus-engine-website.workers.dev/releases.json", default);

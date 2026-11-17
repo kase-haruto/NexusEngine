@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "duration": 2,
+  "loop": true,
+  "tracks": [
+    {
+      "target": "",
+      "component": "Transform",
+      "property": "translation",
+      "interpolation": 1,
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            -1,
+            1,
+            0
+          ]
+        },
+        {
+          "time": 2,
+          "value": [
+            1,
+            1,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "time": 1,
+      "name": "Midpoint",
+      "payload": ""
+    }
+  ]
+}

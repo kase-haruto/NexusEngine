@@ -42,6 +42,9 @@ public sealed class LauncherForm : Form
     readonly TextBox catalog = new() { Width = 720 };
     readonly ComboBox engines = new() { Width = 720, DropDownStyle = ComboBoxStyle.DropDownList };
     readonly ProjectBrowser projects = new();
+    readonly ProjectCreationPanel creation;
+    CancellationTokenSource? templateLoad;
+    string? defaultEngineManifest;
     readonly List<Installed> installed = [];
     readonly List<ProjectEntry> entries = [];
     string? localCatalogRoot;
@@ -62,6 +65,7 @@ public sealed class LauncherForm : Form
         navigation.Controls.Add(new Label { Text = "ENGINE LAUNCHER", Width = 184, Height = 56 });
         pageTitle.Font = new("Yu Gothic UI", 21, FontStyle.Bold);
         cancel.Click += (_, _) => operation?.Cancel();
+        FormClosed += (_, _) => templateLoad?.Cancel();
         FormClosing += (_, e) => { if (operation != null) { operation.Cancel(); e.Cancel = true; status.Text = "処理を中止しています。完了後に閉じてください。"; } };
         var library = Page("エンジンを入手", "ENGINE / DOWNLOADS");
         catalog.Text = settings.CatalogUrl;
@@ -125,31 +129,24 @@ public sealed class LauncherForm : Form
         projects.DeleteProject += () => RemoveSelectedProject(true);
         projects.CreateProject += () => SelectPage(pages[2].Page);
         var create = Page("新規プロジェクト", "WORKSPACE / CREATE");
-        Add(create, "使用するエンジン", engines);
-        var name = new TextBox { Width = 400 }; var parent = new TextBox { Width = 600, Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
-        var template = new ComboBox { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-        template.Items.AddRange(["空のプロジェクト", "基本の3Dプロジェクト（Camera・Sky・Cube）"]); template.SelectedIndex = 0;
-        Add(create, "新規プロジェクト名", name); Add(create, "親フォルダー", parent);
-        Button(create, "プロジェクト保存先を選択", () => { var path = Folder(); if (path != null) parent.Text = path; });
-        Add(create, "テンプレート", template);
-        var initialLanguage = new ComboBox { Width = 420, DropDownStyle = ComboBoxStyle.DropDownList };
-        initialLanguage.Items.AddRange(["C++ — Native Game Development", "C# — Managed Game Development"]); initialLanguage.SelectedIndex = 0;
-        Add(create, "Initial Game Language", initialLanguage);
-        create.Controls.Add(new Label { Width = 740, Height = 65, Text = "空のプロジェクト：何も配置しないシーン。基本の3Dプロジェクト：Camera・Sky・Cube・Directional Lightを配置したシーン。C#の初期Moduleは宣言のみで、実行にはManagedホストの生成が必要です。" });
-        Button(create, "新規プロジェクトを作成", () => Work(async token =>
+        creation = new ProjectCreationPanel(engines);
+        var creationPage = create.Parent!;
+        creationPage.Controls.Remove(create);
+        create.Dispose();
+        creationPage.Controls.Add(creation);
+        engines.SelectedIndexChanged += (_, _) => LoadCreationTemplates();
+        creation.CreateRequested += () => Work(async token =>
         {
-            EnsureTool(); var engine = engines.SelectedItem as Installed ?? throw new IOException("エンジンを選択してください。");
-            var target = ProjectTarget(parent.Text, name.Text);
-            var language = initialLanguage.SelectedIndex == 0 ? "Cpp" : "CSharp";
-            // C++の既定選択は旧CLIと同じ引数を維持し、既存の配布Toolでも作成できるようにする。
-            var templateId = template.SelectedIndex == 0 ? "blank" : "basic-3d";
-            List<string> createArguments = ["create-template", target, name.Text.Trim(), engine.Manifest, templateId];
-            if (language == "CSharp") createArguments.Add(language);
-            var file = await Distribution.Run(Tool, createArguments, token);
-            await Distribution.Run(Tool, ["register", file], token); RefreshLocal();
-        }));
+            EnsureTool();
+            var engine = engines.SelectedItem as Installed ?? throw new IOException("エンジンを選択してください。");
+            var template = creation.Selected ?? throw new IOException("Templateを選択してください。");
+            var file = await ProjectCreationService.Create(Tool, engine, template, creation.ParentDirectory, creation.ProjectName, token);
+            await Distribution.Run(Tool, ["register", file], token);
+            RefreshLocal();
+            SelectPage(pages[1].Page);
+        });
         var git = Page("Gitから追加", "WORKSPACE / SOURCE CONTROL");
-        var url = new TextBox { Width = 720 }; var cloneParent = new TextBox { Width = 600, Text = parent.Text }; var folder = new TextBox { Width = 400 };
+        var url = new TextBox { Width = 720 }; var cloneParent = new TextBox { Width = 600, Text = creation.ParentDirectory }; var folder = new TextBox { Width = 400 };
         Add(git, "GitリポジトリURL (HTTPS)", url); Add(git, "保存先の親フォルダー", cloneParent); Add(git, "新しいフォルダー名", folder);
         Button(git, "保存先を選択", () => { var path = Folder(); if (path != null) cloneParent.Text = path; });
         var hint = new Label { Width = 740, Height = 85, Text = "Git for Windowsが必要です。非公開リポジトリはGit Credential Managerで事前認証してください。クローン後、追加する.nxprojectを選択します。サブモジュールは自動取得しません。" };
@@ -229,6 +226,12 @@ public sealed class LauncherForm : Form
             _ => (item.ToString() ?? "", "")
         };
         LauncherTheme.Apply(this);
+        creation.ApplyAccents();
+        // 選択中とドロップダウンの両方に配置状態と構成を表示する。
+        engines.DrawMode = DrawMode.OwnerDrawVariable;
+        engines.ItemHeight = 54;
+        engines.MeasureItem += (_, e) => e.ItemHeight = 54;
+        engines.DrawItem += DrawCreationEngine;
         projects.ApplyAccents();
         navigation.BackColor = LauncherTheme.Panel;
         foreach (Control child in navigation.Controls) child.BackColor = LauncherTheme.Panel;
@@ -292,12 +295,58 @@ public sealed class LauncherForm : Form
         return target;
     }
     void EnsureTool() { if (!File.Exists(Tool)) throw new IOException("配布パッケージにTools/NexusProjectTool.exeがありません。Build-Distribution.ps1で作成してください。"); }
+    /** \brief Engine切替前の応答を破棄し、検証中はCreateを無効化する */
+    async void LoadCreationTemplates()
+    {
+        templateLoad?.Cancel();
+        var pending = new CancellationTokenSource();
+        templateLoad = pending;
+        var engine = engines.SelectedItem as Installed;
+        creation.Loading(engine);
+        if (engine == null) { templateLoad = null; pending.Dispose(); return; }
+        try
+        {
+            EnsureTool();
+            var templates = await ProjectCreationService.Templates(Tool, engine, pending.Token);
+            if (IsDisposed || pending.IsCancellationRequested || templateLoad != pending) return;
+            creation.SetTemplates(templates, true);
+            creation.SetEngineStatus(engine, string.Equals(engine.Manifest, defaultEngineManifest, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (!IsDisposed && templateLoad == pending) creation.SetTemplates([], false, "Engine / Templateを利用できません: " + ex.Message);
+        }
+        finally
+        {
+            if (templateLoad == pending) templateLoad = null;
+            pending.Dispose();
+        }
+    }
+
+    void DrawCreationEngine(object? sender, DrawItemEventArgs e)
+    {
+        using var fill = new SolidBrush((e.State & DrawItemState.Selected) != 0 ? LauncherTheme.Raised : LauncherTheme.Input);
+        e.Graphics.FillRectangle(fill, e.Bounds);
+        if (e.Index < 0 || engines.Items[e.Index] is not Installed engine) return;
+        var current = string.Equals(engine.Manifest, defaultEngineManifest, StringComparison.OrdinalIgnoreCase);
+        var state = !File.Exists(engine.Manifest) ? "Missing" : engine.Association == "installed" ? "Installed" : "Development";
+        TextRenderer.DrawText(e.Graphics, $"◈  NexusEngine {engine.Version}", e.Font,
+            new Rectangle(e.Bounds.X + 8, e.Bounds.Y + 3, e.Bounds.Width - 16, 24), LauncherTheme.Text, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        TextRenderer.DrawText(e.Graphics, $"{state}  ·  {engine.Configuration}{(current ? "  ·  Current" : "")}", e.Font,
+            new Rectangle(e.Bounds.X + 8, e.Bounds.Y + 28, e.Bounds.Width - 16, 22), LauncherTheme.Muted, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        e.DrawFocusRectangle();
+    }
+
     void RefreshLocal()
     {
+        var selectedManifest = (engines.SelectedItem as Installed)?.Manifest;
         installed.Clear(); entries.Clear(); engines.Items.Clear();
+        defaultEngineManifest = null;
         if (File.Exists(EngineRegistry))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(EngineRegistry));
+            if (doc.RootElement.TryGetProperty("default", out var defaultManifest)) defaultEngineManifest = defaultManifest.GetString();
             foreach (var e in doc.RootElement.GetProperty("engines").EnumerateArray())
                 installed.Add(new(e.GetProperty("manifest").GetString()!, e.GetProperty("id").GetString()!, e.GetProperty("version").GetString()!, e.GetProperty("configuration").GetString()!, e.GetProperty("association").GetString()!));
         }
@@ -312,7 +361,10 @@ public sealed class LauncherForm : Form
             }
         }
         inventory.Items.Clear(); inventory.Items.AddRange(installed.Cast<object>().ToArray());
-        engines.Items.AddRange(installed.Cast<object>().ToArray()); if (installed.Count > 0) engines.SelectedIndex = 0;
+        engines.Items.AddRange(installed.Cast<object>().ToArray());
+        var selectedEngine = installed.FindIndex(e => string.Equals(e.Manifest, selectedManifest ?? defaultEngineManifest, StringComparison.OrdinalIgnoreCase));
+        if (installed.Count > 0) engines.SelectedIndex = Math.Max(0, selectedEngine);
+        else creation.Loading(null);
         projects.SetProjects(entries);
     }
     async void Work(Func<CancellationToken, Task> action, string message = "処理中…", bool allowNavigation = false)

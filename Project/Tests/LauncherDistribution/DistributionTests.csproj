@@ -6,6 +6,11 @@
     <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="../../Templates/**/*" Exclude="../../Templates/Samples/**/*;../../Templates/Behaviour/**/*" Link="Templates/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Compile Include="../../Launcher/Standalone/ProjectCreationService.cs" Link="ProjectCreationService.cs" />
+    <Compile Include="../../Launcher/Standalone/ProjectCreationPanel.cs" Link="ProjectCreationPanel.cs" />
+    <Compile Include="../../Launcher/Standalone/ResponsiveFlowPanel.cs" Link="ResponsiveFlowPanel.cs" />
+    <Compile Include="../../Launcher/Standalone/LauncherTheme.cs" Link="LauncherTheme.cs" />
     <Compile Include="../../Launcher/Standalone/Distribution.cs" Link="Distribution.cs" />
     <Compile Include="../../Launcher/Standalone/LauncherUpdates.cs" Link="LauncherUpdates.cs" />
     <Compile Include="../../Launcher/Standalone/ProjectRemoval.cs" Link="ProjectRemoval.cs" />

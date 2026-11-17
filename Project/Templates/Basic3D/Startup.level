@@ -1,5 +1,5 @@
 NEXUS_LEVEL 12
-LEVEL "Basic3D"
+LEVEL "Basic Level"
 LIGHTING 0
 ENVIRONMENT "" 1 0
 ENTITY 70001 1 "Camera"
@@ -17,25 +17,5 @@ CAMERA 0
 PRIMITIVE 0
 DIRECTIONAL_LIGHT 1 1 -0.330000013 1 -0.159999996 1 1 1 4 0.00465000002
 COMPONENTS 0
-END_ENTITY
-ENTITY 70001 3 "Cube"
-TRANSFORM 0 1 0 0 0 0 1 1 1 1
-PARENT 0 0
-CAMERA 0
-PRIMITIVE 1 1 1 1 1 1 4294967295 0 "" "" 0 0 1 1 1 1 0 1 1 0 0 0 1 1
-DIRECTIONAL_LIGHT 0
-COMPONENTS 0
-END_ENTITY
-ENTITY 70001 4 "Sky"
-TRANSFORM 0 0 0 0 0 0 1 1 1 1
-PARENT 0 0
-CAMERA 0
-PRIMITIVE 0
-DIRECTIONAL_LIGHT 0
-COMPONENTS 4
-COMPONENT "SkyRenderer" object 2 "fields" object 2 "enabled" bool 1 "intensity" float 1 "type" string "SkyRenderer"
-COMPONENT "SkyAtmosphere" object 2 "fields" object 2 "enabled" bool 1 "timeOfDay" float 12 "type" string "SkyAtmosphere"
-COMPONENT "SkyLight" object 2 "fields" object 1 "enabled" bool 1 "type" string "SkyLight"
-COMPONENT "ExponentialHeightFog" object 2 "fields" object 1 "enabled" bool 1 "type" string "ExponentialHeightFog"
 END_ENTITY
 END_LEVEL

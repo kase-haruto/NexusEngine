@@ -253,22 +253,22 @@ DotNetRoot省略時は対象マシンの互換.NET 10 x64 Runtimeを使用する
 | Build/NexusEditorSupport.vcxproj | 新Editor実装のcompile対象 |
 | NexusEngine.vcxproj | 既存一括構成でも新Editor実装をcompile |
 | Tools/Engine/Publish-Engine.ps1 | 新targets / ScriptのSDK収録 |
-| Templates/Shared/Directory.Build.props.in | Managed Project別の中間生成先 |
-| Templates/NativeModule/Host.cpp.in | 初期言語に固定されない共通Host |
-| Templates/Hybrid/Host.cpp.in | 共通manifestによるHybrid Host |
-| Templates/ManagedGameplay/Host.cpp.in | 後からNativeも追加可能なHost |
-| Templates/ManagedBootstrap/Host.cpp.in | Bootstrap互換Host |
-| Templates/NativeModule/GameEditor.vcxproj.in | 共通配置targetのimport |
-| Templates/NativeModule/GameRuntime.vcxproj.in | 同上 |
-| Templates/ManagedBootstrap/GameEditor.vcxproj.in | 同上 |
-| Templates/ManagedBootstrap/GameRuntime.vcxproj.in | 同上 |
-| Templates/Hybrid/ManagedBootstrap.vcxproj.in | Metadata生成の集約待ち |
-| Templates/ManagedBootstrap/ManagedBootstrap.vcxproj.in | 同上 |
-| Templates/Hybrid/Game.slnx.in | C#編集Projectを共通Solutionへ追加、生成はHostへ委譲 |
-| Templates/ManagedGameplay/Game.slnx.in | C#のみの初期Projectも同じIDE / Host構成にする |
-| Templates/native-module.nxtemplate | Directory.Build.props生成 |
-| Templates/hybrid-gameplay.nxtemplate | 同上 |
-| Templates/managed-gameplay.nxtemplate | 同上 |
+| Templates/Samples/Shared/Directory.Build.props.in | Managed Project別の中間生成先 |
+| Templates/Samples/NativeModule/Host.cpp.in | 初期言語に固定されない共通Host |
+| Templates/Samples/Hybrid/Host.cpp.in | 共通manifestによるHybrid Host |
+| Templates/Samples/ManagedGameplay/Host.cpp.in | 後からNativeも追加可能なHost |
+| Templates/Samples/ManagedBootstrap/Host.cpp.in | Bootstrap互換Host |
+| Templates/Samples/NativeModule/GameEditor.vcxproj.in | 共通配置targetのimport |
+| Templates/Samples/NativeModule/GameRuntime.vcxproj.in | 同上 |
+| Templates/Samples/ManagedBootstrap/GameEditor.vcxproj.in | 同上 |
+| Templates/Samples/ManagedBootstrap/GameRuntime.vcxproj.in | 同上 |
+| Templates/Samples/Hybrid/ManagedBootstrap.vcxproj.in | Metadata生成の集約待ち |
+| Templates/Samples/ManagedBootstrap/ManagedBootstrap.vcxproj.in | 同上 |
+| Templates/Samples/Hybrid/Game.slnx.in | C#編集Projectを共通Solutionへ追加、生成はHostへ委譲 |
+| Templates/Samples/ManagedGameplay/Game.slnx.in | C#のみの初期Projectも同じIDE / Host構成にする |
+| Templates/Samples/native-module.nxtemplate | Directory.Build.props生成 |
+| Templates/Samples/hybrid-gameplay.nxtemplate | 同上 |
+| Templates/Samples/managed-gameplay.nxtemplate | 同上 |
 | Templates/managed-bootstrap.nxtemplate | 同上 |
 | Tests/ProjectSystemTests.cpp | 複数計画、配置衝突、Package改変 / 欠落の検証ソース追加 |
 | Docs/HybridProjectREADME.md | 完了範囲・構成・手順・制約・静的確認 |

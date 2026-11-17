@@ -6,6 +6,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <crtdbg.h>
 
 // engine
@@ -50,7 +52,7 @@ namespace NexusEngine::Tests {
 	 * \brief ECSの主要な不変条件をassertで検証する開発用Test
 	 * \note 専用Test runner導入後に自動実行へ接続する。Runtime本体からは呼び出さない
 	 */
-	void RunEcsTests() {
+	void RunEcsTests(bool animationOnly = false) {
         {
             Level level("Fixed atmosphere"); assert(level.LoadEmpty());
             auto entity = level.CreateEntity("Environment");
@@ -136,11 +138,32 @@ namespace NexusEngine::Tests {
             assert(extractor.ExtractInto(*clone, 1, frame));
             assert(frame.primitives[0].animation->time == .5f); // PIE world isolation.
             saved->playbackSpeed = -1; assert(!restored.Save(path));
+            a->PlayAsset("Animations/Idle.nxanim");
+            a->CrossFadeAsset("Animations/Walk.nxanim", 1.0f, false);
+            assert(level.Update(.25f));
+            assert(a->blendWeight == .25f && a->time == .25f && a->blendTime == .25f);
+            a->Pause();
+            assert(level.Update(.25f));
+            assert(a->blendWeight == .25f);
+            assert(level.Save(path));
+            Level fading;
+            assert(fading.Load(path));
+            auto* fadingPlayer = fading.FindEntity(id).GetComponent<AnimationPlayerComponent>();
+            assert(fadingPlayer && fadingPlayer->blendWeight == .25f && fadingPlayer->blendAnimationAsset == "Animations/Walk.nxanim");
+            a->Resume();
+            assert(level.Update(.75f));
+            assert(a->animationAsset == "Animations/Walk.nxanim" && a->time == 1 && !a->loop && a->blendWeight == 0);
+            a->CrossFade(1, 0);
+            assert(a->animationAsset.empty() && a->animationIndex == 1);
             assert(first.RemoveComponent<AnimationPlayerComponent>());
             assert(extractor.ExtractInto(*level.GetScene(), 1, frame));
             assert(!frame.primitives[0].animation && frame.primitives[0].staticLighting);
         }
         {
+            if(animationOnly) {
+                std::cout << "PASS: animation playback, crossfade, pause, asset references and Level persistence\n";
+                return;
+            }
             Level level("Fog scene"); assert(level.LoadEmpty());
             RenderScene frame; RenderSceneExtractor extractor;
             frame.fog.enabled = true;
@@ -465,11 +488,16 @@ namespace NexusEngine::Tests {
 } // namespace NexusEngine::Tests
 
 #if defined(NEXUS_ECS_TEST_MAIN)
-int main() {
+namespace NexusEngine::Tests { void RunAnimationSystemTests(); }
+int main(int argc, char** argv) {
 	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
 	_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-	NexusEngine::Tests::RunEcsTests();
+    if(argc == 2 && std::strcmp(argv[1], "--animation-system") == 0) {
+        NexusEngine::Tests::RunAnimationSystemTests();
+        return 0;
+    }
+	NexusEngine::Tests::RunEcsTests(argc == 2 && std::strcmp(argv[1], "--animation") == 0);
 	return 0;
 }
 #endif

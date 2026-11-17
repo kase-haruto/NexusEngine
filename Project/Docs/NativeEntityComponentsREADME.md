@@ -66,7 +66,7 @@ private:
 
 System登録は`EntityBehaviourSystem<NativeMover>::Descriptor(systemId)`を既存`registration.systems.add`へ渡す。services接続時には既存`find / access`の借用callback内で`Connect(state, services, typeId)`を呼ぶ。metadata宣言だけでは任意のNative関数をC#へ公開しない。Native Systemの明示Bindingは既存経路を使う。
 
-具体例は[GameComponents.h.in](../Templates/NativeModule/GameComponents.h.in)、[NativeMover.h.in](../Templates/NativeModule/NativeMover.h.in)、[NativeMover.cpp.in](../Templates/NativeModule/NativeMover.cpp.in)。Native/Hybridの新規テンプレートと`Add-GameModule.ps1`がこれらを生成する。既存Projectへファイルを自動上書きしない。既存Projectでは同じ宣言・登録・接続をゲーム側へ追加する。
+具体例は[GameComponents.h.in](../Templates/Samples/NativeModule/GameComponents.h.in)、[NativeMover.h.in](../Templates/Samples/NativeModule/NativeMover.h.in)、[NativeMover.cpp.in](../Templates/Samples/NativeModule/NativeMover.cpp.in)。Native/Hybridの新規テンプレートと`Add-GameModule.ps1`がこれらを生成する。既存Projectへファイルを自動上書きしない。既存Projectでは同じ宣言・登録・接続をゲーム側へ追加する。
 
 ユーザーによる通常BuildとHost再起動の後、Content BrowserのSourceにあるNativeMover.h/.cppをEntityへdrop、またはDetailsの「Componentを追加」から選ぶ。共通Property画面でenabled/speedを編集し、「Native Componentを解除」で外す。追加・解除・Property変更は共通Undo/Redoの対象。右クリックのソースを開く操作は既存機能を利用する。
 

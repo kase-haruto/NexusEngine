@@ -6,6 +6,7 @@
 #include "Editor/Gui/Panels/DetailsPanel.h"
 #include "Editor/Gui/Panels/UtilityPanels.h"
 #include "Editor/Gui/Panels/PostProcessGraphPanel.h"
+#include "Editor/Gui/Panels/AnimationStudioPanel.h"
 #include "Editor/Services/EntityConsoleCommands.h"
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
@@ -23,7 +24,11 @@
 namespace NexusEngine {
 EditorWorkspace::EditorWorkspace(EditorSession& session)
     : session_(session), properties_(types_), sceneEdits_(session, properties_), documents_(session, properties_), viewportTools_(session, properties_) {}
+AnimationStudioDocument& EditorWorkspace::AnimationStudio() noexcept {
+    return animationStudio_;
+}
 EditorWorkspace::~EditorWorkspace() noexcept {
+    animationStudio_.StopPreview(session_);
     // 部分初期化時も、Panel/Factoryが借用するAsset・Viewport・編集サービスより先に破棄する。
     reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear(); panels_.Clear(); properties_.Reset(nullptr);
     if(logSink_) Logger::Get().RemoveSink(logSink_);
@@ -68,6 +73,15 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     RegisterPropertyPages(categories_);
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     assets_ = std::make_unique<AssetCatalog>(root / std::filesystem::path{ConvertString(settings_.project.assetPath)});
+    animationStudio_.Initialize(assets_->Root());
+    if(session_.GetLevel()) {
+        session_.GetLevel()->Animations().SetRoot(assets_->Root());
+    }
+    panels_.RegisterFactory("AnimationStudio", "panel.animationStudio", [this] {
+        return std::make_unique<AnimationStudioPanel>(animationStudio_);
+    }, false);
+    commands_.Register("animation.open", {[this] { panels_.Open("AnimationStudio"); }, {}});
+    menu_.RegisterTool({"animation.open", "panel.animationStudio"});
     levels_ = std::make_unique<AssetCatalog>(project ? project->Levels() : assets_->Root() / "Levels");
     sources_ = std::make_unique<AssetCatalog>(project ? project->Source() : root / "Source");
     logs_ = std::make_shared<BufferedLogBuffer>();
@@ -91,6 +105,10 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
         return std::make_unique<ContentBrowserPanel>(*assets_, [this](const auto& path) {
             if((path.extension() == ".json" || path.extension() == ".level") && path.parent_path() == levels_->Root()) OpenLevel(path);
+            else if(path.extension() == ".nxanim" || path.extension() == ".nxcontroller" || path.extension() == ".nxtimeline") {
+                animationStudio_.pendingOpen = path;
+                panels_.Open("AnimationStudio");
+            }
             else if(SourceFileActions::Contains(sources_->Root(), path)) Report(SourceCodeEditor::OpenFile(path));
             else notifications_.Push(AssetCatalog::Utf8(path));
         }, sources_.get());
@@ -151,6 +169,10 @@ void EditorWorkspace::ReportDocumentError() {
 }
 void EditorWorkspace::SynchronizeDocument() {
     if(generation_ == session_.Generation()) return;
+    animationStudio_.StopPreview(session_);
+    if(session_.GetLevel() && assets_) {
+        session_.GetLevel()->Animations().SetRoot(assets_->Root());
+    }
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     static_cast<void>(collisionLayers_.BindLevel());
     previousSelection_ = {}; revision_ = properties_.Revision();
@@ -167,6 +189,11 @@ void EditorWorkspace::RememberLevel(const std::filesystem::path& path) {
     if(!settings_.SaveUser()) notifications_.Push(text_.Text("settings.saveFailed"), true);
 }
 void EditorWorkspace::RequestExit() {
+    if(animationStudio_.dirty) {
+        animationStudio_.exitRequested = true;
+        panels_.Open("AnimationStudio");
+        return;
+    }
     session_.StopPlay(); documents_.Request(EditorDocumentService::Action::Exit);
 }
 void EditorWorkspace::RegisterToolbar() {
@@ -375,8 +402,21 @@ void EditorWorkspace::Draw() {
     // Panelを閉じた後にProject履歴へUndoを送り続けないよう、実際のfocusを毎frame確認する。
     collisionLayers_.focused = false;
     viewport_.SetCameraPreviewVisible(false);
+    animationStudio_.focused = false;
     renderGraph_.capturesKeyboard = false;
-    panels_.Draw(context, session_.IsPlaying());
+    panels_.Draw(context, session_.IsPlaying() || session_.HasAnimationPreview());
+    if(animationStudio_.exitReady) {
+        animationStudio_.exitReady = false;
+        RequestExit();
+    }
+    const bool studioOpen = std::ranges::any_of(panels_.Entries(), [](const auto& entry) {
+        return entry.Id() == "AnimationStudio" && entry.isOpen;
+    });
+    if(!studioOpen || session_.IsPlaying()) {
+        animationStudio_.StopPreview(session_);
+    } else {
+        animationStudio_.Report(animationStudio_.Preview(session_, ImGui::GetIO().DeltaTime));
+    }
     viewportTools_.CompleteInteraction();
     if(previousSelection_ != session_.GetSelection()) { properties_.Commit(); previousSelection_ = session_.GetSelection(); }
     if(!ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating()) properties_.Commit();
@@ -385,7 +425,7 @@ void EditorWorkspace::Draw() {
     const auto& io = ImGui::GetIO();
     if(!io.WantTextInput && !ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating() && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
         commands_.Dispatch(io.KeyCtrl, io.KeyShift, io.KeyAlt, [this](int key) {
-            return (!renderGraph_.capturesKeyboard || key==ImGuiKey_F5) && ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false);
+            return ((!renderGraph_.capturesKeyboard && !animationStudio_.focused) || key==ImGuiKey_F5) && ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false);
         });
     if(showAbout_) { ImGui::OpenPopup("###About"); showAbout_ = false; }
     if(ImGui::BeginPopupModal(text_.Label("help.about", "About").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {

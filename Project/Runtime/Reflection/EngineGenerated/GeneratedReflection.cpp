@@ -5,6 +5,7 @@
 namespace NexusEngine {
 void RegisterGeneratedComponents(ComponentReflection& registry) {
     registry.Register<AnimationPlayerComponent>();
+    registry.Register<AnimatorComponent>();
     registry.Register<CameraComponent>();
     registry.Register<ColliderComponent>();
     registry.Register<DirectionalLightComponent>();
@@ -19,10 +20,12 @@ void RegisterGeneratedComponents(ComponentReflection& registry) {
     registry.Register<SkyAtmosphereComponent>();
     registry.Register<SkyLightComponent>();
     registry.Register<SkyRendererComponent>();
+    registry.Register<TimelinePlayerComponent>();
     registry.Register<TransformComponent>();
 }
 void RegisterGeneratedInspectorTypes(TypeRegistry& registry) {
-    RegisterReflectedInspector<AnimationPlayerComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/AnimationPlayerComponent.h"});
+    RegisterReflectedInspector<AnimationPlayerComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/AnimationPlayerComponent.h", "C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/AnimationPlayerComponent.cpp"});
+    RegisterReflectedInspector<AnimatorComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/AnimatorComponent.h", "C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/AnimatorComponent.cpp"});
     RegisterReflectedInspector<CameraComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/CameraComponent.h"});
     RegisterReflectedInspector<ColliderComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/ColliderComponent.h"});
     RegisterReflectedInspector<DirectionalLightComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/DirectionalLightComponent.h"});
@@ -37,6 +40,7 @@ void RegisterGeneratedInspectorTypes(TypeRegistry& registry) {
     RegisterReflectedInspector<SkyAtmosphereComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/SkyAtmosphereComponent.h"});
     RegisterReflectedInspector<SkyLightComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/SkyLightComponent.h"});
     RegisterReflectedInspector<SkyRendererComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/SkyRendererComponent.h"});
+    RegisterReflectedInspector<TimelinePlayerComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/TimelinePlayerComponent.h", "C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/TimelinePlayerComponent.cpp"});
     RegisterReflectedInspector<TransformComponent>(registry, {"C:/MyProject/NexusEngine/Project/Runtime/Scene/Components/TransformComponent.h"});
 }
 }

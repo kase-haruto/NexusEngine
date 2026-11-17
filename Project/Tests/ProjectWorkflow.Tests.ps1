@@ -1,10 +1,12 @@
-param(
+﻿param(
     [ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug',
     [string]$EngineManifest
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+# 型付きホスト検証専用。配布TemplateへDemo Componentを戻さない。
+$staticFixtures = Join-Path $PSScriptRoot 'Fixtures/StaticProjectTemplates'
 if(-not $EngineManifest) { $EngineManifest = Join-Path $workspace "NexusEngine.$Configuration.nxengine" }
 $EngineManifest = [IO.Path]::GetFullPath($EngineManifest)
 $tool = Join-Path $workspace "Generated/Modules/x64/$Configuration/NexusProjectTool/NexusProjectTool.exe"
@@ -29,7 +31,7 @@ $dataRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($Engi
 $generic = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($EngineManifest)) $engine.paths.runtime))
 foreach($template in @('blank','basic-3d')) {
     $gameRoot = Join-Path $root ("日本語 Game $template")
-    $null = Invoke-Expected $tool @('create-template',$gameRoot,"検証 $template",$EngineManifest,$template)
+    $null = Invoke-Expected $tool @('create-project',$gameRoot,"検証 $template",$EngineManifest,$staticFixtures,$template)
     $file = Join-Path $gameRoot (([IO.Path]::GetFileName($gameRoot)) + '.nxproject')
     $descriptorBytes = [IO.File]::ReadAllText($file)
     # Game固有の型を含むLevelは汎用Runtimeでは開けず、生成したGameホストで開けること。

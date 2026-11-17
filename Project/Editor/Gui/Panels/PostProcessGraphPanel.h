@@ -2,7 +2,7 @@
 #include "IEditorPanel.h"
 #include "Editor/Services/PostProcessGraphDocument.h"
 #include <set>
-struct ImNodesContext;
+#include "Editor/Gui/Nodes/NodeEditor.h"
 namespace NexusEngine {
     class PostProcessGraphPanel final : public IEditorPanel {
     public:
@@ -18,7 +18,7 @@ namespace NexusEngine {
         void SetZoom(float value, const std::array<float,2>& anchor);
         void FrameAll();
         PostProcessGraphDocument& document_;
-        ImNodesContext* nodes_ = nullptr;
+        UI::NodeEditor editor_;
         std::set<int> positioned_;
         std::vector<PostProcessGraph> undo_, redo_;
         float zoom_ = 1;

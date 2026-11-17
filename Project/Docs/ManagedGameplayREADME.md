@@ -174,10 +174,10 @@ SDK収集には追加API / Bootstrap Source / props / targetsを加えたが、�
 | Build/NexusRuntime.vcxproj / NexusEngine.vcxproj / Tests/NexusEditorTests.vcxproj | ScriptSystemのコンパイル対象 |
 | Core/Hosting/ProjectHost.inl | GameScripts配置を設定へ転送 |
 | Tools/Project/ProjectTemplates.cpp | csprojにも既存のXML / MSBuild literal escapingを適用 |
-| Templates/managed-gameplay.nxtemplate | Gameplayテンプレート登録 |
-| Templates/ManagedGameplay/Host.cpp.in / ManagedBootstrap.vcxproj.in | ホスト結合点と共通Utility |
-| Templates/ManagedGameplay/GameScripts.csproj.in / PlayerController.cs.in | ゲームProjectと最小サンプル |
-| Templates/ManagedGameplay/Startup.level / BuildTargets.json.in / README.md.in | 共通Level、配置契約、生成Projectの説明 |
+| Templates/Samples/managed-gameplay.nxtemplate | Gameplayテンプレート登録 |
+| Templates/Samples/ManagedGameplay/Host.cpp.in / ManagedBootstrap.vcxproj.in | ホスト結合点と共通Utility |
+| Templates/Samples/ManagedGameplay/GameScripts.csproj.in / PlayerController.cs.in | ゲームProjectと最小サンプル |
+| Templates/Samples/ManagedGameplay/Startup.level / BuildTargets.json.in / README.md.in | 共通Level、配置契約、生成Projectの説明 |
 | Tools/Project/ProjectBuild.h / .cpp | GameScriptsと安定APIのstamp照合 |
 | Tools/Project/Build-Game.ps1 / Write-GameBuildStamp.ps1 | Backend検証と追加成果物の記録 |
 | Tools/Engine/Publish-Engine.ps1 | 安定APIと追加Bootstrap Source / targetsの収集 |

@@ -3,6 +3,7 @@
 // c++
 #include <cstdint>
 #include <vector>
+#include <span>
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -34,10 +35,18 @@ namespace NexusEngine {
 		[[nodiscard]] const std::vector<Matrix4x4>& GetNodeWorldTransforms() const noexcept;
 		[[nodiscard]] const std::vector<Matrix4x4>* GetSkinPalette(uint32_t skinIndex) const noexcept;
 
+		/** 2つのクリップをlocal TRSで補間する。weightは0～1、回転には最短経路SLERPを使う。 */
+		[[nodiscard]] Result<void> SampleBlend(uint32_t first, float firstTime, bool firstLoop,
+			uint32_t second, float secondTime, bool secondLoop, float weight) noexcept;
+
+        [[nodiscard]] Result<void> SampleLayers(std::span<const AnimationPoseSample> layers) noexcept;
 	private:
+		void EvaluateLocalPose(uint32_t clip, float time, bool loop, std::vector<ModelNodeTransform>& transforms) noexcept;
+		void UpdateMatrices() noexcept;
 		void EvaluatePose() noexcept;
 
 		const ModelAssetData* resource_ = nullptr; //< Asset側に所有権を持たない参照
+		std::vector<ModelNodeTransform> blendTransforms_; //< 2番目のクリップ用作業領域
 		std::vector<ModelNodeTransform> localTransforms_; //< 現在のnode local姿勢
 		std::vector<Matrix4x4> nodeWorldTransforms_; //< hierarchy解決済みModel空間行列
 		std::vector<std::vector<Matrix4x4>> skinPalettes_; //< Skinごとの現在Joint Palette

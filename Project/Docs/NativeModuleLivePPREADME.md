@@ -148,19 +148,19 @@ Asset / Level / Entity同一性、Script Property、Native stateは固定state�
 | LivePP.props | 既存EXE profileとの併用拒否 |
 | Tools/Engine/Publish-Engine.ps1 | 通常SDKへの新props同梱 |
 | Tools/Project/Write-GameBuildStamp.ps1 | 専用配置の成果物を既存stamp形式へ記録 |
-| Templates/NativeModule/NativePatchHooks.cpp.in | DLL内SDK hookと寿命を同期したObserver |
-| Templates/NativeModule/GameModule.vcxproj.in | Game DLL出力のprofile分離 |
-| Templates/NativeModule/GameEditor.vcxproj.in | Editor出力のprofile分離 |
-| Templates/NativeModule/GameRuntime.vcxproj.in | Runtime出力のprofile分離 |
-| Templates/Hybrid/GameModule.vcxproj.in | Hybrid DLL出力のprofile分離 |
-| Templates/Hybrid/ManagedBootstrap.vcxproj.in | Hybrid Managed成果物のprofile分離 |
-| Templates/ManagedBootstrap/ManagedBootstrap.vcxproj.in | 共用Utilityのprofile整合 |
-| Templates/ManagedBootstrap/GameEditor.vcxproj.in | Hybridで再利用するEditorのprofile整合 |
-| Templates/ManagedBootstrap/GameRuntime.vcxproj.in | Hybridで再利用するRuntimeのprofile整合 |
-| Templates/native-module.nxtemplate | 固定SDK hookの生成 |
-| Templates/hybrid-gameplay.nxtemplate | 共通hookをHybridへ生成 |
-| Templates/NativeModule/README.md.in | profileと固定stateの利用案内 |
-| Templates/Hybrid/README.md.in | HybridでのReload操作と制約 |
+| Templates/Samples/NativeModule/NativePatchHooks.cpp.in | DLL内SDK hookと寿命を同期したObserver |
+| Templates/Samples/NativeModule/GameModule.vcxproj.in | Game DLL出力のprofile分離 |
+| Templates/Samples/NativeModule/GameEditor.vcxproj.in | Editor出力のprofile分離 |
+| Templates/Samples/NativeModule/GameRuntime.vcxproj.in | Runtime出力のprofile分離 |
+| Templates/Samples/Hybrid/GameModule.vcxproj.in | Hybrid DLL出力のprofile分離 |
+| Templates/Samples/Hybrid/ManagedBootstrap.vcxproj.in | Hybrid Managed成果物のprofile分離 |
+| Templates/Samples/ManagedBootstrap/ManagedBootstrap.vcxproj.in | 共用Utilityのprofile整合 |
+| Templates/Samples/ManagedBootstrap/GameEditor.vcxproj.in | Hybridで再利用するEditorのprofile整合 |
+| Templates/Samples/ManagedBootstrap/GameRuntime.vcxproj.in | Hybridで再利用するRuntimeのprofile整合 |
+| Templates/Samples/native-module.nxtemplate | 固定SDK hookの生成 |
+| Templates/Samples/hybrid-gameplay.nxtemplate | 共通hookをHybridへ生成 |
+| Templates/Samples/NativeModule/README.md.in | profileと固定stateの利用案内 |
+| Templates/Samples/Hybrid/README.md.in | HybridでのReload操作と制約 |
 | Tests/NativeGameModuleTests.cpp | SDK非依存World leaseの検証ソース |
 | Docs/NativeModuleLivePPREADME.md | この実装・所有権・運用と制約 |
 | Docs/NativePatchRuntimeREADME.md | 7-Cへの案内 |

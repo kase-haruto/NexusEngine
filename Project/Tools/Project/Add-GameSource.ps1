@@ -8,6 +8,8 @@ $lock=[IO.File]::Open((Join-Path $root '.nexus.modules.lock'),[IO.FileMode]::Ope
 try {
 $project=Get-Content -Raw -Encoding UTF8 -LiteralPath $ProjectFile | ConvertFrom-Json
 $engine=Get-Content -Raw -Encoding UTF8 -LiteralPath $EngineManifest | ConvertFrom-Json; $templates=Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($EngineManifest))) $engine.paths.templates
+# Behaviour雛形は共通Root、Demo由来のSystem雛形はSamplesから取得する。
+$sampleTemplates=if(Test-Path -LiteralPath (Join-Path $templates 'Samples') -PathType Container) { Join-Path $templates 'Samples' } else { $templates }
 if($project.engine.id -cne $engine.id -or $project.engine.association -cne $engine.association -or ($project.engine.version -and $project.engine.version -cne $engine.version)) { throw 'Engine association / version mismatch.' }
 $null=@(Get-NexusModuleOrder $project); Assert-NexusRuntimeModules $project
 if($Name -cnotmatch '\A[A-Za-z][A-Za-z0-9_]{0,63}\z' -or $Name -imatch '\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\z') { throw 'Invalid source identifier.' }
@@ -41,7 +43,7 @@ if($module.language -ceq 'CSharp') {
  $writes=@{}
  foreach($file in @('CrowdSimulationSystem.h','CrowdSimulationSystem.cpp','CrowdBinding.h')) {
   # 一度だけ置換し、CrowdAgent等の新しい名前を次の置換で再加工しない。
-  $body=[regex]::Replace([IO.File]::ReadAllText((Join-Path $templates ('NativeModule/'+$file+'.in'))),'CrowdSimulationSystem|CrowdSimulation|Crowd',$Name)
+  $body=[regex]::Replace([IO.File]::ReadAllText((Join-Path $sampleTemplates ('NativeModule/'+$file+'.in'))),'CrowdSimulationSystem|CrowdSimulation|Crowd',$Name)
   $body=$body.Replace('{"'+$Name+'", 15}','{"'+$Name+'", '+$Name.Length+'}')
   $target=$(if($file -eq 'CrowdBinding.h') { $Name+'Binding.h' } else { $file.Replace('CrowdSimulationSystem',$Name) })
   $path=Join-Path $directory $target; if(Test-Path -LiteralPath $path) { throw 'Native source already exists.' }; $writes[$path]=$body
@@ -53,7 +55,7 @@ if($module.language -ceq 'CSharp') {
   if(-not $managedRoot.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase) -or -not [IO.Directory]::Exists($managedRoot)) { throw 'Invalid Managed source directory.' }
   $cursor=$managedRoot; while($cursor -and $cursor.Length -ge $root.Length) { if((Get-Item -Force -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Managed Source cannot traverse a reparse point.' }; $cursor=[IO.Path]::GetDirectoryName($cursor) }
   # 先に元のtokenを分離する。Module IDがCrowdSimulationでもSystem名へ誤変換しない。
-  $facade=[IO.File]::ReadAllText((Join-Path $templates 'Hybrid/CrowdSimulation.cs.in')).Replace('"NativeCombat"','"@NEXUS_MODULE_ID@"').Replace('"CrowdSimulation"','"@NEXUS_SYSTEM_ID@"').Replace('class CrowdSimulation','class @NEXUS_FACADE_CLASS@')
+  $facade=[IO.File]::ReadAllText((Join-Path $sampleTemplates 'Hybrid/CrowdSimulation.cs.in')).Replace('"NativeCombat"','"@NEXUS_MODULE_ID@"').Replace('"CrowdSimulation"','"@NEXUS_SYSTEM_ID@"').Replace('class CrowdSimulation','class @NEXUS_FACADE_CLASS@')
   $facade=$facade.Replace('@NEXUS_MODULE_ID@',$ModuleId).Replace('@NEXUS_SYSTEM_ID@',$Name).Replace('@NEXUS_FACADE_CLASS@',$Name)
   $path=Join-Path $managedRoot ($Name+'.cs'); if(Test-Path -LiteralPath $path) { throw 'Managed facade already exists.' }; $writes[$path]=$facade
  }

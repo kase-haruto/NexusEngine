@@ -1,62 +1,21 @@
 {
-  "moduleLanguages": ["Cpp", "CSharp"],
+  "schemaVersion": 1,
+  "id": "basic-3d",
+  "name": "Basic Level",
+  "description": "CameraとDirectional Lightだけを配置したLevelから開始します。",
+  "category": "project",
+  "generateModule": false,
+  "initialLevel": "@LEVELS@/Startup.level",
+  "requiresCamera": true,
+  "preview": {
+    "kind": "image",
+    "source": "Basic3D/Preview.png"
+  },
   "files": [
     {
-      "replace": false,
-      "target": "@SOURCE@/Game/README.md",
-      "source": "Shared/ManagedModule.README.md.in",
-      "language": "CSharp"
-    },
-    {
-      "replace": false,
-      "target": "@SOURCE@/Game/GameModule.h",
-      "language": "Cpp",
-      "source": "Shared/GameModule.h.in"
-    },
-    {
-      "replace": false,
-      "target": "@SOURCE@/Game/Main.cpp",
-      "language": "Cpp",
-      "source": "Shared/Main.cpp.in"
-    },
-    {
-      "replace": false,
-      "target": "@SOURCE@/Game/HealthComponent.h",
-      "language": "Cpp",
-      "source": "Shared/HealthComponent.h.in"
-    },
-    {
-      "replace": true,
-      "target": "GameRuntime.vcxproj",
-      "language": "Cpp",
-      "source": "Shared/GameRuntime.vcxproj.in"
-    },
-    {
-      "replace": true,
-      "target": "GameEditor.vcxproj",
-      "language": "Cpp",
-      "source": "Shared/GameEditor.vcxproj.in"
-    },
-    {
-      "replace": true,
-      "target": "Game.slnx",
-      "language": "Cpp",
-      "source": "Shared/Game.slnx.in"
-    },
-    {
-      "replace": false,
-      "target": "@CONFIG@/BuildTargets.json",
-      "language": "Cpp",
-      "source": "Shared/BuildTargets.json.in"
-    },
-    {
-      "replace": false,
+      "source": "Basic3D/Startup.level",
       "target": "@LEVELS@/Startup.level",
-      "source": "Basic3D/Startup.level"
+      "replace": false
     }
-  ],
-  "id": "basic-3d",
-  "schemaVersion": 1,
-  "description": "Camera・Sky・CubeとDirectional Lightを配置した3Dシーンから始めます。",
-  "name": "基本の3Dプロジェクト"
+  ]
 }

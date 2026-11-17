@@ -188,10 +188,10 @@ Compile process以外のGame API・Event・lifecycle・Registry操作はRuntime�
 | Core/Hosting/ProjectHost.inl | 1 Native＋1 Managedの検証、言語ごとのModule ID解決 |
 | Tools/Project/ProjectBuild.cpp / Build-Game.ps1 / Write-GameBuildStamp.ps1 | 両成果物のBuild・起動・同一stamp照合 |
 | Tools/Project/ProjectTemplates.h / .cpp | TemplateのModule群宣言、初期言語順、両Source生成、個別GUID |
-| Templates/hybrid-gameplay.nxtemplate | 共通生成経路のHybridテンプレート宣言 |
-| Templates/Hybrid/Host.cpp.in / NativeCombat.cpp.in / PlayerController.cs.in | 共通APIと値Eventを使うゲーム例 |
-| Templates/Hybrid/GameModule.vcxproj.in / ManagedBootstrap.vcxproj.in / Game.slnx.in / BuildTargets.json.in / README.md.in | Project依存・出力・利用方法 |
-| Templates/managed-gameplay.nxtemplate / Launcher/Standalone/Program.cs | 説明更新とHybrid選択肢 |
+| Templates/Samples/hybrid-gameplay.nxtemplate | 共通生成経路のHybridテンプレート宣言 |
+| Templates/Samples/Hybrid/Host.cpp.in / NativeCombat.cpp.in / PlayerController.cs.in | 共通APIと値Eventを使うゲーム例 |
+| Templates/Samples/Hybrid/GameModule.vcxproj.in / ManagedBootstrap.vcxproj.in / Game.slnx.in / BuildTargets.json.in / README.md.in | Project依存・出力・利用方法 |
+| Templates/Samples/managed-gameplay.nxtemplate / Launcher/Standalone/Program.cs | 説明更新とHybrid選択肢 |
 | Tools/Engine/Publish-Engine.ps1 | 追加Managed SourceのSDK配布。Public headerとTemplatesは既存tree配布 |
 | Tests/GameServicesTests.cpp / GameRuntimeTests.cpp / Tests/NexusEditorTests.vcxproj | CLR不要の通信・寿命・World分離・容量・thread検証ケース |
 | Tests/Fixtures/NativeModule/Module.cpp / Fixtures/ManagedGameplay/Behaviours.cs / ManagedGameplayTests.cpp / Build/NexusManagedGameplayTests.vcxproj | DebugのHybrid実行・Native状態保持・Reload失敗保護ケース |

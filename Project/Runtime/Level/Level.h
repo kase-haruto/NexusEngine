@@ -18,6 +18,7 @@
 #include "Foundation/Input/InputFrame.h"
 #include "Runtime/Physics/PhysicsWorld.h"
 #include "Runtime/Audio/AudioWorld.h"
+#include "Runtime/Animation/AnimationRuntime.h"
 
 namespace NexusEngine {
     struct CollisionLayerSettings;
@@ -77,6 +78,7 @@ namespace NexusEngine {
         const std::filesystem::path& ResourceRoot() const noexcept { return resourceRoot_; }
         /** \brief 必要時に共通Audio Backendを生成する。デバイス生成はPlayでのみ行う */
         AudioWorld& Audio();
+        AnimationRuntime& Animations() noexcept;
         /** \brief Hostが既存CPU asset cacheの同期借用を接続する。稼働中solverの差替えは禁止 */
         /** Editor用の衝突形状の線を取得する。物理step・接触通知・保存値を変更しない。 */
         PhysicsWorld::WireframeStats CollectColliderWireframe(const PhysicsWorld::WireframeOptions& options, std::vector<DebugDrawLine>& output);
@@ -138,6 +140,7 @@ namespace NexusEngine {
         std::filesystem::path collisionConfiguration_; //< ProjectのConfig。Levelへ保存しない
         std::shared_ptr<CollisionLayerSettings> collisionConfigurationValues_; //< 削除済みIDのRaycast用解決表
 		std::unique_ptr<PhysicsWorld> physics_; //< 遅延生成するsolver。Systemより後、Sceneより先に破棄する
+        AnimationRuntime animationRuntime_; //< Levelごとの評価cache。Sceneを交換しても共有しない
 		SystemScheduler		   scheduler_;					  //< Sceneへ処理を適用するSystem群。physics_ slotを借用する
 		PersistentIdGenerator  persistentIds_;				  //< 新規Entityの永続ID発行元
 		LevelState			   state_ = LevelState::Unloaded; //< Worldへのアクセス可否を表す状態

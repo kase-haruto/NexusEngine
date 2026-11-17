@@ -159,14 +159,14 @@ Rebuild Scriptsの候補を別Domainでロードし、公開Property snapshotの
 | Tools/Project/Package-Game.ps1 | Mono同梱 / Backend整合検査、CoreCLR互換維持 |
 | Tools/Project/Add-GameModule.ps1 | 最初のC#追加時にMono / net48、既存CoreCLRは維持 |
 | Tools/Engine/Publish-Engine.ps1 | Installed SDKへMono source / helper / licenseを配置 |
-| Templates/Shared/Directory.Build.props.in | Backend既定値、参照Assembly探索、C#言語version |
-| Templates/ManagedGameplay/GameScripts.csproj.in | net48 / System.Memory参照 |
-| Templates/ManagedGameplay/BuildTargets.json.in | 新規Mono選択 |
-| Templates/ManagedBootstrap/BuildTargets.json.in | 新規Mono選択 |
-| Templates/Hybrid/BuildTargets.json.in | 新規Mono選択 |
-| Templates/ManagedGameplay/README.md.in | Mono SDKとアタッチ手順 |
-| Templates/ManagedBootstrap/README.md.in | Mono配置とDomain寿命 |
-| Templates/Hybrid/README.md.in | Mono / Native共存と操作手順 |
+| Templates/Samples/Shared/Directory.Build.props.in | Backend既定値、参照Assembly探索、C#言語version |
+| Templates/Samples/ManagedGameplay/GameScripts.csproj.in | net48 / System.Memory参照 |
+| Templates/Samples/ManagedGameplay/BuildTargets.json.in | 新規Mono選択 |
+| Templates/Samples/ManagedBootstrap/BuildTargets.json.in | 新規Mono選択 |
+| Templates/Samples/Hybrid/BuildTargets.json.in | 新規Mono選択 |
+| Templates/Samples/ManagedGameplay/README.md.in | Mono SDKとアタッチ手順 |
+| Templates/Samples/ManagedBootstrap/README.md.in | Mono配置とDomain寿命 |
+| Templates/Samples/Hybrid/README.md.in | Mono / Native共存と操作手順 |
 | Tests/NexusEditorTests.vcxproj | MonoHostを含めた静的link |
 | Tests/EditorServicesTests.cpp | Script解除・公開値Undo / RedoとPlay guard |
 | Tests/MonoGameplayTests.cpp | 実Mono hosting / reload / ECS統合 |

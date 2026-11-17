@@ -11,11 +11,12 @@
   <PropertyGroup><OutDir>$(ProjectDir)..\..\Generated\Outputs\GraphicsTests\$(Configuration)\</OutDir><IntDir>$(ProjectDir)..\..\Generated\obj\GraphicsTests\$(Configuration)\</IntDir></PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><LanguageStandard>stdcpp23</LanguageStandard><PreprocessorDefinitions>NEXUS_GRAPHICS_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions><MultiProcessorCompilation>true</MultiProcessorCompilation></ClCompile>
-    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>d3d12.lib;dxgi.lib;dxcompiler.lib;windowscodecs.lib;ole32.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
     <PostBuildEvent><Command>copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxcompiler.dll" "$(OutDir)dxcompiler.dll"&#xD;&#xA;copy /Y "$(WindowsSdkDir)Redist\D3D\x64\dxil.dll" "$(OutDir)dxil.dll"</Command></PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="GraphicsShadowTests.cpp" />
+    <ClCompile Include="AnimationAssetTests.cpp" />
     <ClCompile Include="GraphicsPublicHeaderTests.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
     <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
@@ -108,4 +109,8 @@
   <ItemGroup><None Include="DDGITests.inl" /></ItemGroup>
   <ItemGroup><ClCompile Include="..\Graphics\Backend\DirectX12\Selection\SelectionOutline.cpp" /></ItemGroup>
   <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Animation\AnimationDocument.cpp" />
+    <ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" />
+  </ItemGroup>
 </Project>

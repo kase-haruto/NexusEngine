@@ -139,6 +139,8 @@ namespace NexusEngine {
         std::unique_ptr<PrimitiveRenderer> cameraPreviewRenderer_; //< プレビュー専用GPU資源。GraphicsSystem停止まで保持する
         RenderScene cameraPreviewScene_;
         size_t previewAssetRevision_ = 0;
+        size_t animationStudioRevision_ = 0, animationSavedRevision_ = 0;
+        bool animationPreviewWasActive_ = false;
         bool previewInitializationFailed_ = false;
         size_t uploadedAssetRevision_ = 1; //< GPUへ反映済みsnapshot
         std::set<std::string> reportedAssetErrors_; //< 同じ欠損参照による毎Frameのログ連打を防ぐ

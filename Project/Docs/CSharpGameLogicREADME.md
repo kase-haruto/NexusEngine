@@ -157,8 +157,8 @@ Live++とManaged Reloadの調停は改訂仕様Phase 7、Phase 3のNative System
 | Runtime/Scripting/ScriptSystem.cpp | callback中Detach後の旧Level書戻し拒否 |
 | Managed/Nexus.Managed/Entity.cs | TryGetTransformによる既存Component値取得の公開 |
 | Launcher/LauncherApplication.cpp | C#テンプレートと必要環境の案内を修正 |
-| Templates/ManagedGameplay/PlayerController.cs.in | TryGetTransformと明示書戻しの使用例 |
-| Templates/ManagedGameplay/README.md.in | Component取得と終了順序の説明 |
+| Templates/Samples/ManagedGameplay/PlayerController.cs.in | TryGetTransformと明示書戻しの使用例 |
+| Templates/Samples/ManagedGameplay/README.md.in | Component取得と終了順序の説明 |
 | Tests/Fixtures/ManagedGameplay/Behaviours.cs | 値コピーとComponent削除後の取得失敗を検証するソース |
 | Tests/ManagedGameplayTests.cpp | 誤World / Thread拒否、同一Level再開始、部分失敗後の登録数を検証するソース |
 | Docs/ManagedGameplayREADME.md | 旧記録からの案内と現行停止順序 |

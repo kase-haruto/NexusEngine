@@ -131,7 +131,7 @@ World token、Entity index / generation、Script attachment、所有threadをNat
 | Build/NexusRuntime.vcxproj / NexusEngine.vcxproj / Tests/NexusEditorTests.vcxproj | adapter実装の全コンパイル先、テストSource登録 |
 | Tools/Project/ProjectBuild.cpp / Write-GameBuildStamp.ps1 | sidecarをGameplay成果物のhash照合へ追加 |
 | Tools/Engine/Publish-Engine.ps1 | 安定API追加Source、Metadata ToolのSDK配布 |
-| Templates/ManagedGameplay/PlayerController.cs.in / README.md.in | MoveSpeed公開例と生成Projectの利用説明 |
+| Templates/Samples/ManagedGameplay/PlayerController.cs.in / README.md.in | MoveSpeed公開例と生成Projectの利用説明 |
 | Tests/ManagedReflectionTests.cpp / GameRuntimeTests.cpp | CLR不要の共通履歴・保存・Alias・型変更保持・境界検証ケース |
 | Tests/ManagedGameplayTests.cpp / Fixtures/ManagedGameplay/Behaviours.cs | OnCreate前の復元・snapshot・再生成ケース |
 | README.md / Docs/ManagedGameplayREADME.md / 本README | Phase 5の進捗・設計・制限 |

@@ -10,15 +10,15 @@ struct PostProcessGraphPanelTestAccess {
     static ImVec2 CanvasOrigin(const PostProcessGraphPanel& panel) { return {panel.canvasOrigin_[0],panel.canvasOrigin_[1]}; }
     static ImVec2 CanvasSize(const PostProcessGraphPanel& panel) { return {panel.canvasSize_[0],panel.canvasSize_[1]}; }
     static ImVec2 Pan(PostProcessGraphPanel& panel) {
-        auto* previous=ImNodes::GetCurrentContext(); ImNodes::SetCurrentContext(panel.nodes_);
+        auto* previous=ImNodes::GetCurrentContext(); ImNodes::SetCurrentContext(panel.editor_.NativeContext());
         auto result=ImNodes::EditorContextGetPanning(); ImNodes::SetCurrentContext(previous); return result;
     }
     static ImVec2 NodePosition(PostProcessGraphPanel& panel,int id) {
-        auto* previous=ImNodes::GetCurrentContext(); ImNodes::SetCurrentContext(panel.nodes_);
+        auto* previous=ImNodes::GetCurrentContext(); ImNodes::SetCurrentContext(panel.editor_.NativeContext());
         auto result=ImNodes::GetNodeScreenSpacePos(id); ImNodes::SetCurrentContext(previous); return result;
     }
     static std::map<int,ImVec2> Dimensions(PostProcessGraphPanel& panel) {
-        auto* previous=ImNodes::GetCurrentContext(); ImNodes::SetCurrentContext(panel.nodes_);
+        auto* previous=ImNodes::GetCurrentContext(); ImNodes::SetCurrentContext(panel.editor_.NativeContext());
         std::map<int,ImVec2> result;
         for(const auto& node:panel.document_.Graph().nodes) result[node.id]=ImNodes::GetNodeDimensions(node.id);
         ImNodes::SetCurrentContext(previous); return result;

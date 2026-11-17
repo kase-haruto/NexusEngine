@@ -1,62 +1,21 @@
 {
-  "moduleLanguages": ["Cpp", "CSharp"],
+  "schemaVersion": 1,
+  "id": "blank",
+  "name": "Empty",
+  "description": "何も配置されていない、完全に空のLevelから開始します。",
+  "category": "project",
+  "generateModule": false,
+  "initialLevel": "@LEVELS@/Startup.level",
+  "requiresCamera": false,
+  "preview": {
+    "kind": "image",
+    "source": "Blank/Preview.png"
+  },
   "files": [
     {
-      "replace": false,
-      "target": "@SOURCE@/Game/README.md",
-      "source": "Shared/ManagedModule.README.md.in",
-      "language": "CSharp"
-    },
-    {
-      "replace": false,
-      "target": "@SOURCE@/Game/GameModule.h",
-      "language": "Cpp",
-      "source": "Shared/GameModule.h.in"
-    },
-    {
-      "replace": false,
-      "target": "@SOURCE@/Game/Main.cpp",
-      "language": "Cpp",
-      "source": "Shared/Main.cpp.in"
-    },
-    {
-      "replace": false,
-      "target": "@SOURCE@/Game/HealthComponent.h",
-      "language": "Cpp",
-      "source": "Shared/HealthComponent.h.in"
-    },
-    {
-      "replace": true,
-      "target": "GameRuntime.vcxproj",
-      "language": "Cpp",
-      "source": "Shared/GameRuntime.vcxproj.in"
-    },
-    {
-      "replace": true,
-      "target": "GameEditor.vcxproj",
-      "language": "Cpp",
-      "source": "Shared/GameEditor.vcxproj.in"
-    },
-    {
-      "replace": true,
-      "target": "Game.slnx",
-      "language": "Cpp",
-      "source": "Shared/Game.slnx.in"
-    },
-    {
-      "replace": false,
-      "target": "@CONFIG@/BuildTargets.json",
-      "language": "Cpp",
-      "source": "Shared/BuildTargets.json.in"
-    },
-    {
-      "replace": false,
+      "source": "Blank/Startup.level",
       "target": "@LEVELS@/Startup.level",
-      "source": "Blank/Startup.level"
+      "replace": false
     }
-  ],
-  "id": "blank",
-  "schemaVersion": 1,
-  "description": "Entityを配置しない空のシーンから始めます。",
-  "name": "空のプロジェクト"
+  ]
 }

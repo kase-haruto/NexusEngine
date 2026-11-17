@@ -112,8 +112,8 @@ try {
     $locator = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     $msbuild = @(& $locator -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe')[0]
     if(-not $msbuild -or -not [IO.File]::Exists($msbuild)) { throw 'MSBuild with C++ v145 is required to publish hosts.' }
-    # 発行に必要なlibraryとLauncherだけを個別に更新する。SolutionやGameはビルドしない。
-    foreach($buildTarget in @('NexusRuntime','NexusEditorSupport','NexusLauncher')) {
+    # 発行に必要なlibraryだけを個別に更新する。SolutionやGameはビルドしない。
+    foreach($buildTarget in @('NexusRuntime','NexusEditorSupport')) {
         Invoke-Child $msbuild @((Join-Path $sdkSource "Build/$buildTarget.vcxproj"),'/verbosity:minimal',"/p:Configuration=$configuration",'/p:Platform=x64') $sdkSource
     }
     # Engine実装cppとGame/SamplesはSDKへ含めない。公開範囲は既存include構造から段階的に絞る。
@@ -164,7 +164,7 @@ try {
         $inputPath = Within $sourceRoot $dependency
         Copy-File $inputPath (Join-Path $bin ([IO.Path]::GetFileName($inputPath)))
     }
-    Copy-File (Join-Path $sourceRoot "Generated/Modules/x64/$configuration/NexusLauncher/NexusLauncher.exe") (Join-Path $bin 'NexusLauncher.exe')
+    # Launcherは独立配布のWinForms版を使用し、SDKへ旧C++版を同梱しない。
     $identity = '<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><PropertyGroup><NexusHostEngineId Condition="''$(NexusHostEngineId)''==''''">' + (Xml $EngineId) + '</NexusHostEngineId><NexusHostEngineVersion Condition="''$(NexusHostEngineVersion)''==''''">' + (Xml $Version) + '</NexusHostEngineVersion><NexusHostEngineAssociation>installed</NexusHostEngineAssociation></PropertyGroup><ItemDefinitionGroup><ClCompile><PreprocessorDefinitions>NEXUS_HOST_ENGINE_ID=&quot;$(NexusHostEngineId)&quot;;NEXUS_HOST_ENGINE_VERSION=&quot;$(NexusHostEngineVersion)&quot;;NEXUS_HOST_ENGINE_ASSOCIATION=&quot;installed&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile></ItemDefinitionGroup></Project>'
     [IO.File]::WriteAllText((Join-Path $sdk 'Build/Nexus.EngineIdentity.props'),$identity,$utf8)
     [IO.Directory]::CreateDirectory($work) | Out-Null

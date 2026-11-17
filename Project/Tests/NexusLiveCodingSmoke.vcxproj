@@ -29,6 +29,7 @@
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
     <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\AnimationPlayerComponent.cpp" />
     <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
     <ClCompile Include="..\Foundation\Logging\ConsoleLogSink.cpp" />
     <ClCompile Include="..\Foundation\Logging\DebugOutputLogSink.cpp" />
@@ -39,4 +40,9 @@
   <Import Project="..\Reflection.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup><ClCompile Include="..\Game\Generated\GeneratedGameReflection.cpp" /></ItemGroup>
+
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Scene\Components\AnimatorComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\TimelinePlayerComponent.cpp" />
+  </ItemGroup>
 </Project>

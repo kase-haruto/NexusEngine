@@ -397,7 +397,13 @@ namespace NexusEngine {
                 pose.Shutdown();
                 if(!pose.Initialize(*modelAsset_)) continue;
             }
-            if(pose.Sample(sample->index, sample->time, sample->loop)) objectPoses[index] = &pose;
+            const auto status = !sample->layers.empty() ? pose.SampleLayers(sample->layers) : sample->blendWeight > 0
+                ? pose.SampleBlend(sample->index, sample->time, sample->loop,
+                    sample->blendIndex, sample->blendTime, sample->blendLoop, sample->blendWeight)
+                : pose.Sample(sample->index, sample->time, sample->loop);
+            if(status) {
+                objectPoses[index] = &pose;
+            }
         }
 		const Matrix4x4 projection	= renderScene_->camera->viewProjectionMatrix;
 		const auto cameraWorld = TryInverse(renderScene_->camera->viewMatrix);

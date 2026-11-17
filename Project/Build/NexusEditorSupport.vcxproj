@@ -72,4 +72,9 @@
     <ClCompile Include="..\Editor\Gui\Panels\PostProcessGraphPanel.cpp" />
     <ClCompile Include="..\ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
   </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Editor\Services\AnimationStudioDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\AnimationStudioPanel.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Editor\Gui\Nodes\NodeEditor.cpp" /></ItemGroup>
 </Project>

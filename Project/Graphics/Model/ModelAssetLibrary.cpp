@@ -8,9 +8,70 @@
 #include <cctype>
 #include <set>
 #include <type_traits>
+#include "ThirdParty/nlohmann/json.hpp"
+#include "Runtime/Animation/AnimationDocument.h"
 
 namespace NexusEngine {
 namespace {
+std::vector<std::string> AnimationNodePaths(const ModelAssetData& model) {
+    std::vector<std::string> paths;
+    paths.reserve(model.nodes.size());
+    for(const auto& node : model.nodes) {
+        std::string path = node.parentIndex == ModelNodeAssetData::kNoParent ? "" : paths.at(node.parentIndex);
+        path += std::to_string(node.name.size()) + ":" + node.name + "/";
+        paths.push_back(std::move(path));
+    }
+    return paths;
+}
+Error Invalid(const char* message);
+std::filesystem::path Path(const std::string& text);
+Result<std::shared_ptr<const AnimationAsset>> AuthoredAnimation(const std::string& reference, const AnimationClipDocument& definition) {
+            auto asset = std::make_shared<AnimationAsset>();
+            asset->reference = reference;
+            asset->clip.name = Path(reference).stem().string();
+            asset->clip.duration = definition.duration;
+            // $node trackのtargetはインポート時の階層パス。汎用Property trackはRuntimeが処理する。
+            for(const auto& track : definition.tracks) {
+                if(track.component != "$node") {
+                    continue;
+                }
+                auto found = std::find(asset->nodePaths.begin(), asset->nodePaths.end(), track.target);
+                uint32_t node = static_cast<uint32_t>(found - asset->nodePaths.begin());
+                if(found == asset->nodePaths.end()) {
+                    asset->nodePaths.push_back(track.target);
+                    asset->clip.channels.push_back({node});
+                }
+                auto& channel = asset->clip.channels[node];
+                for(const auto& key : track.keys) {
+                    const auto vector = [](const std::vector<float>& value) {
+                        return value.size() >= 3 ? Vector3{value[0], value[1], value[2]} : Vector3{};
+                    };
+                    if(track.property == "rotation" && key.value.size() == 4) {
+                        QuaternionKeyframe frame;
+                        frame.time = key.time;
+                        frame.value = Quaternion{key.value[0], key.value[1], key.value[2], key.value[3]}.Normalized();
+                        if(key.inTangent.size() == 4) {
+                            frame.inTangent = {key.inTangent[0], key.inTangent[1], key.inTangent[2], key.inTangent[3]};
+                        }
+                        if(key.outTangent.size() == 4) {
+                            frame.outTangent = {key.outTangent[0], key.outTangent[1], key.outTangent[2], key.outTangent[3]};
+                        }
+                        channel.rotationInterpolation = track.interpolation;
+                        channel.rotations.push_back(frame);
+                    } else if(track.property == "translation" && key.value.size() == 3) {
+                        channel.translationInterpolation = track.interpolation;
+                        channel.translations.push_back({key.time, vector(key.value), vector(key.inTangent), vector(key.outTangent)});
+                    } else if(track.property == "scale" && key.value.size() == 3) {
+                        channel.scaleInterpolation = track.interpolation;
+                        channel.scales.push_back({key.time, vector(key.value), vector(key.inTangent), vector(key.outTangent)});
+                    } else {
+                        return std::unexpected(Invalid("Unsupported node animation property or dimension."));
+                    }
+                }
+            }
+            std::shared_ptr<const AnimationAsset> immutable = std::move(asset);
+            return immutable;
+}
 Error Invalid(const char* message) { return Error(ErrorCategory::Resource, 130, message); }
 std::string Utf8(const std::filesystem::path& path) {
     auto text = path.generic_u8string(); return {reinterpret_cast<const char*>(text.data()), text.size()};
@@ -31,10 +92,61 @@ ModelAssetLibrary::ModelAssetLibrary(std::shared_ptr<ModelAssetData> initial, st
     }
     ranges_[{kStartupModelAssetReference, ""}] = {0, static_cast<uint32_t>(aggregate_->nodes.size()), 0, 0, static_cast<uint32_t>(aggregate_->animations.size())};
 }
+ModelAssetLibrary::Request ModelAssetLibrary::Request::FromItem(const PrimitiveRenderItem& item) {
+    Request request{item.shape, item.meshAsset, item.baseColorTexture};
+    if(item.animation && item.shape == PrimitiveShape::Asset) {
+        if(item.animation->layers.empty()) {
+            request.animationAsset = item.animation->asset;
+            request.blendAnimationAsset = item.animation->blendAsset;
+        }
+        for(const auto& layer : item.animation->layers) {
+            if(!layer.asset.empty()) {
+                request.layers.push_back(layer.asset);
+            }
+        }
+        std::ranges::sort(request.layers);
+        request.layers.erase(std::unique(request.layers.begin(), request.layers.end()), request.layers.end());
+    }
+    return request;
+}
 void ModelAssetLibrary::Range::ResolveAnimation(PrimitiveRenderItem& item) const {
-    if(!item.animation) return;
-    if(item.animation->index >= animationCount || item.shape != PrimitiveShape::Asset) item.animation.reset();
-    else item.animation->index += animationBegin;
+    if(!item.animation) {
+        return;
+    }
+    if(item.shape != PrimitiveShape::Asset) {
+        item.animation.reset();
+        return;
+    }
+    auto& sample = *item.animation;
+    // Asset参照を実行時indexへ変換する。毎フレームの描画処理ではI/Oを行わない。
+    const auto resolve = [&](const std::string& asset, uint32_t& index) {
+        if(!asset.empty()) {
+            const auto found = animationAssets.find(asset);
+            if(found == animationAssets.end()) {
+                return false;
+            }
+            index = found->second;
+            return true;
+        }
+        if(index >= animationCount) {
+            return false;
+        }
+        index += animationBegin;
+        return true;
+    };
+    if(!sample.layers.empty()) {
+        for(auto& layer : sample.layers) {
+            if(!resolve(layer.asset, layer.index)) {
+                item.animation.reset();
+                return;
+            }
+        }
+        return;
+    }
+    if(item.shape != PrimitiveShape::Asset || !resolve(sample.asset, sample.index) ||
+        (sample.blendWeight > 0 && !resolve(sample.blendAsset, sample.blendIndex))) {
+        item.animation.reset();
+    }
 }
 void ModelAssetLibrary::Retain(std::span<const Request> requests) {
     std::set<std::pair<std::string, std::string>> active;
@@ -72,6 +184,21 @@ bool ModelAssetLibrary::MatchesRequests(std::span<const Request> requests) const
         const auto mesh = MeshKey(request.shape, request.mesh);
         if(!mesh.empty()) keys.emplace(mesh, request.texture);
     }
+    for(const auto& request : requests) {
+        const auto found = ranges_.find({MeshKey(request.shape, request.mesh), request.texture});
+        if(found == ranges_.end()) {
+            continue;
+        }
+        for(const auto& layer : request.layers) {
+            if(!found->second.animationAssets.contains(layer)) {
+                return false;
+            }
+        }
+        if((!request.animationAsset.empty() && !found->second.animationAssets.contains(request.animationAsset)) ||
+            (!request.blendAnimationAsset.empty() && !found->second.animationAssets.contains(request.blendAnimationAsset))) {
+            return false;
+        }
+    }
     if(keys.size() != ranges_.size()) return false;
     for(const auto& key : keys) if(!ranges_.contains(key)) return false;
     return true;
@@ -92,6 +219,152 @@ Result<const ModelAssetData*> ModelAssetLibrary::Model(const std::string& refere
         if(loaded->materials.empty()) loaded->materials.emplace_back();
         return std::move(*loaded);
     });
+}
+void ModelAssetLibrary::InvalidateAnimations() {
+    animations_.clear();
+    animationOverrides_.clear();
+    aggregate_ = std::make_shared<ModelAssetData>();
+    ranges_.clear();
+    ++revision_;
+}
+Result<void> ModelAssetLibrary::PreviewAnimation(const std::string& reference, const AnimationClipDocument& definition) {
+    Result<std::shared_ptr<const AnimationAsset>> asset;
+    if(definition.source.empty()) {
+        asset = AuthoredAnimation(reference, definition);
+    } else {
+        asset = Animation(definition.source + "#animation/" + definition.clip);
+    }
+    if(!asset) {
+        return std::unexpected(asset.error());
+    }
+    animationOverrides_[reference] = *asset;
+    aggregate_ = std::make_shared<ModelAssetData>();
+    ranges_.clear();
+    ++revision_;
+    return {};
+}
+Result<std::shared_ptr<const AnimationAsset>> ModelAssetLibrary::Animation(const std::string& reference) {
+    if(const auto preview = animationOverrides_.find(reference); preview != animationOverrides_.end()) {
+        return preview->second;
+    }
+    if(const auto found = animations_.find(reference); found != animations_.end()) {
+        return found->second;
+    }
+    std::string source;
+    std::string clipName;
+    const auto separator = reference.find("#animation/");
+    if(separator != std::string::npos) {
+        source = reference.substr(0, separator);
+        clipName = reference.substr(separator + 11);
+    } else {
+        auto path = Reference(Path(reference));
+        if(!path) {
+            return std::unexpected(path.error());
+        }
+        if(Path(*path).extension() != ".nxanim") {
+            return std::unexpected(Invalid("Animation assets require .nxanim or model#animation/clip references."));
+        }
+        auto definition = LoadAnimationClipDocument(root_ / Path(*path));
+        if(!definition) {
+            return std::unexpected(definition.error());
+        }
+        if(definition->source.empty()) {
+            auto built = AuthoredAnimation(reference, *definition);
+            if(built) {
+                animations_.emplace(reference, *built);
+            }
+            return built;
+        }
+        source = definition->source;
+        clipName = definition->clip;
+    }
+    auto model = Model(source);
+    if(!model) {
+        // Meshを持たないアニメーション専用glTFも、描画モデルとは別に取り込む。
+        model = CachedModel(":animation/" + source, [&]() -> Result<ModelAssetData> {
+            auto canonical = Reference(Path(source));
+            if(!canonical) {
+                return std::unexpected(canonical.error());
+            }
+            return ModelLoader{}.LoadGltf(root_ / Path(*canonical), false);
+        });
+        if(!model) {
+            return std::unexpected(model.error());
+        }
+    }
+    const AnimationClip* selected = nullptr;
+    for(const auto& clip : (*model)->animations) {
+        if(clip.name == clipName) {
+            if(selected) {
+                return std::unexpected(Invalid("Animation clip name is ambiguous; give source clips unique names."));
+            }
+            selected = &clip;
+        }
+    }
+    if(!selected) {
+        return std::unexpected(Invalid("Animation asset clip was not found in its source."));
+    }
+    auto asset = std::make_shared<AnimationAsset>();
+    asset->reference = reference;
+    asset->source = source;
+    asset->clip = *selected;
+    asset->nodePaths = AnimationNodePaths(**model);
+    std::shared_ptr<const AnimationAsset> immutable = std::move(asset);
+    animations_.emplace(reference, immutable);
+    return immutable;
+}
+Result<ModelAssetLibrary::Range> ModelAssetLibrary::Resolve(const Request& request) {
+    auto range = Resolve(request.shape, request.mesh, request.texture);
+    if(!range) {
+        return range;
+    }
+    if(request.animationAsset.empty() && request.blendAnimationAsset.empty() && request.layers.empty()) {
+        return range;
+    }
+    if(request.shape != PrimitiveShape::Asset || request.mesh.empty()) {
+        return std::unexpected(Invalid("Animation assets require a model."));
+    }
+    auto target = Model(request.mesh);
+    if(!target) {
+        return std::unexpected(target.error());
+    }
+    const auto paths = AnimationNodePaths(**target);
+    auto references = request.layers;
+    references.push_back(request.animationAsset);
+    references.push_back(request.blendAnimationAsset);
+    for(const auto& reference : references) {
+        if(reference.empty() || range->animationAssets.contains(reference)) {
+            continue;
+        }
+        auto asset = Animation(reference);
+        if(!asset) {
+            return std::unexpected(asset.error());
+        }
+        AnimationClip bound = (*asset)->clip;
+        // アセットのnode indexは元モデル固有なので、階層パスで描画対象へ再バインドする。
+        // 曖昧な同名階層や互換性のない骨格はエラーとし、無関係なnodeを動かさない。
+        for(auto& channel : bound.channels) {
+            if(channel.nodeIndex >= (*asset)->nodePaths.size()) {
+                return std::unexpected(Invalid("Animation asset node is invalid."));
+            }
+            const auto& path = (*asset)->nodePaths[channel.nodeIndex];
+            const auto found = std::find(paths.begin(), paths.end(), path);
+            if(found == paths.end() || std::find(found + 1, paths.end(), path) != paths.end() ||
+                std::count((*asset)->nodePaths.begin(), (*asset)->nodePaths.end(), path) != 1) {
+                return std::unexpected(Invalid("Animation asset skeleton does not match the target model."));
+            }
+            channel.nodeIndex = range->begin + static_cast<uint32_t>(found - paths.begin());
+        }
+        if(aggregate_.use_count() != 1) {
+            aggregate_ = std::make_shared<ModelAssetData>(*aggregate_);
+        }
+        const auto index = static_cast<uint32_t>(aggregate_->animations.size());
+        aggregate_->animations.push_back(std::move(bound));
+        range->animationAssets.emplace(reference, index);
+        ranges_.at({request.mesh, request.texture}) = *range;
+        ++revision_;
+    }
+    return range;
 }
 Result<const ModelAssetData*> ModelAssetLibrary::CachedModel(const std::string& key, const ReloadStartup& load) {
     std::promise<ModelResult> promise;

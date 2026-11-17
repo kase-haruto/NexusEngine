@@ -113,6 +113,7 @@
     <ClCompile Include="..\Runtime\Rendering\RenderSceneExtractor.cpp" />
     <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\AnimationPlayerComponent.cpp" />
     <ClCompile Include="..\Runtime\Scene\SystemScheduler.cpp" />
     <ClCompile Include="..\Runtime\Scene\TransformSystem.cpp" />
     <ClCompile Include="..\Runtime\Scene\TransformUpdateSystem.cpp" />
@@ -132,4 +133,13 @@
     <ClCompile Include="..\Runtime\Project\ProjectService.cpp" />
   </ItemGroup>
 <ItemGroup><ClCompile Include="..\Platform\Process\Process.cpp" /></ItemGroup>  <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Animation\AnimationDocument.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Scene\AnimationUpdateSystem.cpp" />
+  </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Scene\Components\AnimatorComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\TimelinePlayerComponent.cpp" />
+  </ItemGroup>
 </Project>

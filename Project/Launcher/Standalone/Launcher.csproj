@@ -3,7 +3,7 @@
     <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <AssemblyName>NexusLauncher</AssemblyName>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Configurations>Debug;Develop;Release</Configurations>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
@@ -12,6 +12,8 @@
     <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="../../Templates/**/*" Exclude="../../Templates/Samples/**/*;../../Templates/Behaviour/**/*" Link="Templates/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Previewと初期LevelはTemplate資源として独立配布し、既存SDKのinventoryを変更しない。 -->
     <Content Include="launcher.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Remove-Launcher.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

@@ -138,8 +138,10 @@ namespace NexusEngine {
 					result.primitives.push_back({ MakeRenderObjectId(entity.GetId()), transform.worldMatrix, primitive.tint, primitive.nodeIndex });
 					auto& item = result.primitives.back();
 					item.staticLighting = primitive.staticLighting;
-                    if(const auto* player = entity.GetComponent<AnimationPlayerComponent>(); player && player->IsValid()) {
-                        item.animation = PrimitiveRenderItem::AnimationSample{player->animationIndex, player->time, player->loop};
+                    if(const auto* player = entity.GetComponent<AnimationPlayerComponent>(); player && player->IsValid() && (!player->runtimeDriven || !player->samples.empty())) {
+                        item.animation = PrimitiveRenderItem::AnimationSample{player->animationIndex, player->time, player->loop,
+                            player->blendAnimationIndex, player->blendTime, player->blendLoop, player->blendWeight,
+                            player->animationAsset, player->blendAnimationAsset, player->samples};
                         item.staticLighting = false;
                     }
                     item.meshAsset = primitive.meshAsset;

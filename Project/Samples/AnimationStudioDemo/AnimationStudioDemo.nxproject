@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "name": "Animation Studio Demo",
+  "projectVersion": "0.1.0",
+  "projectId": "e44b163c-e3cf-4d67-8686-4c730ea49772",
+  "engine": {
+    "association": "development",
+    "id": "nexus-development",
+    "version": "0.1.0-dev"
+  },
+  "paths": {
+    "assets": "Assets",
+    "levels": "Levels",
+    "config": "Config",
+    "source": "Source"
+  },
+  "startupLevel": "Levels/Startup.level"
+}

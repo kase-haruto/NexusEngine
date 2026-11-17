@@ -180,7 +180,7 @@ GC確認はProcess全体に停止時間を生じ得る。終了しないfinalize
 | Tools/Engine/Publish-Engine.ps1 | Reload entry SourceとBuild-ScriptsのSDK配布 |
 | Tests/Fixtures/ManagedGameplay/Behaviours.cs / Fixtures/ManagedReload/GameScripts.csproj | 別コード世代、初期化失敗、worker / GCHandle残存のfixture |
 | Tests/ManagedGameplayTests.cpp / Build/NexusManagedGameplayTests.vcxproj | 再Reload、旧継続、状態保持、Scene復元、解放失敗・再試行の明示実行用ケース |
-| Templates/ManagedGameplay/README.md.in / Startup.level | 新規Projectの操作・lifecycle契約・固定型ID |
+| Templates/Samples/ManagedGameplay/README.md.in / Startup.level | 新規Projectの操作・lifecycle契約・固定型ID |
 | README.md / Docs/ManagedReflectionREADME.md / 本README | Phase 6の進捗と制限 |
 
 ## 静的確認・未対応

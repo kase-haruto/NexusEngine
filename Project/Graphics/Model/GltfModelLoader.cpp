@@ -1,5 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "ModelLoader.h"
+#include "Foundation/Logging/Logger.h"
 
 // c++
 #include <algorithm>
@@ -352,7 +353,7 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// glTF 2.0をModelAssetDataへ変換する
 	/////////////////////////////////////////////////////////////////////////////////////////
-	Result<ModelAssetData> ModelLoader::LoadGltf(const std::filesystem::path& filePath) const {
+	Result<ModelAssetData> ModelLoader::LoadGltf(const std::filesystem::path& filePath, bool requireDrawableMesh) const {
 		const std::string nativePath = filePath.string();
 		cgltf_options options = {};
 		cgltf_data* parsedData = nullptr;
@@ -494,13 +495,27 @@ namespace NexusEngine {
 		for(cgltf_size animationIndex = 0; animationIndex < data->animations_count; ++animationIndex) {
 			const cgltf_animation& sourceAnimation = data->animations[animationIndex];
 			AnimationClip clip;
-			clip.name = sourceAnimation.name != nullptr ? sourceAnimation.name : "Animation";
+			clip.name = sourceAnimation.name != nullptr && sourceAnimation.name[0] != '\0'
+				? sourceAnimation.name : "Animation_" + std::to_string(animationIndex);
 			for(cgltf_size channelIndex = 0; channelIndex < sourceAnimation.channels_count; ++channelIndex) {
 				const cgltf_animation_channel& sourceChannel = sourceAnimation.channels[channelIndex];
 				if(sourceChannel.target_node == nullptr || sourceChannel.sampler == nullptr) continue;
 				if(sourceChannel.target_path == cgltf_animation_path_type_weights) {
-					return std::unexpected(MakeGltfError(filePath, kGltfUnsupported,
-						"morph target weight animation is not currently supported"));
+					// 表情trackを持つだけで骨格や全クリップの読み込みを失敗させない。
+					// モーフ専用クリップも元の番号と時間を保ち、bind poseとして評価する。
+					clip.hasMorphAnimation = true;
+					const cgltf_accessor* times = sourceChannel.sampler->input;
+					if(times == nullptr || times->type != cgltf_type_scalar) {
+						return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid morph animation times"));
+					}
+					for(cgltf_size key = 0; key < times->count; ++key) {
+						float time = 0.0f;
+						if(!cgltf_accessor_read_float(times, key, &time, 1) || !std::isfinite(time) || time < 0.0f) {
+							return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid morph animation time"));
+						}
+						clip.duration = (std::max)(clip.duration, time);
+					}
+					continue;
 				}
 				NodeAnimationChannel* channel = nullptr;
 				const uint32_t targetNode = nodeRemap[PointerIndex(sourceChannel.target_node, data->nodes)];
@@ -583,7 +598,10 @@ namespace NexusEngine {
 			model.animations.push_back(std::move(clip));
 		}
 
-		if(model.meshes.empty()) {
+		if(std::ranges::any_of(model.animations, [](const AnimationClip& clip) { return clip.hasMorphAnimation; })) {
+			NEXUS_LOG_WARNING("Assets", "Morph animation is not rendered; skeletal/TRS clips were imported: " + nativePath);
+		}
+		if(requireDrawableMesh && model.meshes.empty()) {
 			return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "document has no drawable meshes"));
 		}
 		return model;

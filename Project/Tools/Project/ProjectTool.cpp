@@ -13,6 +13,7 @@
 #include "Tools/Engine/EngineRegistry.h"
 #include "Tools/Engine/EnginePublisher.h"
 #include "ProjectTemplates.h"
+#include "Runtime/Project/ProjectJson.h"
 #include "ProjectBuild.h"
 #include "ProjectMigration.h"
 #include "Platform/FileSystem/AtomicFile.h"
@@ -63,6 +64,8 @@ int RunProjectTool(int argc, wchar_t** argv) {
                      "NexusProjectTool migration-apply <plan.json> --accept-api-risk\n"
                      "NexusProjectTool migration-restore <project.nxproject> <Recovery.json>\n"
                      "NexusProjectTool template-list <engine.nxengine>\n"
+                     "NexusProjectTool template-catalog <engine.nxengine> [template-directory]\n"
+                     "NexusProjectTool create-project <new-root> <name> <engine.nxengine> <template-directory> <template-id>\n"
                      "NexusProjectTool create-template <new-root> <name> <engine.nxengine> <template-id> [Cpp|CSharp]\n"
                      "NexusProjectTool build-editor|build-runtime|rebuild-editor|rebuild-runtime|verify-editor|verify-runtime|open|run|check <file.nxproject> <engine-registry.json> [configuration] [Standard|NativeLivePatch] [LivePP-directory]\n";
         return 1;
@@ -140,19 +143,48 @@ int RunProjectTool(int argc, wchar_t** argv) {
         for(const auto& engine : *engines) std::cout << engine.identity.id << '\t' << engine.identity.version << '\t' << engine.configuration << '\t' << (engine.installation ? "Available" : engine.error) << '\n';
         return 0;
     }
+    if(command == L"template-catalog" && (argc == 3 || argc == 4)) {
+        // Engine検証とTemplate解決はCLIへ集約し、配布UIへRuntimeの内部構造を公開しない。
+        auto engine = EngineManifest::Load(argv[2]);
+        if(!engine) {
+            return Fail(engine.error());
+        }
+        const std::filesystem::path directory = argc == 4 ? std::filesystem::path(argv[3]) : engine->templates;
+        auto templates = ProjectTemplates::List(directory);
+        if(!templates) {
+            return Fail(templates.error());
+        }
+        auto items = ProjectJson::Json::array();
+        for(const auto& item : *templates) {
+            if(item.category != "project") {
+                continue;
+            }
+            items.push_back({{"id", item.id}, {"name", item.name}, {"description", item.description},
+                {"previewKind", item.previewKind}, {"previewImage", Utf8(item.previewImage)},
+                {"initialLevel", item.initialLevel}, {"error", item.error}});
+        }
+        std::cout << ProjectJson::Json{{"schemaVersion", 1}, {"templates", items}}.dump() << '\n';
+        return 0;
+    }
     if(command == L"template-list" && argc == 3) {
         auto engine = EngineManifest::Load(argv[2]); if(!engine) return Fail(engine.error());
         auto templates = ProjectTemplates::List(engine->templates); if(!templates) return Fail(templates.error());
         for(const auto& item : *templates) std::cout << item.id << '\t' << item.name << '\n';
         return 0;
     }
-    if(command == L"create-template" && (argc == 6 || argc == 7)) {
+    if((command == L"create-template" && (argc == 6 || argc == 7)) || (command == L"create-project" && argc == 7)) {
         // 省略時は従来のC++生成を維持する。言語はProject全体ではなく最初のModuleへ渡す。
-        const std::wstring_view language = argc == 7 ? argv[6] : L"Cpp";
+        const bool browser = command == L"create-project";
+        const std::wstring_view language = !browser && argc == 7 ? argv[6] : L"Cpp";
         if(language != L"Cpp" && language != L"CSharp") { std::cerr << "Initial Game language must be Cpp or CSharp.\n"; return 1; }
         auto engine = EngineManifest::Load(argv[4]); if(!engine) return Fail(engine.error());
-        auto templates = ProjectTemplates::List(engine->templates); if(!templates) return Fail(templates.error());
-        for(const auto& item : *templates) if(item.id == ConvertString(std::wstring(argv[5]))) {
+        const std::filesystem::path directory = browser ? std::filesystem::path(argv[5]) : engine->templates;
+        auto templates = ProjectTemplates::List(directory); if(!templates) return Fail(templates.error());
+        for(const auto& item : *templates) if(item.id == ConvertString(std::wstring(argv[browser ? 6 : 5]))) {
+            if(browser && item.category != "project") {
+                std::cerr << "Samples cannot be selected as Project Browser templates.\n";
+                return 1;
+            }
             ProjectDescriptor descriptor; descriptor.name = ConvertString(std::wstring(argv[3])); descriptor.engine = engine->identity;
             auto created = ProjectTemplates::Create(argv[2], std::move(descriptor), item, *engine,
                 language == L"Cpp" ? ProjectModuleLanguage::Cpp : ProjectModuleLanguage::CSharp);

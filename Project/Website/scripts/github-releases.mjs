@@ -13,7 +13,10 @@ if (!token) throw new Error('GitHub authentication is required. Sign in through 
 const headers = { Authorization: `Bearer ${token}`, 'User-Agent': 'NexusEngine-Website', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
 async function call(url, init = {}) {
   const response = await fetch(url, { ...init, headers: { ...headers, ...init.headers } });
-  if (!response.ok) throw new Error(`GitHub API returned ${response.status} for ${new URL(url).pathname}`);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(`GitHub API returned ${response.status} for ${new URL(url).pathname}: ${JSON.stringify({ message: detail.message, errors: detail.errors })}`);
+  }
   return response.status === 204 ? null : response.json();
 }
 const repository = await call(api);
@@ -43,7 +46,18 @@ const launcher = uploads.find(item => item.key.startsWith('launcher/'));
 const body = 'NexusEngine Windows x64配布物。SDK ' + versions + 'とLauncher ' + (launcher.version || '') + ' setupを添付しています。\n\n' + (launcher.changes ? launcher.changes + '\n\n' : '') + '導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、タグが指すコミットのソースであり、SDK生成時の作業ツリーや各旧SDKのソースとの一致を保証しません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
 if (!release) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: resolve(root, '../..'), encoding: 'utf8' }).trim();
-  release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: commit, name: 'NexusEngine Windows SDK / Launcher', body, draft: true }) });
+  // ローカルだけの開発commitを公開するために、別作業のソースをpushしない。
+  // このタグは成果物の配布バッチ。ビルド入力は別の検証記録で特定する。
+  const commitResponse = await fetch(api + `/commits/${commit}`, { headers });
+  let targetCommit = commit;
+  if (commitResponse.status === 404 || commitResponse.status === 422) {
+    const remote = await call(api + `/commits/${encodeURIComponent(repository.default_branch)}`);
+    targetCommit = remote.sha;
+    console.log(`Local build commit ${commit} is not published; distribution tag uses remote commit ${targetCommit}. Build provenance remains in the verification notes.`);
+  } else if (!commitResponse.ok) {
+    throw new Error(`Cannot verify release target commit: HTTP ${commitResponse.status}`);
+  }
+  release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: targetCommit, name: 'NexusEngine Windows SDK / Launcher', body, draft: true }) });
   console.log(`Created draft release: ${tag}`);
 }
 // 前のsetupも版一覧から導入できるよう、検証済みの公開履歴を残す。

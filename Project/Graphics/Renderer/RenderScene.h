@@ -1,4 +1,5 @@
 #pragma once
+#include "Graphics/Model/ModelAnimation.h"
 
 // c++
 #include <array>
@@ -66,7 +67,18 @@ namespace NexusEngine {
         MaterialOverride material; //< 描画Instanceの材質値
         uint32_t materialBegin = 0; //< Source Slotから統合Slotへのoffset
         PrimitiveShape shape = PrimitiveShape::Asset;
-        struct AnimationSample { uint32_t index = 0; float time = 0; bool loop = true; };
+        struct AnimationSample {
+            uint32_t index = 0;
+            float time = 0;
+            bool loop = true;
+            uint32_t blendIndex = 0;
+            float blendTime = 0;
+            bool blendLoop = true;
+            float blendWeight = 0;
+            std::string asset;
+            std::string blendAsset;
+            std::vector<AnimationPoseSample> layers;
+        };
         std::optional<AnimationSample> animation;
 	};
 

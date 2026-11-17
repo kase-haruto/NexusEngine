@@ -268,14 +268,14 @@ void HybridTemplateTests(const std::filesystem::path& root) {
         Level scene;
         Require(scene.Load(created->StartupLevel()).has_value(), "Cannot load generated scene.");
         size_t count = 0;
-        bool camera = false, sky = false, cube = false;
+        bool camera = false, light = false;
         scene.GetScene()->ForEach<NameComponent>([&](Entity, const NameComponent& name) {
             ++count;
             camera |= name.name == "Camera";
-            sky |= name.name == "Sky";
-            cube |= name.name == "Cube";
+            light |= name.name == "Directional Light";
         });
-        Require(std::string_view(id) == "blank" ? count == 0 : camera && sky && cube, "Scene template contents differ from the launcher description.");
+        Require(std::string_view(id) == "blank" ? count == 0 : count == 2 && camera && light, "Scene template contents differ from the launcher description.");
+        Require(created->Descriptor().modules.empty(), "Scene-only template generated a Game Module.");
     }
     for(const auto language : {ProjectModuleLanguage::Cpp, ProjectModuleLanguage::CSharp}) {
         const auto found = std::ranges::find(*templates, "hybrid-gameplay", &ProjectTemplate::id); Require(found != templates->end(), "Hybrid Template missing.");

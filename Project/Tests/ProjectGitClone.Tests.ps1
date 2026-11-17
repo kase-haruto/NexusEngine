@@ -1,10 +1,12 @@
-param(
+﻿param(
     [string]$EngineManifest,
     [ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug'
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+# 型付きホスト検証専用。配布TemplateへDemo Componentを戻さない。
+$staticFixtures = Join-Path $PSScriptRoot 'Fixtures/StaticProjectTemplates'
 if(-not $EngineManifest) { $EngineManifest = Join-Path $workspace "NexusEngine.$Configuration.nxengine" }
 $EngineManifest = [IO.Path]::GetFullPath($EngineManifest)
 $tool = Join-Path $workspace "Generated/Modules/x64/$Configuration/NexusProjectTool/NexusProjectTool.exe"
@@ -24,7 +26,7 @@ $null = Invoke-Expected @('engine-register',$EngineManifest,$registry)
 foreach($kind in @('Data Game','Cpp Game')) {
     $original = Join-Path $root $kind
     if($kind -eq 'Data Game') { $null = Invoke-Expected @('create',$original,'Data Game') }
-    else { $null = Invoke-Expected @('create-template',$original,'Cpp Game',$EngineManifest,'blank') }
+    else { $null = Invoke-Expected @('create-project',$original,'Cpp Game',$EngineManifest,$staticFixtures,'blank') }
     $file = Join-Path $original ($kind + '.nxproject')
     $null = Invoke-Expected @('check',$file,$registry,$Configuration)
     $null = Invoke-Git $original @('init','--quiet')

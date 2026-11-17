@@ -62,7 +62,10 @@ namespace NexusEngine {
 		[[nodiscard]] LevelDocument* GetLevelDocument() const noexcept { return levelDocument_.get(); }
 		[[nodiscard]] Level*		 GetLevel() noexcept { return levelDocument_ ? levelDocument_->GetLevel() : nullptr; }
 		/** \brief 描画・更新用World。再生中は編集Worldの複製を返す */
-		Level* GetPreviewLevel() noexcept { return IsPlaying() ? playRuntime_.GetLevel() : GetLevel(); }
+		Level* GetPreviewLevel() noexcept { return IsPlaying() ? playRuntime_.GetLevel() : animationPreview_ ? animationPreview_.get() : GetLevel(); }
+        Result<void> BeginAnimationPreview();
+        void EndAnimationPreview() noexcept;
+        bool HasAnimationPreview() const noexcept;
 		Level* GetPlayLevel() noexcept { return playRuntime_.GetLevel(); }
         /** \brief 編集用Worldへ入力を与えず、実行Worldだけへfocus検証済みframeを渡す */
         void SetFrameInput(const InputFrame& input) noexcept { playRuntime_.SetFrameInput(input); }
@@ -116,6 +119,7 @@ namespace NexusEngine {
         std::filesystem::path collisionConfiguration_; //< Project共通Physics設定の絶対パス
         PhysicsWorld::ModelSource physicsModels_; //< Editor ApplicationのCPU asset cacheへの同期借用
 		std::unique_ptr<LevelDocument> levelDocument_; //< 編集用World。再生用Worldとは共有しない
+        std::unique_ptr<Level> animationPreview_; //< 編集Worldを変更しない専用プレビュー
 		GameRuntime playRuntime_; //< Game単体起動と共通の実行基盤
         std::shared_ptr<const ManagedScriptMetadata> managedMetadata_; //< sidecar由来のimmutable値。CLR参照を含まない
         uint64_t playEpoch_ = 0; //< Compile中のStop / 再Playへ古い成果物を適用させない

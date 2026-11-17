@@ -148,7 +148,7 @@ Module依存やBuild profileの変更をPlay中へ自動反映しない。SDK設
 | Runtime/Project/ProjectContext.h | 現在のRuntime互換性検査の宣言 |
 | Runtime/Project/ProjectContext.cpp | 計画と実行能力の区別・初期化順序検証 |
 | Tools/Project/ProjectTemplates.cpp | template依存の読込・生成時維持 |
-| Templates/hybrid-gameplay.nxtemplate | GameplayのNativeCombat依存 |
+| Templates/Samples/hybrid-gameplay.nxtemplate | GameplayのNativeCombat依存 |
 | Tools/Project/ProjectBuild.h | 共通profile・Build optionsと既定値 |
 | Tools/Project/ProjectBuild.cpp | profileごとの計画・Build・stamp検証・Binding・Launch |
 | Tools/Project/Project-ModuleOrder.ps1 | Script共通のグラフ・Runtime互換性検証 |

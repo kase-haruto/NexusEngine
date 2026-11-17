@@ -121,6 +121,7 @@ namespace NexusEngine {
 		resource_ = &resource;
 		localTransforms_.reserve(resource.nodes.size());
 		for(const ModelNodeAssetData& node : resource.nodes) localTransforms_.push_back(node.localTransform);
+		blendTransforms_.resize(resource.nodes.size());
 		nodeWorldTransforms_.resize(resource.nodes.size());
 		skinPalettes_.resize(resource.skins.size());
 		for(std::size_t skinIndex = 0; skinIndex < resource.skins.size(); ++skinIndex) {
@@ -133,6 +134,7 @@ namespace NexusEngine {
 	void ModelInstance::Shutdown() noexcept {
 		resource_ = nullptr;
 		localTransforms_.clear();
+		blendTransforms_.clear();
 		nodeWorldTransforms_.clear();
 		skinPalettes_.clear();
 		animationIndex_ = UINT32_MAX;
@@ -182,31 +184,111 @@ namespace NexusEngine {
 		return skinIndex < skinPalettes_.size() ? &skinPalettes_[skinIndex] : nullptr;
 	}
 
-	void ModelInstance::EvaluatePose() noexcept {
-		if(resource_ == nullptr) return;
-		const auto& nodes = resource_->nodes;
-		for(std::size_t index = 0; index < nodes.size(); ++index) localTransforms_[index] = nodes[index].localTransform;
+	Result<void> ModelInstance::SampleBlend(uint32_t first, float firstTime, bool firstLoop,
+		uint32_t second, float secondTime, bool secondLoop, float weight) noexcept {
+		// 入力の検証を先に完了し、失敗時は直前の姿勢を維持する。
+		if(!resource_ || first >= resource_->animations.size() || second >= resource_->animations.size() ||
+			!std::isfinite(firstTime) || firstTime < 0 || !std::isfinite(secondTime) || secondTime < 0 ||
+			!std::isfinite(weight) || weight < 0 || weight > 1) {
+			return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid animation blend sample."));
+		}
+		animationIndex_ = first;
+		animationTime_ = firstTime;
+		loop_ = firstLoop;
+		EvaluateLocalPose(first, firstTime, firstLoop, localTransforms_);
+		// 各クリップをbind poseから評価し、trackが片方にしかない場合も過去の姿勢を残さない。
+		auto& target = blendTransforms_;
+		EvaluateLocalPose(second, secondTime, secondLoop, target);
+		for(std::size_t index = 0; index < target.size(); ++index) {
+			auto& pose = localTransforms_[index];
+			pose.translation = Lerp(pose.translation, target[index].translation, weight);
+			pose.scale = Lerp(pose.scale, target[index].scale, weight);
+			pose.rotation = Slerp(pose.rotation, target[index].rotation, weight);
+		}
+		UpdateMatrices();
+		return {};
+	}
 
-		if(animationIndex_ < resource_->animations.size()) {
-			const AnimationClip& clip = resource_->animations[animationIndex_];
+    Result<void> ModelInstance::SampleLayers(std::span<const AnimationPoseSample> layers) noexcept {
+        float total = 0;
+        for(const auto& layer : layers) {
+            if(!resource_ || layer.index >= resource_->animations.size() || !std::isfinite(layer.time) || layer.time < 0 ||
+                !std::isfinite(layer.weight) || layer.weight < 0) {
+                return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid animation layer."));
+            }
+            total += layer.weight;
+        }
+        if(!std::isfinite(total) || total <= 0) {
+            return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Animation layers require positive total weight."));
+        }
+        float accumulated = 0;
+        for(const auto& layer : layers) {
+            if(layer.weight == 0) {
+                continue;
+            }
+            if(accumulated == 0) {
+                EvaluateLocalPose(layer.index, layer.time, layer.loop, localTransforms_);
+            } else {
+                EvaluateLocalPose(layer.index, layer.time, layer.loop, blendTransforms_);
+                const float weight = layer.weight / (accumulated + layer.weight);
+                for(size_t node = 0; node < localTransforms_.size(); ++node) {
+                    auto& pose = localTransforms_[node];
+                    const auto& target = blendTransforms_[node];
+                    pose.translation = Lerp(pose.translation, target.translation, weight);
+                    pose.scale = Lerp(pose.scale, target.scale, weight);
+                    pose.rotation = Slerp(pose.rotation, target.rotation, weight);
+                }
+            }
+            accumulated += layer.weight;
+        }
+        UpdateMatrices();
+        return {};
+    }
+	void ModelInstance::EvaluatePose() noexcept {
+		if(resource_ == nullptr) {
+			return;
+		}
+		EvaluateLocalPose(animationIndex_, animationTime_, loop_, localTransforms_);
+		UpdateMatrices();
+	}
+
+	void ModelInstance::EvaluateLocalPose(uint32_t clipIndex, float time, bool loop, std::vector<ModelNodeTransform>& transforms) noexcept {
+		if(resource_ == nullptr) {
+			return;
+		}
+		const auto& nodes = resource_->nodes;
+		for(std::size_t index = 0; index < nodes.size(); ++index) {
+			transforms[index] = nodes[index].localTransform;
+		}
+
+		if(clipIndex < resource_->animations.size()) {
+			const AnimationClip& clip = resource_->animations[clipIndex];
+			const float duration = clip.duration;
+			time = duration > 0 ? (loop ? std::fmod(time, duration) : (std::min)(time, duration)) : 0;
 			for(const NodeAnimationChannel& channel : clip.channels) {
-				if(channel.nodeIndex >= localTransforms_.size()) continue;
-				ModelNodeTransform& transform = localTransforms_[channel.nodeIndex];
+				if(channel.nodeIndex >= transforms.size()) {
+					continue;
+				}
+				ModelNodeTransform& transform = transforms[channel.nodeIndex];
 				transform.translation = SampleTrack(
-					channel.translations, animationTime_, transform.translation,
+					channel.translations, time, transform.translation,
 					channel.translationInterpolation, Lerp,
 					static_cast<Vector3(*)(const VectorKeyframe&, const VectorKeyframe&, float, float)>(CubicInterpolate));
 				transform.scale = SampleTrack(
-					channel.scales, animationTime_, transform.scale,
+					channel.scales, time, transform.scale,
 					channel.scaleInterpolation, Lerp,
 					static_cast<Vector3(*)(const VectorKeyframe&, const VectorKeyframe&, float, float)>(CubicInterpolate));
 				transform.rotation = SampleTrack(
-					channel.rotations, animationTime_, transform.rotation,
+					channel.rotations, time, transform.rotation,
 					channel.rotationInterpolation, Slerp,
 					static_cast<Quaternion(*)(const QuaternionKeyframe&, const QuaternionKeyframe&, float, float)>(CubicInterpolate));
 			}
 		}
 
+	}
+
+	void ModelInstance::UpdateMatrices() noexcept {
+		const auto& nodes = resource_->nodes;
 		// Initialize時に親indexが子より前になることを検証済みなので、1 passでhierarchyを合成できる。
 		for(std::size_t index = 0; index < nodes.size(); ++index) {
 			nodeWorldTransforms_[index] = MakeAffineMatrix(

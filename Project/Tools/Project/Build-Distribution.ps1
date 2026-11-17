@@ -3,7 +3,7 @@ param(
     [uri]$CatalogUrl,
     [string]$CatalogFile,
     [uri]$LauncherCatalogUrl,
-    [ValidatePattern('^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$')][string]$LauncherVersion = '1.2.0',
+    [ValidatePattern('^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$')][string]$LauncherVersion = '1.3.0',
     [string]$LauncherChangesFile,
     [string]$ProjectToolDirectory,
     [string]$OutputDirectory = (Join-Path $PSScriptRoot ('../../../Generated/LauncherDistribution/' + [guid]::NewGuid().ToString('N'))),

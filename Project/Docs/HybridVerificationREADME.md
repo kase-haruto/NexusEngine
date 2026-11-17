@@ -59,7 +59,7 @@ hookからRuntimeへ再入する案は採用せず、Loaderと同じheader / 翻
 
 修正後は実パッチ、移動先9、World / Entity保持、終了をすべて確認してexit 0となった。固定入力・header競合と未準備の通知は引き続き拒否する。CPP内の任意layout変更を自動判定できる保証は追加していない。変更したSourceはGenerated内のサンプルだけで、既存ユーザーSourceは変更していない。
 
-この検証ではRuntime/Gameplay/GameModuleLoader.h / .cppへ既存入力読取の値APIを追加し、Platform/Development/LiveCodingAgent.cppのSDK callbackからRuntime直接呼出しを除去した。Runtime/Application/GameRuntime.hのThread契約、Templates/NativeModule/NativePatchHooks.cpp.inの拒否診断も更新した。ScriptComponentの生成Reflectionは実Buildの既存生成器で更新し、GeneratedReflection.cpp / .h / ReflectionSchema.jsonへ登録情報が反映された。
+この検証ではRuntime/Gameplay/GameModuleLoader.h / .cppへ既存入力読取の値APIを追加し、Platform/Development/LiveCodingAgent.cppのSDK callbackからRuntime直接呼出しを除去した。Runtime/Application/GameRuntime.hのThread契約、Templates/Samples/NativeModule/NativePatchHooks.cpp.inの拒否診断も更新した。ScriptComponentの生成Reflectionは実Buildの既存生成器で更新し、GeneratedReflection.cpp / .h / ReflectionSchema.jsonへ登録情報が反映された。
 
 続いてCppSampleへManagedPatchを途中追加し、Tests/Fixtures/NativePatch/ManagedProbe.csを生成Moduleへコピーして同じ専用profileでBuildした。テストホストの任意第4引数へHost出力Rootを渡すと、同一WorldへScriptComponentを追加して実Hostingする。ManagedProbeはOnCreateで取得したNativeFunctionを保持し、OnUpdateで呼び出す。Nativeパッチ後の呼出し成功を、Native Crowdが操作しないscale値の増分で確認する。結果はexit 0で、C#へDLL pointerを渡さず再登録後のBinding世代を解決できた。CppSampleはこの検証の過程でHybridへ拡張されたため、上表のCpp-only結果は追加前の記録である。
 
@@ -73,7 +73,7 @@ hookからRuntimeへ再入する案は採用せず、Loaderと同じheader / 翻
 | Runtime/Gameplay/GameModuleLoader.cpp / .h | 既存の固定入力読取を値snapshotとしてBackendと共有 |
 | Runtime/Application/GameRuntime.h | SDK前のowner-thread検査とhook側の入力検査を区別する契約 |
 | Platform/Development/LiveCodingAgent.cpp | receiver Threadでは入力snapshotだけを照合し、ownerでWorld / 契約検査・Binding再登録を行う |
-| Templates/NativeModule/NativePatchHooks.cpp.in | 不正なpre-patch入力を拒否した場合の診断 |
+| Templates/Samples/NativeModule/NativePatchHooks.cpp.in | 不正なpre-patch入力を拒否した場合の診断 |
 | Tools/Project/Add-GameModule.ps1 | 原子的な既存ファイル置換のnull string修正 |
 | Tools/Project/Add-GameSource.ps1 | 同上、Native Source更新の失敗修正 |
 | Tools/Project/Complete-GameDeployment.ps1 | 同上、配置manifestの繰返し更新修正 |

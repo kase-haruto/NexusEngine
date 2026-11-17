@@ -23,7 +23,7 @@ namespace NexusEngine {
 		// 組み込みSystemはLevelごとに所有し、複数World（Editor/PIE）の状態を分離する。
 		scheduler_.AddSystem<PhysicsUpdateSystem>(physics_,physicsModels_,collisionLayers_);
 		scheduler_.AddSystem<TransformUpdateSystem>();
-		scheduler_.AddSystem<AnimationUpdateSystem>();
+		scheduler_.AddSystem<AnimationUpdateSystem>(animationRuntime_, reflection_);
 	}
 
 	Result<void> Level::LoadEmpty() {
@@ -69,6 +69,7 @@ namespace NexusEngine {
 	}
 
 	void Level::Unload() noexcept {
+        animationRuntime_.ResetScene();
         collisionLayers_ = DefaultCollisionMatrix();
         nextLevel_.reset();
         audio_.reset();
@@ -81,6 +82,7 @@ namespace NexusEngine {
 	}
 
 	std::unique_ptr<Scene> Level::ExchangeScene(std::unique_ptr<Scene> scene) noexcept {
+        animationRuntime_.ResetScene();
 		if(!scene) return {};
 		// Undo/Reloadの候補SceneはIDが同一でも別World。solverの一時参照を交換前に捨てる。
 		physics_.reset();
@@ -123,8 +125,12 @@ namespace NexusEngine {
         if(!configured) {
             return configured;
         }
+        animationRuntime_.SetRoot(root / "Assets");
         resourceRoot_ = std::move(root);
         return {};
+    }
+    AnimationRuntime& Level::Animations() noexcept {
+        return animationRuntime_;
     }
     AudioWorld& Level::Audio() {
         if(!audio_) audio_=std::make_unique<AudioWorld>(resourceRoot_);

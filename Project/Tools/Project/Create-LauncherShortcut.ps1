@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Launcher,
     [string]$Destination,
     [ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug'
@@ -6,16 +6,16 @@
 $ErrorActionPreference = 'Stop'
 if(-not $Launcher) {
     $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-    $Launcher = Join-Path $repository "Generated/Modules/x64/$Configuration/NexusLauncher/NexusLauncher.exe"
+    $Launcher = Join-Path $repository "Project/Launcher/Standalone/bin/$Configuration/net10.0-windows/NexusLauncher.exe"
 }
 $Launcher = [IO.Path]::GetFullPath($Launcher)
 if(-not [IO.File]::Exists($Launcher)) {
-    $buildProject = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../Build/NexusLauncher.vcxproj'))
+    $buildProject = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../Launcher/Standalone/Launcher.csproj'))
     throw @"
 Launcher executable does not exist: $Launcher
 Build NexusLauncher first from a Visual Studio Developer PowerShell:
-  msbuild "$buildProject" /m /t:Build /p:Configuration=$Configuration /p:Platform=x64
-For an installed Launcher, specify -Launcher "C:/path/to/Bin/NexusLauncher.exe".
+  dotnet build "$buildProject" -c $Configuration
+For an installed Launcher, specify -Launcher "C:/path/to/Launcher/NexusLauncher.exe".
 "@
 }
 if(-not $Destination) {

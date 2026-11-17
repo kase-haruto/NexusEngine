@@ -26,9 +26,6 @@
     <Project Path="Project/Build/SampleGameEditor.vcxproj" />
     <Project Path="Project/Build/SampleGameRuntime.vcxproj" />
   </Folder>
-  <Folder Name="/Legacy Launcher/">
-    <Project Path="Project/Build/NexusLauncher.vcxproj" />
-  </Folder>
   <Folder Name="/Tests/">
     <Project Path="Project/Tests/LauncherDistribution/DistributionTests.csproj">
       <Platform Solution="*|x64" Project="Any CPU" />

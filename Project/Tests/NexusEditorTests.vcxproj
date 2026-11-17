@@ -14,6 +14,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EditorServicesTests.cpp" />
+    <ClCompile Include="AnimationStudioTests.cpp" />
+    <ClCompile Include="NodeEditorTests.cpp" />
     <ClCompile Include="GameRuntimeTests.cpp" />
     <ClCompile Include="NativeGameModuleTests.cpp" />
     <ClCompile Include="NativeGameSystemTests.cpp" />
@@ -39,6 +41,7 @@
     <ClCompile Include="..\Graphics\Model\ModelInstance.cpp" />
     <ClCompile Include="..\Foundation\Error\Error.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\AnimationPlayerComponent.cpp" />
     <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />
     <ClCompile Include="..\Runtime\Scene\SystemScheduler.cpp" />
     <ClCompile Include="..\Runtime\Scene\TransformSystem.cpp" />
@@ -140,4 +143,18 @@
     <ClCompile Include="..\ThirdParty\imnodes\imnodes.cpp"><WarningLevel>TurnOffAllWarnings</WarningLevel><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
   </ItemGroup>
   <ItemGroup><ClCompile Include="..\Graphics\PostProcess\PostProcessGraphAsset.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Animation\AnimationDocument.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationRuntime.cpp" />
+    <ClCompile Include="..\Runtime\Scene\AnimationUpdateSystem.cpp" />
+  </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Editor\Services\AnimationStudioDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\AnimationStudioPanel.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Editor\Gui\Nodes\NodeEditor.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Scene\Components\AnimatorComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\TimelinePlayerComponent.cpp" />
+  </ItemGroup>
 </Project>

@@ -10,5 +10,4 @@
   <Project Path="NexusEditor.vcxproj" />
   <Project Path="NexusRuntimeHost.vcxproj" />
   <Project Path="NexusProjectTool.vcxproj" />
-  <Project Path="NexusLauncher.vcxproj" />
 </Solution>

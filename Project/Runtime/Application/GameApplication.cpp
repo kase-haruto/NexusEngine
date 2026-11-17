@@ -10,6 +10,7 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
     auto level = std::make_unique<Level>("Level", reflection_);
     auto resourceRoot=level->SetResourceRoot(paths_.projectRoot.empty() ? std::filesystem::absolute(root) : paths_.projectRoot);
     if(!resourceRoot) return resourceRoot;
+    level->Animations().SetRoot(std::filesystem::absolute(root));
     auto result = level->Load(path);
     if(!result) return result;
     if(paths_.project) {
@@ -54,7 +55,7 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
         }
         for(const auto& item : renderScene_.primitives) {
             if(item.shape == PrimitiveShape::Asset && item.meshAsset.empty()) continue;
-            auto range = library_->Resolve(item.shape, item.meshAsset, item.baseColorTexture);
+            auto range = library_->Resolve(ModelAssetLibrary::Request::FromItem(item));
             if(!range) return std::unexpected(std::move(range.error()));
         }
         asset_ = library_->SharedSnapshot();
@@ -110,12 +111,17 @@ Result<void> GameApplication::PrepareRequestedAssets() {
     std::vector<ModelAssetLibrary::Request> requests;
     for(const auto& item:renderScene_.primitives) {
         if(item.shape==PrimitiveShape::Asset && item.meshAsset.empty()) continue;
-        requests.push_back({item.shape,item.shape==PrimitiveShape::Asset ? item.meshAsset : std::string{},item.baseColorTexture});
+        requests.push_back(ModelAssetLibrary::Request::FromItem(item));
     }
     if(library_->MatchesRequests(requests)) return {};
     // 既存libraryの共有source cacheとcopy-on-writeを利用し、現行snapshotを変更しない。
     auto candidate=std::make_unique<ModelAssetLibrary>(*library_); candidate->Retain(requests);
-    for(const auto& request:requests) { auto range=candidate->Resolve(request.shape,request.mesh,request.texture); if(!range) return std::unexpected(range.error()); }
+    for(const auto& request : requests) {
+        auto range = candidate->Resolve(request);
+        if(!range) {
+            return std::unexpected(range.error());
+        }
+    }
     const auto next=candidate->SharedSnapshot();
     if(next==asset_) { library_=std::move(candidate); return {}; }
     ModelInstance pose; auto initialized=pose.Initialize(*next); if(!initialized) return initialized;

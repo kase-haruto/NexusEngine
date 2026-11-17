@@ -7,6 +7,11 @@ namespace NexusEngine {
 struct ProjectTemplate {
     std::string id, name, description;
     std::filesystem::path file;
+    std::string category = "sample"; //< Project BrowserとSampleの責務をMetadataで分離する
+    std::string previewKind; //< image / thumbnail等の表示Source種別。Scene実装は参照しない
+    std::filesystem::path previewImage; //< Template内の相対Sourceを解決した画像
+    std::string initialLevel; //< Project Root相対の初期Level
+    std::string error; //< 破損Templateだけを作成不可にし、他の項目は表示する
 };
 /*-----------------------------------------------------------------------------------------
  * ProjectTemplates
@@ -15,6 +20,7 @@ struct ProjectTemplate {
  *---------------------------------------------------------------------------------------*/
 class ProjectTemplates final {
 public:
+    /** \brief TemplateとSamplesのMetadataを列挙し、個別の破損はerrorへ記録する */
     [[nodiscard]] static Result<std::vector<ProjectTemplate>> List(const std::filesystem::path& directory);
     /**
      * \brief Templateの初期Module群と共通データをstagingへ生成する。呼出元のUI状態を保持しない

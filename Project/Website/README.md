@@ -2,7 +2,7 @@
 
 公開先: https://nexus-engine.nexus-engine-website.workers.dev/
 
-紹介・Launcher setup.exe・SDK 1.0.0〜1.3.0とLauncher 1.2.0の変更点・導入手順・開発ドキュメントをまとめた日本語サイト。UEのビジュアルと導入導線、Blenderのダウンロードとリリース案内を参考にし、独自の配色とNexusEngine自身のPBR描画画像を使っています。
+紹介・Launcher setup.exe・SDK 1.0.0〜1.3.0とLauncher 1.3.0の変更点・導入手順・開発ドキュメントをまとめた日本語サイト。UEのビジュアルと導入導線、Blenderのダウンロードとリリース案内を参考にし、独自の配色とNexusEngine自身のPBR描画画像を使っています。
 
 ## 従量課金を使わない構成
 
@@ -32,7 +32,7 @@ npm.cmd run dev
 Cloudflare CLIとGit Credential ManagerのGitHub認証を使用。認証情報をソースやWebへ埋め込みません。
 
 ```powershell
-.\scripts\Publish-Website.cmd -LauncherSetup "C:\MyProject\NexusEngine\Generated\LauncherDistribution\Launcher-1.2.0\Setup\launcherSetup.exe"
+.\scripts\Publish-Website.cmd -LauncherSetup "C:\MyProject\NexusEngine\Generated\LauncherDistribution\Launcher-1.3.0\Setup\launcherSetup.exe"
 ```
 
 `-LauncherSetup`を省略すると公開URLを埋め込んだsetupを新規生成します。Visual Studio C++ / Windows SDK / .NET SDKが必要。ローカルカタログのパスを設定したReview用setupは公開しません。
@@ -64,3 +64,7 @@ SDK 1.3.0とLauncher 1.1.0を公開。SDK 6版と新setupの計7ファイルを�
 ## 2026-11-16 公開記録
 
 プロジェクト移行機能を追加したLauncher 1.2.0を公開。エンジンSDKの版数・内容は維持しています。旧ランチャー1.1.0の実コードから更新一覧・変更点・新Setupの取得とSHA-256検査が成功。SDK 6版と新Setupの計7ファイルも公開URLから照合済みです。旧ランチャー2版と既存SDKを保持しています。詳細は[Launcher 1.2.0配布検証](../Docs/Launcher-Release-1.2.0-Verification.md)。
+
+## 2026-11-16 Launcher 1.3.0 公開記録
+
+Empty / Basic Levelの画像付きTemplateカードと拡大Previewを追加したLauncher 1.3.0を公開しました。SDKは再発行していません。公開済みSDK 6版と新Setupの計7ファイルを取得し、サイズ・SHA-256を照合済みです。旧Launcher 1.2.0の実コードでも更新一覧と変更点、新Setupの取得・検証が成功しました。旧Launcher 3版と既存SDKを保持しています。詳細は[Launcher 1.3.0配布検証](../Docs/Launcher-Release-1.3.0-Verification.md)を参照してください。

@@ -88,8 +88,8 @@ BuildTargetsStampTestsを追加したが実行していない。fixtureは不活
 | Tools/Project/Project-ModuleOrder.ps1 | 保存IDから衝突しないC#識別子への値変換 |
 | Tools/Project/Add-GameModule.ps1 | 識別子・Script ID、Host参照・define判定、Engine Version照合 |
 | Tools/Project/Add-GameSource.ps1 | 一回の置換、token分離、名前検査、共有lock、一時copyからの公開 |
-| Templates/ManagedGameplay/PlayerController.cs.in | SDK基底型とAttributeの完全修飾 |
-| Templates/Hybrid/CrowdSimulation.cs.in | Facadeの境界型とcodecの完全修飾 |
+| Templates/Samples/ManagedGameplay/PlayerController.cs.in | SDK基底型とAttributeの完全修飾 |
+| Templates/Samples/Hybrid/CrowdSimulation.cs.in | Facadeの境界型とcodecの完全修飾 |
 | Tests/HybridGeneration.Tests.ps1 | 実生成物の型名・System ID長・Facade ID・Host接続・既存データ保持を検査するソース |
 | Docs/HybridProjectREADME.md | 生成命名とNative System追加時の手順 |
 | Docs/IntegrationAuditREADME.md | 第2回の根拠・修正・残る証拠不足 |

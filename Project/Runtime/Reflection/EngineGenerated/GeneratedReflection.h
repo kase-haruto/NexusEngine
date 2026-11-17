@@ -6,6 +6,7 @@
 #include "Graphics/Material/MaterialOverride.h"
 #include "Graphics/Shadow/ShadowTypes.h"
 #include "Runtime/Scene/Components/AnimationPlayerComponent.h"
+#include "Runtime/Scene/Components/AnimatorComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/ColliderComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
@@ -20,6 +21,7 @@
 #include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
 #include "Runtime/Scene/Components/SkyLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
+#include "Runtime/Scene/Components/TimelinePlayerComponent.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
 #include "Runtime/Scene/EntityId.h"
 namespace NexusEngine {
@@ -32,6 +34,23 @@ template<> struct ReflectionTraits<AnimationPlayerComponent> {
         visitor("loop", &AnimationPlayerComponent::loop);
         visitor("playing", &AnimationPlayerComponent::playing);
         visitor("time", &AnimationPlayerComponent::time);
+        visitor("animationAsset", &AnimationPlayerComponent::animationAsset);
+        visitor("blendAnimationAsset", &AnimationPlayerComponent::blendAnimationAsset);
+        visitor("blendAnimationIndex", &AnimationPlayerComponent::blendAnimationIndex);
+        visitor("blendTime", &AnimationPlayerComponent::blendTime);
+        visitor("blendLoop", &AnimationPlayerComponent::blendLoop);
+        visitor("blendWeight", &AnimationPlayerComponent::blendWeight);
+        visitor("fadeDuration", &AnimationPlayerComponent::fadeDuration);
+        visitor("fadeElapsed", &AnimationPlayerComponent::fadeElapsed);
+    }
+};
+template<> struct ReflectionTraits<AnimatorComponent> {
+    static constexpr const char* Id = "Animator";
+    static constexpr const char* Label = "component.animator";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("controllerAsset", &AnimatorComponent::controllerAsset);
+        visitor("playing", &AnimatorComponent::playing);
+        visitor("parameters", &AnimatorComponent::parameters);
     }
 };
 template<> struct ReflectionTraits<CameraComponent> {
@@ -245,6 +264,17 @@ template<> struct ReflectionTraits<SkyRendererComponent> {
     template<class Visitor> static void Visit(Visitor&& visitor) {
         visitor("enabled", &SkyRendererComponent::enabled);
         visitor("intensity", &SkyRendererComponent::intensity);
+    }
+};
+template<> struct ReflectionTraits<TimelinePlayerComponent> {
+    static constexpr const char* Id = "TimelinePlayer";
+    static constexpr const char* Label = "component.timeline";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("timelineAsset", &TimelinePlayerComponent::timelineAsset);
+        visitor("time", &TimelinePlayerComponent::time);
+        visitor("playing", &TimelinePlayerComponent::playing);
+        visitor("loop", &TimelinePlayerComponent::loop);
+        visitor("speed", &TimelinePlayerComponent::speed);
     }
 };
 template<> struct ReflectionTraits<TransformComponent> {

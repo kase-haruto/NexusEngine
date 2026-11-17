@@ -30,7 +30,7 @@ namespace NexusEngine {
 		std::erase_if(requests, [](const auto& request) { return request.shape == PrimitiveShape::Asset && request.mesh.empty(); });
 		for(auto& request : requests) if(request.shape != PrimitiveShape::Asset) request.mesh.clear();
 		std::ranges::sort(requests, [](const auto& a, const auto& b) {
-			return std::tie(a.shape, a.mesh, a.texture) < std::tie(b.shape, b.mesh, b.texture);
+			return std::tie(a.shape, a.mesh, a.texture, a.animationAsset, a.blendAnimationAsset, a.layers) < std::tie(b.shape, b.mesh, b.texture, b.animationAsset, b.blendAnimationAsset, b.layers);
 		});
 		requests.erase(std::unique(requests.begin(), requests.end()), requests.end());
 		if(assetRequestRevision_ == 0 || requestedAssets_ != requests) {
@@ -108,7 +108,7 @@ namespace NexusEngine {
 					library->Retain(requests);
 					for(const auto& request : requests) {
 						if(cancellation.stop_requested()) return std::unexpected(Error(ErrorCategory::Resource,132,"Asset preparation cancelled."));
-						auto range = library->Resolve(request.shape, request.mesh, request.texture);
+						auto range = library->Resolve(request);
 						if(!range) return std::unexpected(std::move(range.error()));
 					}
 					prepared->asset = library->SharedSnapshot(); prepared->library = std::move(library);
@@ -694,13 +694,36 @@ namespace NexusEngine {
 		if(preview == nullptr || preview->GetScene() == nullptr || sceneHeight == 0) return {};
 		const float aspect = static_cast<float>(sceneWidth) / static_cast<float>(sceneHeight);
 		if(graphicsSystem_) graphicsSystem_->SetCameraPreviewActive(false);
+        if(workspace_ && modelLibrary_) {
+            auto& studio = workspace_->AnimationStudio();
+            const bool nativePreview = studio.preview && std::holds_alternative<AnimationClipDocument>(studio.value);
+            const bool saved = animationSavedRevision_ != studio.savedRevision;
+            if(saved || (nativePreview && animationStudioRevision_ != studio.revision) || (animationPreviewWasActive_ && !nativePreview)) {
+                modelLibrary_->InvalidateAnimations();
+                if(nativePreview) {
+                    auto applied = modelLibrary_->PreviewAnimation(studio.reference, std::get<AnimationClipDocument>(studio.value));
+                    studio.Report(applied);
+                }
+                if(auto* active = session_.GetPreviewLevel(); active && !nativePreview) {
+                    active->Animations().Invalidate();
+                }
+                animationStudioRevision_ = studio.revision;
+                animationSavedRevision_ = studio.savedRevision;
+                animationPreviewWasActive_ = nativePreview;
+                assetBuildCancellation_.request_stop();
+                ++assetRequestRevision_;
+                resolvedAssetRequestRevision_ = failedAssetRequestRevision_ = 0;
+            }
+        }
 		const auto previousPrimitives = renderScene_.primitives;
 		const auto previousAssetRevision = uploadedAssetRevision_;
 		auto extracted = extractor_.ExtractInto(*preview->GetScene(), aspect, renderScene_, session_.IsPlaying());
 		if(extracted && modelLibrary_ && graphicsSystem_) {
             std::vector<ModelAssetLibrary::Request> requests;
             requests.reserve(renderScene_.primitives.size());
-            for(const auto& item : renderScene_.primitives) requests.push_back({item.shape, item.meshAsset, item.baseColorTexture});
+            for(const auto& item : renderScene_.primitives) {
+                requests.push_back(ModelAssetLibrary::Request::FromItem(item));
+            }
             auto preparation = PrepareAssets(std::move(requests));
             if(!preparation) return preparation;
             for(auto& item : renderScene_.primitives) {

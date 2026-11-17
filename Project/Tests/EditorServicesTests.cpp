@@ -118,7 +118,7 @@ void AnimationPlayerEditing() {
     Fixture f;
     RegisterGeneratedInspectorTypes(f.types);
     assert(f.edits.Create("Model")); const auto id = f.session.GetSelection();
-    const auto* type = f.types.Find("AnimationPlayer"); assert(type && type->properties.size() == 5);
+    const auto* type = f.types.Find("AnimationPlayer"); assert(type && type->properties.size() == 13);
     assert(f.edits.AddComponent(*type));
     assert(f.properties.Undo());
     assert(!f.session.GetSelectedEntity().HasComponent<AnimationPlayerComponent>());
@@ -1331,10 +1331,18 @@ void ExecutionModeRouting() {
 }
 void RunGameRuntimeTests();
 void RunReflectedComponentTests();
+namespace NexusEngine::Tests { void RunAnimationStudioTests(); void RunNodeEditorTests(); }
 int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    try {
+        NexusEngine::Tests::RunNodeEditorTests();
+        NexusEngine::Tests::RunAnimationStudioTests();
+    } catch(const std::exception& error) {
+        std::cerr << "Animation Studio tests failed: " << error.what() << std::endl;
+        return 1;
+    }
     PostProcessGraphTests();
     RunReinstancingTests();
     RunGameRuntimeTests();

@@ -1,8 +1,10 @@
-param([ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug',[string]$EngineManifest,
+﻿param([ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug',[string]$EngineManifest,
     [ValidateSet('blank','basic-3d')][string]$Template = 'basic-3d')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+# 型付きホスト検証専用。配布TemplateへDemo Componentを戻さない。
+$staticFixtures = Join-Path $PSScriptRoot 'Fixtures/StaticProjectTemplates'
 $tool = Join-Path $workspace "Generated/Modules/x64/$Configuration/NexusProjectTool/NexusProjectTool.exe"
 $manifest = if($EngineManifest) { [IO.Path]::GetFullPath($EngineManifest) } else { Join-Path $workspace "NexusEngine.$Configuration.nxengine" }
 $root = Join-Path $workspace ('Generated/ProjectGpuValidation/' + [guid]::NewGuid().ToString())
@@ -10,7 +12,7 @@ $root = Join-Path $workspace ('Generated/ProjectGpuValidation/' + [guid]::NewGui
 $registry = Join-Path $root 'Engines.json'; $gameRoot = Join-Path $root '日本語 GPU Game'
 & $tool engine-register $manifest $registry
 if($LASTEXITCODE -ne 0) { throw 'Cannot register selected Engine for GPU validation.' }
-& $tool create-template $gameRoot 'GPU Game' $manifest $Template
+& $tool create-project $gameRoot 'GPU Game' $manifest $staticFixtures $Template
 if($LASTEXITCODE -ne 0) { throw 'Cannot create GPU validation Game.' }
 $file = Join-Path $gameRoot '日本語 GPU Game.nxproject'
 $levelFile = Join-Path $gameRoot 'Levels/Startup.level'

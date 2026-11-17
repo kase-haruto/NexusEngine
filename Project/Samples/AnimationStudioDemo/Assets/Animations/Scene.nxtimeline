@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "duration": 6,
+  "loop": true,
+  "tracks": [
+    {
+      "name": "Actor movement",
+      "type": "Animation",
+      "target": "",
+      "clips": [
+        {
+          "asset": "Animations/Move.nxanim",
+          "start": 0,
+          "duration": 3,
+          "clipIn": 0,
+          "speed": 1,
+          "loop": true,
+          "easeOut": 0.5
+        },
+        {
+          "asset": "Animations/Idle.nxanim",
+          "start": 2.5,
+          "duration": 3.5,
+          "clipIn": 0,
+          "speed": 1,
+          "loop": true,
+          "easeIn": 0.5
+        }
+      ]
+    }
+  ]
+}

@@ -45,7 +45,8 @@ namespace NexusEngine {
 		executing_ = true;
 		for(const auto& system : systems_) {
 			// 固定stepはSimulationの専用callback→Physics→Transform。可変stepはPhysicsを進めない。
-            if(mode == 2 && system->GetPhase() == SystemPhase::Physics) {
+            if((mode == 2 && system->GetPhase() == SystemPhase::Physics) ||
+                (mode == 1 && system->GetPhase() == SystemPhase::Animation)) {
                 continue;
             }
             auto result = mode == 1 && system->GetPhase() == SystemPhase::Simulation ?

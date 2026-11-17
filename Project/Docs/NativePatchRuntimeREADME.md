@@ -136,15 +136,15 @@ EditorSessionにも転送APIを用意したが、既存Reload C++操作をこの
 | Runtime/Application/GameRuntime.cpp | 両言語の更新停止、Managed Reload排他、Stop遅延 |
 | Editor/Core/EditorSession.h | Runtime境界と結果の転送 |
 | Managed/Nexus.Managed/NativeBindings.cs | 論理ID保持とcallback前限定の再解決 |
-| Templates/NativeModule/NativeModuleState.h.in | Native Module stateを固定ヘッダーへ移動 |
-| Templates/NativeModule/Main.cpp.in | 固定stateヘッダーと任意export |
-| Templates/NativeModule/CrowdBinding.h.in | Crowdの再Bindingと固定layout契約 |
-| Templates/NativeModule/README.md.in | 現在の対応範囲・未接続の説明 |
-| Templates/Hybrid/NativeCombatState.h.in | Hybridの永続stateヘッダー |
-| Templates/Hybrid/NativeCombat.cpp.in | 固定契約・再Binding export |
-| Templates/Hybrid/README.md.in | Handle更新とBackend未接続の説明 |
-| Templates/native-module.nxtemplate | 新しい固定ヘッダーを生成 |
-| Templates/hybrid-gameplay.nxtemplate | Hybridの固定ヘッダーを生成 |
+| Templates/Samples/NativeModule/NativeModuleState.h.in | Native Module stateを固定ヘッダーへ移動 |
+| Templates/Samples/NativeModule/Main.cpp.in | 固定stateヘッダーと任意export |
+| Templates/Samples/NativeModule/CrowdBinding.h.in | Crowdの再Bindingと固定layout契約 |
+| Templates/Samples/NativeModule/README.md.in | 現在の対応範囲・未接続の説明 |
+| Templates/Samples/Hybrid/NativeCombatState.h.in | Hybridの永続stateヘッダー |
+| Templates/Samples/Hybrid/NativeCombat.cpp.in | 固定契約・再Binding export |
+| Templates/Samples/Hybrid/README.md.in | Handle更新とBackend未接続の説明 |
+| Templates/Samples/native-module.nxtemplate | 新しい固定ヘッダーを生成 |
+| Templates/Samples/hybrid-gameplay.nxtemplate | Hybridの固定ヘッダーを生成 |
 | Tests/NativeGameSystemTests.cpp | 表の一括公開、取消、部分失敗、予約statusの検証ソース |
 | Tests/Fixtures/NativeModule/Module.cpp | SDKなしの契約・再登録fixture |
 | Tests/NativeGameModuleTests.cpp | 更新停止、state / Entity保持、Stop遅延、Source変更拒否の検証ソース |

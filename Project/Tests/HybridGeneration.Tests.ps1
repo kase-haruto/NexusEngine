@@ -10,7 +10,7 @@ function Put([string]$Path,[string]$Text) {
  [IO.File]::WriteAllText($Path,$Text,[Text.UTF8Encoding]::new($false))
 }
 function Require([bool]$Condition,[string]$Message) { if(-not $Condition) { throw $Message } }
-function Template([string]$Name) { return [IO.File]::ReadAllText((Join-Path $engineSource ('Templates/'+$Name))) }
+function Template([string]$Name) { return [IO.File]::ReadAllText((Join-Path $engineSource ('Templates/Samples/'+$Name))) }
 . (Join-Path $engineSource 'Tools/Project/Project-ModuleOrder.ps1')
 
 # punctuation・数字始まり・underscore始まりでも、保存IDを変更せず一意な識別子を作る。

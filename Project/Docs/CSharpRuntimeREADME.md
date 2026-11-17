@@ -101,9 +101,7 @@ BootstrapからEntityやAssetを生成したり、Reflection / DetailsPanelへ�
 
 ## Project生成と前提条件
 
-Project Browserで`Managed Bootstrap (C#)`とC#を選ぶ。
-CLIではcreate-templateのtemplate-idに`managed-bootstrap`を指定し、初期言語CSharpを渡す。
-旧blank / basic-3dのC#生成は宣言のみの既存動作を維持し、BuildTargetsがないProjectを黙って実行しない。
+この文書はBootstrap-only導入時の設計記録です。旧`managed-bootstrap`は整理時に削除しました。現在のLauncherはコードを生成しないEmpty / Basic Levelのみを提供し、C# Gameplayの利用例はCLIの`managed-gameplay` Sampleを初期言語CSharpで生成します。以下の構成図・Phase説明は旧実装の履歴です。
 
 ```text
 MyGame/
@@ -158,12 +156,7 @@ SDK発行処理はヘッダ、ライセンス、targets、Bootstrap Sourceを収
 | `Core/Hosting/ProjectHost.inl` | 宣言言語とホストBackendの照合、Managed配置の解決 |
 | `Build/NexusRuntime.vcxproj` / `NexusEngine.vcxproj` / `Tests/NexusEditorTests.vcxproj` | 新Native cppのコンパイル対象 |
 | `Build/Nexus.ManagedBootstrap.targets` | 明示Host Packの検証、安定Bootstrap準備とnethost配置 |
-| `Templates/managed-bootstrap.nxtemplate` | C# Bootstrap専用テンプレート |
-| `Templates/ManagedBootstrap/Host.cpp.in` | Runtime設定用ホスト結合点 |
-| `Templates/ManagedBootstrap/GameRuntime.vcxproj.in` / `GameEditor.vcxproj.in` | Nativeホストと共通Utilityの依存 |
-| `Templates/ManagedBootstrap/ManagedBootstrap.vcxproj.in` | 単一の安定Bootstrap準備Utility |
-| `Templates/ManagedBootstrap/Game.slnx.in` | 両ホストとUtilityのSolution |
-| `Templates/ManagedBootstrap/BuildTargets.json.in` / `README.md.in` | 配置契約と生成Projectの説明 |
+| `Templates/Samples/ManagedBootstrap/GameRuntime.vcxproj.in` / `GameEditor.vcxproj.in` | Nativeホストと共通Utilityの依存 |
 | `Tools/Project/ProjectBuild.h` / `.cpp` | Managed Backend認識と4ファイルstamp照合 |
 | `Tools/Project/Build-Game.ps1` | 単一CSharp BootstrapのBuildを許可し、不一致・複数Moduleは拒否 |
 | `Tools/Project/Write-GameBuildStamp.ps1` | Managed配布ファイルのSHA-256記録 |

@@ -6,6 +6,11 @@
     },
     {
         "Kind":  "COMPONENT",
+        "Type":  "AnimatorComponent",
+        "Id":  "\"Animator\""
+    },
+    {
+        "Kind":  "COMPONENT",
         "Type":  "CameraComponent",
         "Id":  "\"Camera\""
     },
@@ -98,6 +103,11 @@
         "Kind":  "COMPONENT",
         "Type":  "SkyRendererComponent",
         "Id":  "\"SkyRenderer\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "TimelinePlayerComponent",
+        "Id":  "\"TimelinePlayer\""
     },
     {
         "Kind":  "COMPONENT",

@@ -21,6 +21,8 @@ $project=(Read-Original ([IO.Path]::GetFullPath($ProjectFile))) | ConvertFrom-Js
 $engine=Get-Content -Raw -Encoding UTF8 -LiteralPath $EngineManifest | ConvertFrom-Json
 $engineRoot=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($EngineManifest))
 $templates=[IO.Path]::GetFullPath((Join-Path $engineRoot $engine.paths.templates))
+# 新規Project用データとSample資源を分離し、旧SDKの配置も読み取る。
+if(Test-Path -LiteralPath (Join-Path $templates 'Samples') -PathType Container) { $templates=Join-Path $templates 'Samples' }
 if($ModuleId -cnotmatch '\A[A-Za-z][A-Za-z0-9_]{0,63}\z' -or $ModuleId -imatch '\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\z' -or @($project.modules | Where-Object { $_.id -ieq $ModuleId }).Count) { throw 'Choose a unique ASCII identifier for the new Module.' }
 if($project.engine.id -cne $engine.id -or $project.engine.association -cne $engine.association -or ($project.engine.version -and $project.engine.version -cne $engine.version)) { throw 'Engine association / version mismatch.' }
 function Within([string]$Relative) {

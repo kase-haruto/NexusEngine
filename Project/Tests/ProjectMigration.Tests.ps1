@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$TargetManifest,
     [string]$SourceManifest,
     [ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug'
@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+# 型付きホスト検証専用。配布TemplateへDemo Componentを戻さない。
+$staticFixtures = Join-Path $PSScriptRoot 'Fixtures/StaticProjectTemplates'
 if(-not $SourceManifest) { $SourceManifest = Join-Path $workspace "NexusEngine.$Configuration.nxengine" }
 $SourceManifest = [IO.Path]::GetFullPath($SourceManifest); $TargetManifest = [IO.Path]::GetFullPath($TargetManifest)
 $tool = Join-Path $workspace "Generated/Modules/x64/$Configuration/NexusProjectTool/NexusProjectTool.exe"
@@ -19,7 +21,7 @@ function Invoke-Expected([string[]]$Arguments,[int]$Expected = 0) {
 }
 function Write-Json([string]$File,$Value) { [IO.File]::WriteAllText($File,($Value | ConvertTo-Json -Depth 12),$utf8) }
 $game = Join-Path $root '日本語 Migration Game'
-$null = Invoke-Expected @('create-template',$game,'Migration Game',$SourceManifest,'blank')
+$null = Invoke-Expected @('create-project',$game,'Migration Game',$SourceManifest,$staticFixtures,'blank')
 $file = Join-Path $game '日本語 Migration Game.nxproject'
 $original = [IO.File]::ReadAllText($file)
 $asset = Join-Path $game 'Assets/Keep.txt'; [IO.File]::WriteAllText($asset,'Project-owned asset bytes',$utf8)
@@ -95,7 +97,7 @@ if([IO.File]::ReadAllText($file) -cne $original) { throw 'Moved Project did not 
 $null = Invoke-Expected @('check',$file,$registry,$Configuration)
 # 成果物名を共有データに使うProjectでは、復旧ファイルを別の除外Directoryへ退避する。
 $aliasRoot = Join-Path $root 'Shared Paths'
-$null = Invoke-Expected @('create-template',$aliasRoot,'Shared Paths',$SourceManifest,'blank')
+$null = Invoke-Expected @('create-project',$aliasRoot,'Shared Paths',$SourceManifest,$staticFixtures,'blank')
 $aliasFile = Join-Path $aliasRoot 'Shared Paths.nxproject'
 foreach($pair in @(@('Assets','Build'),@('Levels','Intermediate'),@('Source','Cache'),@('Config','Generated'))) {
     $from = Join-Path $aliasRoot $pair[0]; $to = Join-Path $aliasRoot $pair[1]

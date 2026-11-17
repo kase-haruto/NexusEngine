@@ -15,7 +15,7 @@
 | 配布テスト | `Project/Tests/LauncherDistribution` |
 | ビルド・ZIP作成 | `Project/Tools/Project/Build-Distribution.ps1`、`New-EngineRelease.ps1` |
 | MSBuild入口 | `Project/Build/NexusDistribution.proj`：ReleaseのCLIをビルドしてセットアップを生成 |
-| C++ランチャー | `Project/Build/NexusLauncher.vcxproj`：ソース開発・エンジン移行用、SDKにも引き続き同梱 |
+| Launcher | WinForms版に統一。C++版は削除済み。SDKには同梱せず独立配布 |
 
 `Project/Tools/Project`は既存CLIと補助スクリプトの配置として正しく、独立アプリとテストのみを責務ごとの場所へ移しました。既存のC++ランチャーのビルド・ショートカット・SDK発行経路は保持します。独立版は`NexusProjectTool.exe`を同梱して既存の作成・登録・ビルド・起動・inventory検証へ委譲し、同じユーザーのRegistryを共有します。EditorやEngineを先にインストールする必要はありませんが、生成したC++プロジェクトのビルドにはVisual StudioのC++ツールが必要です。
 

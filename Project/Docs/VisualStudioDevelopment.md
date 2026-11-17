@@ -20,7 +20,6 @@ Visual StudioのC++ v145ツール・Windows SDKと、.NET 10のWindowsデスク�
 | Engine | NexusRuntimeHost | 特定Gameの型を含まないRuntimeホスト |
 | Engine | NexusProjectTool | プロジェクト作成・登録・ビルド・エンジン検証CLI |
 | Samples | SampleGame / SampleGameEditor / SampleGameRuntime | リポジトリ内サンプル |
-| Legacy Launcher | NexusLauncher | エンジン移行UIなどを保持した既存C++ランチャー |
 | Tests | DistributionTests | 配布・ローカル導入・CLI連携の検証 |
 
 共通ソリューションにまとめていますが、実行ファイルと責務は引き続き別です。C#ランチャーがC++エディタを直接リンクすることはありません。
@@ -40,7 +39,6 @@ Visual StudioのC++ v145ツール・Windows SDKと、.NET 10のWindowsデスク�
 | サンプル上でエディタ機能を確認 | `Samples`の`SampleGameEditor` |
 | 汎用エディタホストをデバッグ | `Engine`の`NexusEditor`。対象`.nxproject`などの起動引数を指定 |
 | 生成済みの自分のGameを開発 | そのGameの`Game.slnx`を開き、`GameEditor`を指定 |
-| 旧C++ランチャーの移行UI | `Legacy Launcher`の`NexusLauncher` |
 
 スタートアップの選択はVisual Studioのユーザー設定です。他の開発者の選択を書き換える設定ファイルは追加していません。F5時にスタートアップとその依存だけをビルドしたい場合は、Visual Studioの「ツール → オプション → プロジェクトおよびソリューション → ビルド/実行」で対象を設定します。Ctrl+Shift+Bのソリューション全体ビルドとは区別してください。
 

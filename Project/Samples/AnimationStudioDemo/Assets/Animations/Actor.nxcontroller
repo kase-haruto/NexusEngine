@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "entry": "Idle",
+  "parameters": [
+    {
+      "name": "Speed",
+      "type": "Float",
+      "value": 0
+    }
+  ],
+  "states": [
+    {
+      "name": "Idle",
+      "asset": "Animations/Idle.nxanim",
+      "position": [
+        70,
+        90
+      ]
+    },
+    {
+      "name": "Move",
+      "asset": "Animations/Move.nxanim",
+      "position": [
+        330,
+        90
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "from": "Idle",
+      "to": "Move",
+      "duration": 0.3,
+      "conditions": [
+        {
+          "parameter": "Speed",
+          "operation": ">",
+          "value": 0.1
+        }
+      ]
+    },
+    {
+      "from": "Move",
+      "to": "Idle",
+      "duration": 0.3,
+      "conditions": [
+        {
+          "parameter": "Speed",
+          "operation": "<",
+          "value": 0.1
+        }
+      ]
+    }
+  ]
+}

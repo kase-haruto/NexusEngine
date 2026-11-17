@@ -55,10 +55,18 @@ namespace NexusEngine {
 	 * - ModelResourceが所有するimmutableなnode animation keyframe群
 	 * - 再生時刻やloop状態はModelInstanceへ分離する
 	 *---------------------------------------------------------------------------------------*/
+    /** ミキサーの入力。assetは永続参照、indexは描画snapshotへバインドした後だけ使用する。 */
+    struct AnimationPoseSample {
+        std::string asset;
+        uint32_t index = 0;
+        float time = 0, weight = 1;
+        bool loop = true;
+    };
 	struct AnimationClip {
 		std::string name;
 		float duration = 0.0f;
 		std::vector<NodeAnimationChannel> channels;
+		bool hasMorphAnimation = false; //< モーフ変形は未対応。TRSとクリップ時間は読み込む。
 	};
 
 	/*-----------------------------------------------------------------------------------------

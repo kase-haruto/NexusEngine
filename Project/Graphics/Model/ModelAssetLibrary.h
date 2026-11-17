@@ -1,5 +1,6 @@
 #pragma once
 #include "ModelAssetData.h"
+#include "AnimationAsset.h"
 #include "ModelAssetReference.h"
 #include "PrimitiveShape.h"
 #include "Foundation/Error/Result.h"
@@ -14,6 +15,7 @@
 
 namespace NexusEngine {
 struct PrimitiveRenderItem;
+struct AnimationClipDocument;
 /*-----------------------------------------------------------------------------------------
  * ModelAssetLibrary
  * - 相対Asset参照をCPUモデルへ解決し、材質Variantを一つのUpload snapshotへ統合する
@@ -21,10 +23,21 @@ struct PrimitiveRenderItem;
  *---------------------------------------------------------------------------------------*/
 class ModelAssetLibrary final {
 public:
-    struct Range { uint32_t begin = 0, end = 0, materialBegin = 0, animationBegin = 0, animationCount = 0;
+    /** モデルの描画範囲と、個別アセットからバインド済みクリップへの対応。 */
+    struct Range {
+        uint32_t begin = 0, end = 0, materialBegin = 0, animationBegin = 0, animationCount = 0;
+        std::map<std::string, uint32_t> animationAssets;
         void ResolveAnimation(PrimitiveRenderItem& item) const;
     };
-    struct Request { PrimitiveShape shape; std::string mesh, texture; bool operator==(const Request&) const = default; };
+    /** 時刻や重みを含めず、実際に準備が必要な資源だけを要求する。 */
+    struct Request {
+        PrimitiveShape shape;
+        std::string mesh, texture;
+        std::string animationAsset, blendAnimationAsset;
+        std::vector<std::string> layers;
+        static Request FromItem(const PrimitiveRenderItem& item);
+        bool operator==(const Request&) const = default;
+    };
     ModelAssetLibrary(std::filesystem::path root, const ModelAssetData& initial);
     using ReloadStartup = std::function<Result<ModelAssetData>()>;
     ModelAssetLibrary(std::shared_ptr<ModelAssetData> initial, std::filesystem::path root, ReloadStartup reloadStartup = {});
@@ -32,6 +45,12 @@ public:
     Result<std::string> Reference(const std::filesystem::path& path) const;
     /** \brief 対応形式を検証し共有CPU cacheへロードする。未完了なら待つためWorkerから呼ぶ。 */
     Result<const ModelAssetData*> Model(const std::string& reference);
+    /** .nxanimまたはmodel#animation/clip名を個別アセットとして取得する。Worker用。 */
+    Result<std::shared_ptr<const AnimationAsset>> Animation(const std::string& reference);
+    void InvalidateAnimations();
+    Result<void> PreviewAnimation(const std::string& reference, const AnimationClipDocument& definition);
+    /** モデルと必要なアニメーションアセットをまとめて準備する。 */
+    Result<Range> Resolve(const Request& request);
     /** 読み込みや完了待ちを発生させず、共有CPUキャッシュだけを参照する。 */
     const ModelAssetData* FindModel(const std::string& reference) const;
     /** 描画済みsnapshotに存在する範囲だけを返す。未準備のアセットはnullopt。 */
@@ -65,6 +84,8 @@ private:
     std::map<std::string, uint64_t> textureIds_; //< 同じ画像を複数材質へ割り当てる際の共有識別子
     std::map<std::pair<std::string, std::string>, Range> ranges_; //< 永続参照から実行時範囲への対応
     size_t revision_ = 1; //< Monotonic even when a replacement has the same number of variants
+    std::map<std::string, std::shared_ptr<const AnimationAsset>> animations_;
+    std::map<std::string, std::shared_ptr<const AnimationAsset>> animationOverrides_;
     ReloadStartup reloadStartup_; //< Allows the synthetic startup source to be evicted too
 };
 }

@@ -94,6 +94,7 @@ NexusEngine::Result<void> NexusEngine::EditorSession::Create() {
 }
 
 void NexusEngine::EditorSession::Close() noexcept {
+    EndAnimationPreview();
 	StopPlay();
 	selection_.Clear();
 	ClearCameraPreview(); diagnostics_.Clear();
@@ -103,6 +104,7 @@ void NexusEngine::EditorSession::Close() noexcept {
 }
 
 bool NexusEngine::EditorSession::StartPlay() {
+    EndAnimationPreview();
 	playError_.reset();
 	if(IsPlaying() || !GetLevel() || !GetLevel()->GetScene()) return false;
     ++playEpoch_;
@@ -114,6 +116,7 @@ bool NexusEngine::EditorSession::StartPlay() {
         auto resources=level->SetResourceRoot(GetLevel()->ResourceRoot());
         if(!resources) { playError_=resources.error(); return false; }
     }
+    level->Animations().SetRoot(GetLevel()->Animations().Root());
 	level->Lighting() = GetLevel()->Lighting();
     if(!level->SetCollisionLayers(GetLevel()->CollisionLayers())) {
         return false;
@@ -138,11 +141,38 @@ NexusEngine::Result<void> NexusEngine::EditorSession::ReloadCSharp(const std::fi
     return result;
 }
 
+NexusEngine::Result<void> NexusEngine::EditorSession::BeginAnimationPreview() {
+    if(IsPlaying() || !GetLevel()) {
+        return std::unexpected(Error(ErrorCategory::Scene, 392, "Animation preview requires an editing Level."));
+    }
+    auto scene = GetLevel()->GetScene()->Clone();
+    if(!scene) {
+        return std::unexpected(Error(ErrorCategory::Scene, 392, "Cannot clone the preview scene."));
+    }
+    auto preview = std::make_unique<Level>("Animation Preview", reflection_);
+    auto root = preview->SetResourceRoot(GetLevel()->ResourceRoot().empty() ? std::filesystem::current_path() : GetLevel()->ResourceRoot());
+    if(!root) {
+        return root;
+    }
+    preview->Animations().SetRoot(GetLevel()->Animations().Root());
+    preview->ExchangeScene(std::move(scene));
+    animationPreview_ = std::move(preview);
+    return {};
+}
+void NexusEngine::EditorSession::EndAnimationPreview() noexcept {
+    animationPreview_.reset();
+}
+bool NexusEngine::EditorSession::HasAnimationPreview() const noexcept {
+    return animationPreview_ != nullptr;
+}
 NexusEngine::Result<void> NexusEngine::EditorSession::UpdatePreview(float deltaTime) {
 	if(IsPlaying()) return playRuntime_.Update(deltaTime);
 	if(!std::isfinite(deltaTime) || deltaTime < 0)
 		return std::unexpected(Error(ErrorCategory::Framework, 43, "Preview delta time must be finite and non-negative."));
-	return GetLevel() ? GetLevel()->Update(0.0f) : Result<void>{};
+    if(GetLevel()) {
+        GetLevel()->Animations().SetEnabled(false);
+    }
+	return GetPreviewLevel() ? GetPreviewLevel()->Update(0.0f) : Result<void>{};
 }
 
 NexusEngine::Result<void> NexusEngine::EditorSession::Open(const std::filesystem::path& path) {

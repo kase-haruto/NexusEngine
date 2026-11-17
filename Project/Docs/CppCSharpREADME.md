@@ -121,7 +121,7 @@ Hybridコード実行は未対応である。ModuleごとにWorldを設けず、
 | `Runtime/Project/ProjectContext.cpp` | Module配置のRoot内解決を検証 |
 | `Tools/Project/ProjectTemplates.h` / `.cpp` | 初期Module生成とテンプレート言語フィルター。既存呼出しはCpp既定値 |
 | `Templates/blank.nxtemplate` / `basic-3d.nxtemplate` | 共通LevelとCpp / CSharp別ファイルの指定 |
-| `Templates/Shared/ManagedModule.README.md.in` | C# Module生成範囲を説明 |
+| `Tests/Fixtures/StaticProjectTemplates/Shared/ManagedModule.README.md.in` | C# Module生成範囲を説明 |
 | `Launcher/LauncherApplication.h` / `.cpp` | Native Browserの初期言語UIとworker値渡し |
 | `Launcher/Standalone/Program.cs` | 配布Browserの初期言語UIとCLI接続 |
 | `Tools/Project/ProjectTool.cpp` | create-templateの省略可能な言語引数 |

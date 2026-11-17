@@ -16,7 +16,7 @@ namespace NexusEngine {
 	class Scene;
 
 	/** ゲームロジック、物理の値書戻し、派生Matrix確定の順。公開DLLのphase値とは別のEngine内部enum。 */
-	enum class SystemPhase : uint8_t { Simulation, Physics, Transform };
+	enum class SystemPhase : uint8_t { Simulation, Animation, Physics, Transform };
 
 	/*-----------------------------------------------------------------------------------------
 	 * ComponentAccess

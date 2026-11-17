@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$EngineManifest,
     [string]$OtherManifest,
     [ValidateSet('Debug','Develop','Release')][string]$Configuration = 'Debug'
@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+# 型付きホスト検証専用。配布TemplateへDemo Componentを戻さない。
+$staticFixtures = Join-Path $PSScriptRoot 'Fixtures/StaticProjectTemplates'
 $tool = Join-Path $workspace "Generated/Modules/x64/$Configuration/NexusProjectTool/NexusProjectTool.exe"
 $root = Join-Path $workspace ('Generated/RelocationValidation/' + [guid]::NewGuid().ToString())
 [IO.Directory]::CreateDirectory($root) | Out-Null
@@ -30,7 +32,7 @@ $null = Invoke-Expected @('engine-register',$manifest,$registry)
 if($OtherManifest) { $null = Invoke-Expected @('engine-register',[IO.Path]::GetFullPath($OtherManifest),$registry) }
 $null = Invoke-Expected @('engine-default',$manifest,$registry)
 $game = Join-Path $root 'Original Game'
-$null = Invoke-Expected @('create-template',$game,'Portable Game',$manifest,'basic-3d')
+$null = Invoke-Expected @('create-project',$game,'Portable Game',$manifest,$staticFixtures,'basic-3d')
 $file = Join-Path $game 'Original Game.nxproject'; $descriptor = [IO.File]::ReadAllText($file)
 $null = Invoke-Expected @('check',$file,$registry,$Configuration)
 $null = Invoke-Expected @('register',$file,$recent)
