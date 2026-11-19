@@ -1,0 +1,35 @@
+{
+  "keys": [
+    {
+      "inTangent": 0.0,
+      "inWeight": 0.3333333333333333,
+      "interpolation": 3,
+      "outTangent": 1.0,
+      "outWeight": 0.3333333333333333,
+      "tangentMode": 2,
+      "x": 0.0,
+      "y": 0.7
+    },
+    {
+      "inTangent": 0.0,
+      "inWeight": 0.3333333333333333,
+      "interpolation": 2,
+      "outTangent": 0.0,
+      "outWeight": 0.3333333333333333,
+      "tangentMode": 2,
+      "x": 0.5,
+      "y": 1.3
+    },
+    {
+      "inTangent": -1.0,
+      "inWeight": 0.3333333333333333,
+      "interpolation": 1,
+      "outTangent": 0.0,
+      "outWeight": 0.3333333333333333,
+      "tangentMode": 2,
+      "x": 1.0,
+      "y": 1.0
+    }
+  ],
+  "version": 2
+}

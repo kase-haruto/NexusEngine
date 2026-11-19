@@ -3,10 +3,13 @@
 // c++
 #include <cstdint>
 #include <vector>
+#include <span>
+#include "Foundation/Error/Result.h"
 
 // engine
 #include "IndexBuffer.h"
 #include "VertexBuffer.h"
+#include "Graphics/Model/DeformationData.h"
 
 namespace NexusEngine {
 	class GraphicsContext;
@@ -38,6 +41,7 @@ namespace NexusEngine {
 		void Shutdown() noexcept;
 		[[nodiscard]] bool IsInitialized() const noexcept;
 		[[nodiscard]] const std::vector<SubmeshRange>& GetSubmeshes() const noexcept;
+        DeformationData GetDeformation() const noexcept;
 		/** \brief 再生成時に変わるGeometry識別値。Memory address再利用とGeometry変更を区別する */
 		[[nodiscard]] uint64_t GetGeometryGeneration() const noexcept { return geometryGeneration_; }
 
@@ -55,5 +59,8 @@ namespace NexusEngine {
 		IndexBuffer indexBuffer_;
 		std::vector<SubmeshRange> submeshes_;
 		uint64_t geometryGeneration_ = 0; //< 0は未生成。成功した再生成ごとに更新
+        struct MorphResource;
+        std::shared_ptr<MorphResource> morph_;
+        Result<void> InitializeMorph(const GraphicsResourceFactory& factory, std::span<const uint8_t> bytes, uint32_t vertices, uint32_t targets);
 	};
 } // namespace NexusEngine

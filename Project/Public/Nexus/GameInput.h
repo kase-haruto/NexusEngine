@@ -40,10 +40,32 @@ typedef struct NexusGamepadsFrameV1 {
     uint32_t count,focused,reserved[2];
     NexusGamepadStateV1 pads[NEXUS_GAMEPAD_COUNT];
 } NexusGamepadsFrameV1;
+#define NEXUS_INPUT_MAX_ACTIONS 32u
+/* operation=2は全Action、operation=3は次frameからのContext切替。 */
+typedef struct NexusInputActionRequestV1 {
+    uint32_t operation;
+    char context[64];
+} NexusInputActionRequestV1;
+typedef struct NexusInputActionStateV1 {
+    char name[64];
+    uint32_t kind;
+    float value[2];
+    uint32_t down, pressed, released;
+} NexusInputActionStateV1;
+typedef struct NexusInputActionsFrameV1 {
+    uint32_t count, focused;
+    char context[64];
+    NexusInputActionStateV1 actions[NEXUS_INPUT_MAX_ACTIONS];
+} NexusInputActionsFrameV1;
 #pragma pack(pop)
 #if defined(__cplusplus)
 static_assert(sizeof(NexusInputFrameV1)==800);
 static_assert(sizeof(NexusGamepadRequestV1)==4);
 static_assert(sizeof(NexusGamepadStateV1)==64);
 static_assert(sizeof(NexusGamepadsFrameV1)==272);
+#endif
+
+#if defined(__cplusplus)
+static_assert(sizeof(NexusInputActionStateV1) == 88);
+static_assert(sizeof(NexusInputActionsFrameV1) == 2888);
 #endif

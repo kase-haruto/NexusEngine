@@ -1,5 +1,7 @@
 # アニメーションスタジオ
 
+1.4.0の新規開発向けのKeyframe / Skeletal、汎用Curve Editor、Speed Curveは[Animation System](AnimationSystemREADME.md)を参照してください。以下には旧AnimationPlayer / Controller / Timelineの互換経路も含みます。新規Keyframe clipで選べるpropertyはanimatable登録に限定されます。
+
 クリップ、Animator Controller、Timelineを同じアセット参照で作成・編集・再生する。ウィンドウメニューまたはツールメニューの「アニメーションスタジオ」から開く。コンテンツブラウザーでアニメーションアセットをダブルクリックしても開ける。
 
 ## すぐに試す

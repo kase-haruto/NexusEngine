@@ -1,4 +1,9 @@
 #include "Editor/Services/AnimationStudioDocument.h"
+#include "Editor/Services/CurveEditDocument.h"
+#include "Editor/Services/AnimationCurvePreview.h"
+#include "Runtime/Scene/Components/KeyframeAnimationComponent.h"
+#include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Rendering/RenderSceneExtractor.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Core/EditorWorkspace.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
@@ -71,6 +76,41 @@ void RunAnimationStudioTests() {
     StudioExpect(session.GetPlayLevel()->FindEntity(id).GetComponent<TransformComponent>()->translation.x == 10,"PIE did not evaluate authored clip.");
     session.StopPlay();
 
+    CurveEditDocument curve;
+    curve.Initialize(assets);
+    curve.New();
+    StudioCheck(curve.Save("Curves/Speed.curve"));
+    entity.GetComponent<KeyframeAnimationComponent>()->speedCurveAsset = "Curves/Speed.curve";
+    ConnectAnimationCurvePreview(curve, document, session);
+    curve.changed = [&](const auto& reference, auto snapshot) {
+        if(session.HasAnimationPreview() && snapshot) {
+            StudioCheck(session.GetPreviewLevel()->Animations().Curves().Override(reference, *snapshot));
+        }
+    };
+    document.preview = true;
+    document.time = .5f;
+    StudioCheck(document.Preview(session, 0));
+    StudioExpect(curve.preview.input().has_value(), "Curve preview context did not connect");
+    StudioCheck(curve.SetKeys({{0, .5}, {1, .5}}));
+    curve.EndEdit();
+    StudioCheck(document.Preview(session, 0));
+    StudioExpect(session.GetPreviewLevel()->FindEntity(id).GetComponent<TransformComponent>()->translation.x == 5,
+        "Unsaved speed curve did not reevaluate paused preview");
+    StudioExpect(session.GetLevel()->FindEntity(id).GetComponent<TransformComponent>()->translation.x == 7,
+        "Curve draft modified edit World");
+    StudioExpect(LoadFloatCurve(assets / "Curves/Speed.curve")->Evaluate(.5) == 1,
+        "Curve draft overwrote saved asset");
+    StudioExpect(curve.Undo(), "Curve preview undo failed");
+    StudioCheck(document.Preview(session, 0));
+    StudioExpect(session.GetPreviewLevel()->FindEntity(id).GetComponent<TransformComponent>()->translation.x == 10,
+        "Curve undo did not restore preview");
+    curve.preview.seek(.25);
+    StudioCheck(document.Preview(session, 0));
+    StudioExpect(session.GetPreviewLevel()->FindEntity(id).GetComponent<TransformComponent>()->translation.x == 5,
+        "Curve context seek failed");
+    document.StopPreview(session);
+    StudioExpect(!curve.preview.input(), "Curve preview context retained a closed World");
+
     ImGui::CreateContext();
     ImGui::GetIO().DisplaySize = {1600,1000};
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -84,7 +124,25 @@ void RunAnimationStudioTests() {
         EditorWorkspace workspace(session);
 
         workspace.Initialize(project,{},std::filesystem::absolute("Project"));
+        document.preview = true;
+        StudioCheck(document.Preview(session, 0));
+        RenderScene previewFrame;
+        StudioCheck(RenderSceneExtractor{}.ExtractInto(*session.GetPreviewLevel()->GetScene(), 1, previewFrame, true));
+        workspace.ViewportEditor().Prepare(previewFrame, 1);
+        StudioExpect(previewFrame.camera.has_value(), "Animation preview without a Camera lost its Editor camera");
+        auto cameraEntity = session.GetPreviewLevel()->CreateEntity("Preview camera");
+        auto* camera = cameraEntity.AddComponent<CameraComponent>();
+        camera->primary = true;
+        camera->verticalFieldOfViewRadians = .6f;
+        StudioCheck(session.GetPreviewLevel()->Update(0));
+        StudioCheck(RenderSceneExtractor{}.ExtractInto(*session.GetPreviewLevel()->GetScene(), 1, previewFrame, true));
+        StudioExpect(previewFrame.camera.has_value(), "Preview primary camera was not extracted");
+        const auto animatedProjection = previewFrame.camera->projectionMatrix;
+        workspace.ViewportEditor().Prepare(previewFrame, 1);
+        StudioExpect(previewFrame.camera->projectionMatrix.elements == animatedProjection.elements, "Editor camera overwrote preview FOV");
+        document.StopPreview(session);
         workspace.Panels().Open("AnimationStudio");
+        workspace.Panels().Open("CurveEditor");
         for(int kind = 0; kind < 3; ++kind) {
             workspace.AnimationStudio().New(kind);
             for(int frame = 0; frame < 2; ++frame) {
@@ -100,6 +158,6 @@ void RunAnimationStudioTests() {
         workspace.Shutdown();
     }
     ImGui::DestroyContext();
-    std::cout << "PASS: Animation Studio asset undo/save/open, isolated draft preview, PIE and Clip/Animator/Timeline panels\n";
+    std::cout << "PASS: Animation Studio, Curve panels, asset history, isolated unsaved speed preview, seek/disconnect and PIE\n";
 }
 }

@@ -1,7 +1,8 @@
 #ifndef NEXUS_PRIMITIVE_DRAW_DATA_HLSLI
 #define NEXUS_PRIMITIVE_DRAW_DATA_HLSLI
 
-// CPU側PrimitiveDrawDataと同じ4800byte配置。行列はrow-vector規約。
+// CPU側PrimitiveDrawDataと同じ752byte配置。可変長変形データは共有bufferへ置く。
+#include "../Common/Deformation.hlsli"
 #include "../Common/IndirectLighting.hlsli"
 #include "../Common/BakedLighting.hlsli"
 #include "../Common/DDGI.hlsli"
@@ -14,7 +15,7 @@ cbuffer PrimitiveDrawData : register(b0)
     uint skinningEnabled;
     float drawDataPadding;
     float4 materialTint;
-    row_major float4x4 jointPalette[64];
+    DeformationData deformation;
     uint shadowMaskIndex;
     uint3 shadowPadding;
     float4 lightDirectionIntensity;
@@ -37,6 +38,7 @@ cbuffer PrimitiveDrawData : register(b0)
     EnvironmentData environment;
     BakedLightingData bakedLighting;
     DDGIData ddgi;
+    float4 uvTransform;
 };
 
 #endif

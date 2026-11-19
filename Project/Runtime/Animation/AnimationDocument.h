@@ -25,13 +25,20 @@ struct AnimationEvent {
     std::string name = "Event", payload;
 };
 /** v1の参照型と、v2の編集可能なキーを同じアセットとして扱う。 */
+enum class AnimationClipKind { Legacy, Keyframe, Skeletal };
 struct AnimationClipDocument {
     std::string source, clip;
     float duration = 1;
     bool loop = true;
     std::vector<AnimationTrack> tracks;
     std::vector<AnimationEvent> events;
+    AnimationClipKind kind = AnimationClipKind::Legacy; //< v3は用途を明示。v1/v2は曖昧なまま保持
+    bool durationExplicit = true; //< 旧source参照で省略された長さはrepositoryで補完する。再生状態ではない
+    std::string retargetProfile; //< v4: 独立した.nxretargetの相対参照
+    std::string skeletonSource; //< v4: authored keysの元rest/bindを持つモデル参照
 };
+/** \brief 明示kindまたはlegacyの内容から判定する。混在legacyはLegacyを返し変換しない。 */
+AnimationClipKind EffectiveAnimationClipKind(const AnimationClipDocument& document);
 struct AnimatorParameter {
     std::string name = "Speed", type = "Float";
     float value = 0;

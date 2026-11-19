@@ -1,4 +1,4 @@
-#include "Graphics/Color/ColorSpace.h"
+﻿#include "Graphics/Color/ColorSpace.h"
 #include "Graphics/Backend/DirectX12/PostProcess/PostProcessBackend.h"
 #include "Graphics/Resource/TextureResource.h"
 #include "Graphics/Resource/ConstantBuffer.h"
@@ -224,6 +224,12 @@ void ColorManagementIntegration() {
     invalidEffect = multiply; invalidEffect.shaderPath = L"missing.hlsl";
     Require(!post.PrepareEffects(test.device.GetDevice(), L"Project/Shaders", std::vector{invalidEffect}), "Missing effect accepted.");
     Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 64), "Failed prepare replaced the live effect chain.");
+    ScreenEffect curveEffect;
+    curveEffect.shaderPath = L"PostProcess/ColorAdjust.PS.hlsl";
+    curveEffect.parameters[0] = .5f;
+    curveEffect.parameters[1] = 1;
+    install({curveEffect});
+    Require(withinByteTolerance(render({1, 1, 1, 1}, settings)[0], 128), "Curve Camera Effect shader output failed");
     install({});
     auto patch = std::array<float, 4>{0.21404114f, 0.21404114f, 0.21404114f, 1};
     auto withoutGrid = render(patch, settings);

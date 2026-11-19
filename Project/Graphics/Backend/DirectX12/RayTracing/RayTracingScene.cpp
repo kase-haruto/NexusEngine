@@ -138,7 +138,7 @@ namespace NexusEngine {
 		frame.references.reserve(instances.size());
 		frame.current.reserve(instances.size());
 		for(const auto& instance : instances) {
-			if(instance.mesh == nullptr || !instance.jointPalette.empty()) {
+            if(instance.mesh == nullptr || !instance.jointPalette.empty() || instance.deformation.jointCount || instance.deformation.targetCount) {
 				return std::unexpected(Error(ErrorCategory::Graphics, kInvalidInput,
 					"RT Geometry requires a Mesh; skinned geometry must provide a deformed buffer before AS build."));
 			}

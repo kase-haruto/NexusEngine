@@ -91,6 +91,7 @@
     <ClCompile Include="..\Runtime\Application\GameApplication.cpp" />
     <ClCompile Include="..\Runtime\Application\GameRuntime.cpp" />
     <ClCompile Include="..\Runtime\Gameplay\GameApiBridge.cpp" />
+    <ClCompile Include="..\Public\Nexus\GameInputActions.cpp" />
     <ClCompile Include="..\Runtime\Gameplay\GameComponentAccess.cpp" />
     <ClCompile Include="..\Runtime\Gameplay\GameModuleLoader.cpp" />
     <ClCompile Include="..\Runtime\Gameplay\NativeGameSystemScope.cpp" />
@@ -101,12 +102,15 @@
     <ClCompile Include="..\Runtime\Scripting\CSharpRuntime.cpp" />
     <ClCompile Include="..\Runtime\Scripting\ScriptSystem.cpp" />
     <ClCompile Include="..\Runtime\Level\Level.cpp" />
+    <ClCompile Include="..\Runtime\Input\InputMap.cpp" />
     <ClCompile Include="..\Runtime\Level\LevelDocument.cpp" />
     <ClCompile Include="..\Runtime\Level\LevelSerializer.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
     <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\TypeRegistryStorage.cpp" />
     <ClCompile Include="..\Runtime\Reflection\TypeRegistry.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ManagedScriptMetadata.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\ComponentEditorMetadata.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ReflectionRegistration.cpp" />
     <ClCompile Include="..\Runtime\Reflection\NativeComponentMetadata.cpp" />
     <ClCompile Include="..\Runtime\Scene\Components\GameComponentData.cpp" />
@@ -142,4 +146,30 @@
     <ClCompile Include="..\Runtime\Scene\Components\AnimatorComponent.cpp" />
     <ClCompile Include="..\Runtime\Scene\Components\TimelinePlayerComponent.cpp" />
   </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Curves\FloatCurve.cpp" />
+    <ClCompile Include="..\Runtime\Curves\CurveSerializer.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationPlayback.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Curves\CurveAssets.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Animation\AnimationClipAssets.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationPropertyEvaluator.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationComponentEvaluator.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\KeyframeAnimationComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\CurveBindingComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\SkeletalAnimationComponent.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Graphics\Model\GltfData.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\RetargetProfile.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\AnimationLayers.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\AnimationControllerPlayer.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Graphics\Model\PoseMath.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\AnimationPoseAssets.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Platform\FileSystem\AssetIdentity.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Platform\IPC\NamedPipeChannel.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Curves\CurvePreviewBridge.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Graphics\Resource\FrameDataBuffer.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Scene\Components\CameraEffectComponent.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\TimelineEvaluation.cpp" /></ItemGroup>
 </Project>

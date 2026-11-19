@@ -49,7 +49,7 @@ uint ReadIndex(ByteAddressBuffer buffer, uint index, uint wide)
 void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes attr)
 {
     const uint instance = InstanceID() * 80;
-    const uint geometry = geometryByteOffset + geometryRecordIndex * 144;
+    const uint geometry = geometryByteOffset + geometryRecordIndex * 160;
     // A primary visibility ray needs no full material evaluation on an ordinary non-metal.
     // Secondary reflections and GI probes still collect all shading attributes.
     if(payload.padding == 0xffffffffu) {
@@ -66,6 +66,8 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
                 float3 bary=float3(1-attr.barycentrics.x-attr.barycentrics.y,attr.barycentrics);
                 float2 uv=asfloat(vb.Load2(indices.x*streams.z+24))*bary.x +
                     asfloat(vb.Load2(indices.y*streams.z+24))*bary.y + asfloat(vb.Load2(indices.z*streams.z+24))*bary.z;
+                float4 uvTransform = asfloat(surfaceData.Load4(geometry + 144));
+                uv = uv * uvTransform.xy + uvTransform.zw;
                 uint4 maps=surfaceData.Load4(geometry+96);
                 float4 texel=1;
                 if(maps.z!=0) {
@@ -104,6 +106,8 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
     payload.front = dot(payload.geometricNormal, WorldRayDirection()) < 0;
     float2 uv = asfloat(vertices.Load2(addresses.x + 24)) * weights.x +
         asfloat(vertices.Load2(addresses.y + 24)) * weights.y + asfloat(vertices.Load2(addresses.z + 24)) * weights.z;
+    float4 uvTransform = asfloat(surfaceData.Load4(geometry + 144));
+    uv = uv * uvTransform.xy + uvTransform.zw;
     float3 vertexColor = asfloat(vertices.Load3(addresses.x + 32)) * weights.x +
         asfloat(vertices.Load3(addresses.y + 32)) * weights.y + asfloat(vertices.Load3(addresses.z + 32)) * weights.z;
     payload.color = asfloat(surfaceData.Load4(geometry + 32)).rgb * vertexColor;
@@ -153,7 +157,8 @@ void OpticalHit(inout Surface payload, BuiltInTriangleIntersectionAttributes att
             float3 p0 = asfloat(vertices.Load3(addresses.x));
             float3 e1 = asfloat(vertices.Load3(addresses.y)) - p0, e2 = asfloat(vertices.Load3(addresses.z)) - p0;
             float2 uv0 = asfloat(vertices.Load2(addresses.x + 24));
-            float2 uv1 = asfloat(vertices.Load2(addresses.y + 24)) - uv0, uv2 = asfloat(vertices.Load2(addresses.z + 24)) - uv0;
+            float2 uv1 = (asfloat(vertices.Load2(addresses.y + 24)) - uv0) * uvTransform.xy;
+            float2 uv2 = (asfloat(vertices.Load2(addresses.z + 24)) - uv0) * uvTransform.xy;
             float det = uv1.x * uv2.y - uv1.y * uv2.x;
             t = abs(det) > 1e-10 ? mul(ObjectToWorld3x4(), float4((e1 * uv2.y - e2 * uv1.y) / det, 0)) : 0;
             b = abs(det) > 1e-10 ? mul(ObjectToWorld3x4(), float4((e2 * uv1.x - e1 * uv2.x) / det, 0)) : 0;

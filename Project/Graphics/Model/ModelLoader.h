@@ -29,6 +29,7 @@ namespace NexusEngine {
 		 * \param requireDrawableMesh falseならMeshを持たないアニメーション専用sourceも受け入れる
 		 * \return Graphics API非依存のModelデータ
 		 */
-		[[nodiscard]] Result<ModelAssetData> LoadGltf(const std::filesystem::path& filePath, bool requireDrawableMesh = true) const;
+		[[nodiscard]] Result<ModelAssetData> LoadGltf(const std::filesystem::path& filePath, bool requireDrawableMesh = true,
+            bool loadGeometry = true) const;
 	};
 } // namespace NexusEngine

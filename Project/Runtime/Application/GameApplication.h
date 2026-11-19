@@ -5,6 +5,7 @@
 #include "Graphics/Model/ModelAssetLibrary.h"
 #include "Graphics/Model/ModelInstance.h"
 #include "Runtime/Rendering/RenderSceneExtractor.h"
+#include "Runtime/Curves/CurvePreviewBridge.h"
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
@@ -14,6 +15,7 @@ namespace NexusEngine {
  *---------------------------------------------------------------------------------------*/
 class GameApplication final : public IFrameworkUpdateClient {
 public:
+    void ConnectCurvePreview(const std::string& endpoint);
     /** \brief 読込前に型集合を固定する。登録関数はApplicationより長く生存する */
     explicit GameApplication(ReflectionRegistration reflection = {}, ApplicationPaths paths = {})
         : reflection_(reflection), paths_(std::move(paths)) {}
@@ -45,6 +47,7 @@ public:
     const ProjectContext* Project() const noexcept { return paths_.project.get(); }
 
 private:
+    std::unique_ptr<CurvePreviewReceiver> curvePreview_; //< 受信値のWorld反映はUpdateのmain threadだけ
     ReflectionRegistration reflection_; //< Level読込より先に決定するGameの型集合
     ApplicationPaths paths_; //< ホストで解決した資源の基準
     [[nodiscard]] Result<void> ResolveDrawRanges();

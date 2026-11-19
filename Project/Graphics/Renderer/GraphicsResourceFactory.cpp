@@ -22,6 +22,7 @@
 #include "Graphics/Resource/IndexBufferUploader.h"
 #include "Graphics/Resource/MeshResource.h"
 #include "Graphics/Model/ModelAssetData.h"
+#include "Graphics/Model/ModelInstance.h"
 #include "Graphics/Lighting/LightmapGeometry.h"
 #include "Graphics/Model/ModelResource.h"
 #include "Graphics/Resource/SamplerDesc.h"
@@ -36,6 +37,42 @@
 
 namespace NexusEngine {
 	thread_local CommandQueue* GraphicsResourceFactory::uploadQueueOverride_ = nullptr;
+    Result<std::vector<ShaderResourceRef>> GraphicsResourceFactory::CreatePersistentRawBufferShaderResources(const ConstantBuffer& buffer) const {
+        if(!bindlessDescriptors_ || !buffer.NativeResource() || !buffer.GetDataSize() || buffer.GetDataSize() % 4 || buffer.GetDataSize() > UINT32_MAX) {
+            return std::unexpected(Error(ErrorCategory::Graphics, 144, "Invalid raw buffer resource"));
+        }
+        std::vector<ShaderResourceRef> views;
+        for(uint32_t frame = 0; frame < buffer.GetFrameCount(); ++frame) {
+            D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
+            desc.Format = DXGI_FORMAT_R32_TYPELESS;
+            desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+            desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            desc.Buffer.FirstElement = buffer.GetAlignedSliceSize() * frame / 4;
+            desc.Buffer.NumElements = static_cast<UINT>(buffer.GetDataSize() / 4);
+            desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+            auto view = bindlessDescriptors_->CreateShaderResourceView(static_cast<ID3D12Resource*>(buffer.NativeResource()), desc);
+            if(!view) {
+                for(const auto previous : views) {
+                    static_cast<void>(RetirePersistentShaderResource(previous));
+                }
+                return std::unexpected(view.error());
+            }
+            views.push_back(*view);
+        }
+        return views;
+    }
+    Result<ShaderResourceRef> GraphicsResourceFactory::CreatePersistentVertexBufferShaderResource(const VertexBuffer& buffer) const {
+        if(!bindlessDescriptors_ || !buffer.IsInitialized() || (static_cast<uint64_t>(buffer.GetVertexCount()) * buffer.GetStride()) % 4) {
+            return std::unexpected(Error(ErrorCategory::Graphics, 144, "Invalid immutable raw buffer resource"));
+        }
+        D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
+        desc.Format = DXGI_FORMAT_R32_TYPELESS;
+        desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+        desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        desc.Buffer.NumElements = buffer.GetVertexCount() * buffer.GetStride() / 4;
+        desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+        return bindlessDescriptors_->CreateShaderResourceView(static_cast<ID3D12Resource*>(buffer.GetNativeResource()), desc);
+    }
 	GraphicsResourceFactory::UploadScope::UploadScope(CommandQueue* queue) noexcept
 		: previous_(uploadQueueOverride_) { uploadQueueOverride_ = queue; }
 	GraphicsResourceFactory::UploadScope::~UploadScope() { uploadQueueOverride_ = previous_; }
@@ -185,7 +222,16 @@ namespace NexusEngine {
 		}
 		const uint32_t materialCount = assetData.materials.empty()
 			? 1U : static_cast<uint32_t>(assetData.materials.size());
+        ModelInstance validatedPose;
+        const auto validPose = validatedPose.Initialize(assetData);
+        if(!validPose) {
+            return validPose;
+        }
 		for(const MeshAssetData& mesh : assetData.meshes) {
+            if(mesh.morphTargetCount && (!mesh.vertexStride || mesh.morphTargetCount > kMaxMorphTargets ||
+                mesh.morphDeltas.size() != (mesh.vertexData.size() / mesh.vertexStride) * mesh.morphTargetCount)) {
+                return std::unexpected(Error(ErrorCategory::Graphics, 144, "Invalid morph vertex/target dimensions"));
+            }
 			for(const SubmeshRange& submesh : mesh.submeshes) {
 				if(submesh.materialSlot >= materialCount) {
 					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
@@ -206,6 +252,9 @@ namespace NexusEngine {
 					return std::unexpected(Error(ErrorCategory::Graphics, kInvalidResourceArgument,
 						"Model node references an invalid mesh index."));
 				}
+                if(node.morphWeights.size() != assetData.meshes[meshIndex].morphTargetCount) {
+                    return std::unexpected(Error(ErrorCategory::Graphics, 144, "Node morph weights do not match mesh targets"));
+                }
 			}
 			if(!node.meshIndices.empty()) {
 				const uint32_t nodeSkin = assetData.meshes[node.meshIndices.front()].skinIndex;
@@ -279,7 +328,7 @@ namespace NexusEngine {
 			}
 			MeshAssetData prepared;
 			const MeshAssetData* geometry = &source;
-			if(generateLightmapUV && source.skinIndex == MeshAssetData::kNoSkin) {
+            if(generateLightmapUV && source.skinIndex == MeshAssetData::kNoSkin && source.morphTargetCount == 0) {
 				auto result = BuildLightmapGeometry(source);
 				if(!result) return std::unexpected(std::move(result.error()));
 				prepared = std::move(*result);
@@ -290,6 +339,15 @@ namespace NexusEngine {
 				*mesh, geometry->vertexData, geometry->vertexStride,
 				geometry->indexData, geometry->indexFormat, geometry->submeshes);
 			if(!result) return result;
+
+            if(source.morphTargetCount) {
+                const auto bytes = std::as_bytes(std::span(source.morphDeltas));
+                result = mesh->InitializeMorph(*this, {reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()},
+                    static_cast<uint32_t>(source.vertexData.size() / source.vertexStride), source.morphTargetCount);
+                if(!result) {
+                    return result;
+                }
+            }
 			meshes.push_back(std::move(mesh));
 		}
 

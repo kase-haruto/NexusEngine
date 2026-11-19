@@ -48,6 +48,8 @@ namespace NexusEngine {
 	 *---------------------------------------------------------------------------------------*/
 	class GraphicsResourceFactory final {
 	public:
+        Result<std::vector<ShaderResourceRef>> CreatePersistentRawBufferShaderResources(const ConstantBuffer& buffer) const;
+        Result<ShaderResourceRef> CreatePersistentVertexBufferShaderResource(const VertexBuffer& buffer) const;
 		/** \brief Native Feature 型を公開せず起動時能力を返す */
 		[[nodiscard]] const GraphicsCapabilities& GetCapabilities() const noexcept { return capabilities_; }
 		/** \brief 対応 GPU 上で独立 AS/MS/PS Pipeline を作成する */

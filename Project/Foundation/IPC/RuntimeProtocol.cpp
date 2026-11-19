@@ -4,7 +4,9 @@ namespace NexusEngine::IPC {
 namespace {
 constexpr uint32_t Magic = 0x5358454e; // NEXS
 constexpr size_t HeaderSize = 44;
-bool ValidType(MessageType type) { return type >= MessageType::Hello && type <= MessageType::Heartbeat; }
+bool ValidType(MessageType type) {
+    return type >= MessageType::Hello && type <= MessageType::CurveState;
+}
 }
 void WireWriter::U16(uint16_t value) { for(int i = 0; i < 2; ++i) data.push_back(static_cast<std::byte>(value >> (8 * i))); }
 void WireWriter::U32(uint32_t value) { for(int i = 0; i < 4; ++i) data.push_back(static_cast<std::byte>(value >> (8 * i))); }

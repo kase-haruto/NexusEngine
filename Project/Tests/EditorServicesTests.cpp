@@ -1,4 +1,4 @@
-#include "Editor/Services/EditorDocumentService.h"
+﻿#include "Editor/Services/EditorDocumentService.h"
 #include "Editor/Services/SceneEditService.h"
 #include "Editor/Services/SourceFileActions.h"
 #include "Editor/Services/EditorCommandRegistry.h"
@@ -1089,7 +1089,18 @@ void CollisionSettingsEditingTests() {
     // Root設定後も、開いているv13の表を初回のProject設定へ引き継ぐ。
     std::ifstream beforeDelete(levelFile, std::ios::binary);
     std::string legacyText{std::istreambuf_iterator<char>(beforeDelete), std::istreambuf_iterator<char>()};
-    legacyText.replace(0, std::string("NEXUS_LEVEL 14").size(), "NEXUS_LEVEL 13");
+    legacyText.replace(0, std::string("NEXUS_LEVEL 15").size(), "NEXUS_LEVEL 13");
+    // v15の末尾UVを除き、実際の旧形式レコードへ戻して移行を検証する。
+    for(size_t position = legacyText.find("PRIMITIVE 1 "); position != std::string::npos;
+        position = legacyText.find("PRIMITIVE 1 ", position + 1)) {
+        const auto end = legacyText.find('\n', position);
+        auto begin = end;
+        for(int field = 0; field < 4; ++field) {
+            begin = legacyText.rfind(' ', begin - 1);
+        }
+        legacyText.erase(begin, end - begin);
+    }
+
     auto importedMatrix = settings.matrix;
     importedMatrix[0] &= ~uint32_t{1};
     std::string legacyMatrix = "COLLISION_MATRIX";
@@ -1246,6 +1257,10 @@ void ColliderViewportTests() {
 }
 
 #include "DetailsCategoryTests.inl"
+#include "InputMapPanelTests.inl"
+#include "ContentSourceCreationTests.inl"
+#include "ComponentBrowserTests.inl"
+#include "ComponentRemovalTests.inl"
 #include "PrimitiveShapeTests.inl"
 #include "StartupPathTests.inl"
 #include "EntityConsoleTests.inl"
@@ -1331,18 +1346,28 @@ void ExecutionModeRouting() {
 }
 void RunGameRuntimeTests();
 void RunReflectedComponentTests();
-namespace NexusEngine::Tests { void RunAnimationStudioTests(); void RunNodeEditorTests(); }
+namespace NexusEngine::Tests { void RunAnimationStudioTests(); void RunNodeEditorTests(); void RunCurveDocumentTests(); }
+#include "ContentBrowserTests.inl"
+namespace NexusEngine::Tests { void RunContentBrowserExtendedTests(); }
 int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     try {
+        std::cerr << "Running RunCurveDocumentTests\n" << std::flush;
+        NexusEngine::Tests::RunCurveDocumentTests();
+        std::cerr << "Running RunNodeEditorTests\n" << std::flush;
         NexusEngine::Tests::RunNodeEditorTests();
+        std::cerr << "Running RunAnimationStudioTests\n" << std::flush;
         NexusEngine::Tests::RunAnimationStudioTests();
     } catch(const std::exception& error) {
         std::cerr << "Animation Studio tests failed: " << error.what() << std::endl;
         return 1;
     }
+    NexusEngine::Tests::RunContentBrowserExtendedTests();
+    ContentBrowserServiceTests();
+    ContentBrowserIconTests();
+    ContentBrowserViewIntegration();
     PostProcessGraphTests();
     RunReinstancingTests();
     RunGameRuntimeTests();
@@ -1361,6 +1386,10 @@ int main() {
     PrimitiveShapeTests();
     StartupPathTests();
     DetailsCategoryIntegration();
+    InputMapPanelIntegration();
+    ContentSourceCreationIntegration();
+    ComponentBrowserIntegration();
+    ComponentRemovalTransactions();
     AssetDropInteraction();
     GizmoWorldTransactions(); ImGuizmoInteraction();
     OffsetMeshGizmoInteraction();

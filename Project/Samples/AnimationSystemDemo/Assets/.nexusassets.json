@@ -1,0 +1,43 @@
+{
+  "aliases": {
+    "animations/sourceidle.nxanim": "a23ba66b-faca-4c2d-b181-54c61fea193b",
+    "animations/sourcesmile.nxanim": "5d28d0a8-56ea-4830-87c8-8855fdbe8032",
+    "animations/sourcewalk.nxanim": "d26fc72e-61c3-4d60-866e-ec95b24f0beb",
+    "animations/sourcewave.nxanim": "157559f6-33c3-4b84-85d3-332b3ab093b8",
+    "animations/targetidle.nxanim": "8542c2f5-43a1-48ad-a75b-71454e5a314a",
+    "animations/targetsmile.nxanim": "42488b13-ed05-4683-bafa-6e0af6dfcd76",
+    "animations/targetwalk.nxanim": "dcdc4907-d2e4-47aa-972c-d68b91346820",
+    "animations/targetwave.nxanim": "0727e7c8-63cb-4d61-b0a5-3db560356245",
+    "controllers/source.nxcontroller": "63808f46-cf24-41ca-9d36-559b1e8d60f4",
+    "controllers/target.nxcontroller": "ab9a5660-32fd-41a1-918d-32418a7be5b9",
+    "curves/brightness.curve": "7eecca0f-e1fc-4025-af72-ab56c34b2543",
+    "curves/speed.curve": "b93e1179-887a-43aa-8581-81f9b368c4d8",
+    "layers/source.nxlayers": "c67c7e64-ddee-4906-81e1-47432f452d4c",
+    "layers/target.nxlayers": "4ca3d82b-fef8-4c39-bdfc-6e947616cf6e",
+    "models/source.gltf": "f2eef8e8-9c7d-4944-9185-c25ec30eb1f8",
+    "models/target.gltf": "6d17e39c-b0a0-45d1-805e-4672b68159f5",
+    "rigs/taller.nxretarget": "7b34338e-58f5-43d9-b41d-c291cad23131",
+    "timelines/sequence.nxtimeline": "26a6d17c-b1c9-4c9d-a2fd-c08f3d0bb1e6"
+  },
+  "assets": {
+    "0727e7c8-63cb-4d61-b0a5-3db560356245": "Animations/TargetWave.nxanim",
+    "157559f6-33c3-4b84-85d3-332b3ab093b8": "Animations/SourceWave.nxanim",
+    "26a6d17c-b1c9-4c9d-a2fd-c08f3d0bb1e6": "Timelines/Sequence.nxtimeline",
+    "42488b13-ed05-4683-bafa-6e0af6dfcd76": "Animations/TargetSmile.nxanim",
+    "4ca3d82b-fef8-4c39-bdfc-6e947616cf6e": "Layers/Target.nxlayers",
+    "5d28d0a8-56ea-4830-87c8-8855fdbe8032": "Animations/SourceSmile.nxanim",
+    "63808f46-cf24-41ca-9d36-559b1e8d60f4": "Controllers/Source.nxcontroller",
+    "6d17e39c-b0a0-45d1-805e-4672b68159f5": "Models/Target.gltf",
+    "7b34338e-58f5-43d9-b41d-c291cad23131": "Rigs/Taller.nxretarget",
+    "7eecca0f-e1fc-4025-af72-ab56c34b2543": "Curves/Brightness.curve",
+    "8542c2f5-43a1-48ad-a75b-71454e5a314a": "Animations/TargetIdle.nxanim",
+    "a23ba66b-faca-4c2d-b181-54c61fea193b": "Animations/SourceIdle.nxanim",
+    "ab9a5660-32fd-41a1-918d-32418a7be5b9": "Controllers/Target.nxcontroller",
+    "b93e1179-887a-43aa-8581-81f9b368c4d8": "Curves/Speed.curve",
+    "c67c7e64-ddee-4906-81e1-47432f452d4c": "Layers/Source.nxlayers",
+    "d26fc72e-61c3-4d60-866e-ec95b24f0beb": "Animations/SourceWalk.nxanim",
+    "dcdc4907-d2e4-47aa-972c-d68b91346820": "Animations/TargetWalk.nxanim",
+    "f2eef8e8-9c7d-4944-9185-c25ec30eb1f8": "Models/Source.gltf"
+  },
+  "version": 1
+}

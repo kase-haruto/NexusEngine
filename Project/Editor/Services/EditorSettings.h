@@ -22,6 +22,8 @@ public:
         bool autoSaveLayout = true; //< 終了時に配置を保存する
         std::string workspace = "General"; //< 個人の名前付き配置
         std::map<std::string, bool> panels; //< 安定Panel IDごとの表示状態
+        std::map<std::string, std::string> contentBrowser; //< Project rootで区別したBrowser個人設定
+        std::vector<std::string> componentFavorites; //< 型IDだけを保存する個人用Component Browserのお気に入り
         std::vector<std::string> recentLevels; //< 個人の最近使ったLevel、最大10件
         // セクションの安定IDをキーとして、個人用のツールバー配置を保存する。
         ToolbarOffsets toolbarOffsets;
@@ -44,7 +46,9 @@ public:
     /** \brief エディタ動作設定を明示的に保存する */
     [[nodiscard]] bool SaveEditor() const;
     [[nodiscard]] const std::filesystem::path& UserDirectory() const { return userDirectory_; }
-private:
+    const std::filesystem::path &ProjectDirectory() const noexcept;
+
+  private:
     std::filesystem::path descriptorFile_; //< Descriptor起動時の保存対象。旧起動では空
     std::string projectId_; //< 保存前にProjectの同一性を確認する識別子
     std::filesystem::path userDirectory_; //< LOCALAPPDATA/NexusEngine/Editor

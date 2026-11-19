@@ -39,8 +39,15 @@ Unreal EngineのSky Atmosphere / Sky Light / Exponential Height Fogの役割分�
 - `Generated/Outputs/GraphicsTests/Debug/NexusGraphicsTests.exe --sky`: GPU読み戻しによる昼・夕・夜、平行移動不変、HDR、深度。画像は`Generated/SkyPreview/`。
 - 同実行ファイル `--atmosphere`: 大気、CPU/GPU一致、Sky Light、高さフォグ、旧距離フォグのVS/Mesh Shader経路をまとめて検証。
 - 同実行ファイル `--ibl`: CPU/GPUの大気色の一致、固定時刻によるSky Lightの変化、既存HDR IBLの回帰。
+- 同実行ファイル `--shadow-grazing`: 太陽が受光面に対して浅い3方向で、遮蔽物のない面に縞が出ないことと、実際の遮蔽物の影が残ることをHardware / WARPで検証。
 - 同実行ファイル `--fog`: 高さ・距離フォグのGPU読み戻し、最大不透明度・開始距離・打ち切り距離、VS/Mesh Shader・RT経路。
 
 2026-11-13の検証では本体ビルド、ECS、Editor、`--atmosphere`が成功。`--fog`の既存ガラス判定は `IOR=17 / absorption=6` で閾値に届かず失敗します。変更前のHEADを別フォルダーでビルドしても同じ数値・同じ失敗になることを確認しています。既存の閾値は変更していません。
 
 参考: [Epic: Sky Atmosphere](https://dev.epicgames.com/documentation/en-us/unreal-engine/sky-atmosphere-component-in-unreal-engine)、[Sky Lights](https://dev.epicgames.com/documentation/en-us/unreal-engine/sky-lights-in-unreal-engine)、[Exponential Height Fog](https://dev.epicgames.com/documentation/en-us/unreal-engine/exponential-height-fog-in-unreal-engine)。
+
+### 低い太陽角度での影の縞（2026-11-18）
+
+Shadow MapのPCFは周囲の深度を比較します。受光面が光に対して傾くと、各tapの受光面深度も変化するため、中心画素の深度を全tapに使うと面自身を遮蔽物と誤判定します。Resolveではカメラ深度から受光面の差分を復元し、light UVに対する深度勾配を求め、各tapの中心で比較深度を補正します。画面端・背景との境界・退化した勾配にはフォールバックを用意し、既定の固定Biasは維持します。
+
+Hillaireの [A Scalable and Production Ready Sky and Atmosphere Rendering Technique (EGSR 2020)](https://sebh.github.io/publications/egsr2020.pdf) の式(1)～(4)および[著者の参照実装](https://github.com/sebh/UnrealEngineSkyAtmosphere)では、大気透過率と物体による遮蔽を別の項として評価します。今回再現した物体表面の縞は遮蔽計算の問題であり、大気近似の交換ではなくShadow Mapを修正しています。tapごとの受光面補正は、[MicrosoftのPCF深度補正の説明](https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps#calculating-a-per-texel-depth-bias-with-ddx-and-ddy-for-large-pcfs)も参照しています。

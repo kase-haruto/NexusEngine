@@ -1,6 +1,8 @@
 #include "ImGuiRenderer.h"
 #include "ImGuiStyle.h"
 #include "Editor/Gui/Widgets/EditorIconButton.h"
+#include "Editor/Gui/Icons/EditorIcons.h"
+#include "ThirdParty/nlohmann/json.hpp"
 #include "Editor/Gui/EditorTitleBarLayout.h"
 
 #ifndef NOMINMAX
@@ -30,34 +32,161 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
 namespace NexusEngine {
+namespace {
+Result<DecodedImage> ReadEditorIcon(const std::filesystem::path &path) {
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    const auto size = input ? input.tellg() : std::streampos(-1);
+    if (size < 24 || size > 4 * 1024 * 1024) {
+        return std::unexpected(Error(ErrorCategory::Resource, 300, "Icon size is invalid."));
+    }
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    input.seekg(0);
+    input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    const uint8_t signature[]{137, 80, 78, 71, 13, 10, 26, 10};
+    if (!input || std::memcmp(bytes.data(), signature, 8) != 0) {
+        return std::unexpected(Error(ErrorCategory::Resource, 300, "Editor icons must be PNG."));
+    }
+    const auto dimension = [&](size_t offset) {
+        return uint32_t(bytes[offset]) << 24 | uint32_t(bytes[offset + 1]) << 16 | uint32_t(bytes[offset + 2]) << 8 |
+               bytes[offset + 3];
+    };
+    // Decode前にIHDRのサイズを制限し、巨大な展開bufferを作らせない。
+    if (!dimension(16) || !dimension(20) || dimension(16) > 1024 || dimension(20) > 1024) {
+        return std::unexpected(Error(ErrorCategory::Resource, 300, "Icon dimensions exceed 1024 pixels."));
+    }
+    return WicImageDecoder{}.Decode(bytes);
+}
+} // namespace
+void ImGuiRenderer::LoadIconTheme() {
+    UI::ClearEditorIconTheme();
+    for (const auto *name : {"IconSources.json", "IconTheme.json"}) {
+        const auto file = iconDirectory_ / name;
+        std::error_code error;
+        if (!std::filesystem::exists(file, error) || error || std::filesystem::file_size(file, error) > 1024 * 1024) {
+            continue;
+        }
+        try {
+            std::ifstream input(file);
+            const auto json = nlohmann::json::parse(input);
+            if (json.is_array()) {
+                for (const auto &item : json) {
+                    if (item.contains("target")) {
+                        UI::SetEditorIconMonochrome(
+                            std::filesystem::path(item.at("target").get<std::string>()).stem().string(),
+                            item.value("monochrome", false));
+                    }
+                }
+            } else if (json.is_object()) {
+                for (const auto &[key, value] : json.items()) {
+                    if (value.is_boolean()) {
+                        UI::SetEditorIconMonochrome(key, value.get<bool>());
+                    }
+                }
+            }
+        } catch (const std::exception &failure) {
+            NEXUS_LOG_WARNING("Editor", failure.what());
+        }
+    }
+}
     void ImGuiRenderer::LoadEditorIcons() {
-        // engineRoot/Resources/Editor/Icons。Game側のAssetやthumbnail上限とは独立させる。
-        if(iconDirectory_.empty()) return;
+        if (iconDirectory_.empty()) {
+            return;
+        }
         std::error_code error;
         std::filesystem::directory_iterator files(iconDirectory_, error), end;
-        for(; !error && files != end && icons_.size() < 128; files.increment(error)) {
-            const auto path = files->path();
-            if(path.extension() != ".png") continue;
-            std::ifstream input(path, std::ios::binary | std::ios::ate);
-            if(!input) continue;
-            const auto size = input.tellg();
-            if(size <= 0 || size > 4 * 1024 * 1024) continue;
-            std::vector<uint8_t> bytes(static_cast<size_t>(size));
-            input.seekg(0); input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            if(!input) continue;
-            auto image = WicImageDecoder{}.Decode(bytes);
-            if(!image || !image->width || !image->height || image->width > 1024 || image->height > 1024) {
-                NEXUS_LOG_WARNING("Editor", "Invalid editor icon: " + path.filename().string());
+        for (; !error && files != end && icons_.size() < 128; files.increment(error)) {
+            if (files->path().extension() != ".png") {
+                continue;
+            }
+            auto image = ReadEditorIcon(files->path());
+            if (!image) {
+                NEXUS_LOG_WARNING("Editor", image.error().GetMessageText());
                 continue;
             }
             auto texture = std::make_unique<ImTextureData>();
             texture->Create(ImTextureFormat_RGBA32, static_cast<int>(image->width), static_cast<int>(image->height));
             std::memcpy(texture->Pixels, image->rgbaPixels.data(), image->rgbaPixels.size());
             ImGui::RegisterUserTexture(texture.get());
-            const auto key = path.stem().string();
+            const auto key = files->path().stem().string();
             UI::SetEditorIcon(key, texture->GetTexRef());
             icons_.emplace(key, std::move(texture));
         }
+        LoadIconTheme();
+        iconReloadPaused_ = false;
+        const auto started = iconWatcher_.Start(iconDirectory_, false);
+        if (!started) {
+            NEXUS_LOG_WARNING("Editor", started.error().GetMessageText());
+        }
+    }
+    void ImGuiRenderer::PollEditorIcons() {
+        if (iconTask_.valid() && iconTask_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            auto image = iconTask_.get();
+            if (image) {
+                const auto key = loadingIcon_.stem().string();
+                auto texture = std::make_unique<ImTextureData>();
+                texture->Create(ImTextureFormat_RGBA32, static_cast<int>(image->width),
+                                static_cast<int>(image->height));
+                std::memcpy(texture->Pixels, image->rgbaPixels.data(), image->rgbaPixels.size());
+                ImGui::RegisterUserTexture(texture.get());
+                UI::SetEditorIcon(key, texture->GetTexRef());
+                if (auto old = icons_.find(key); old != icons_.end()) {
+                    retiredIcons_.push_back(std::move(old->second));
+                }
+                icons_[key] = std::move(texture);
+            } else {
+                NEXUS_LOG_WARNING("Editor", image.error().GetMessageText());
+            }
+        }
+        if (iconReloadPaused_) {
+            return;
+        }
+        const auto changed = iconWatcher_.Poll();
+        if (!changed) {
+            NEXUS_LOG_WARNING("Editor", changed.error().GetMessageText());
+            return;
+        }
+        for (const auto &path : changed->paths) {
+            if (path.filename() == "IconSources.json" || path.filename() == "IconTheme.json") {
+                LoadIconTheme();
+            }
+            if (path.extension() == ".png") {
+                changedIcons_.insert(path);
+                iconsChangedAt_ = std::chrono::steady_clock::now();
+            }
+        }
+        // GPU使用中の旧SRVを保持し、際限なく差替えた場合は安全に自動更新を停止する。
+        if (retiredIcons_.size() >= 128 || changedIcons_.size() > 128 || changed->overflow) {
+            iconWatcher_.Stop();
+            changedIcons_.clear();
+            iconReloadPaused_ = true;
+            NEXUS_LOG_WARNING("Editor",
+                              "Icon reload budget exceeded; restart the editor to load further icon changes.");
+            return;
+        }
+        if (iconTask_.valid() || changedIcons_.empty() ||
+            std::chrono::steady_clock::now() - iconsChangedAt_ < std::chrono::milliseconds(300)) {
+            return;
+        }
+        loadingIcon_ = *changedIcons_.begin();
+        changedIcons_.erase(changedIcons_.begin());
+        std::error_code error;
+        if (!std::filesystem::exists(loadingIcon_, error)) {
+            const auto key = loadingIcon_.stem().string();
+            if (auto old = icons_.find(key); old != icons_.end()) {
+                retiredIcons_.push_back(std::move(old->second));
+                icons_.erase(old);
+            }
+            if (auto context = UI::editorIcons.find(ImGui::GetCurrentContext()); context != UI::editorIcons.end()) {
+                context->second.erase(key);
+            }
+            return;
+        }
+        if (icons_.size() >= 128 && !icons_.contains(loadingIcon_.stem().string())) {
+            return;
+        }
+        iconTask_ = std::async(std::launch::async, [path = loadingIcon_] {
+            return ReadEditorIcon(path);
+        });
     }
     ImTextureRef ImGuiRenderer::FindPreview(const std::string& key) const {
         auto found = previews_.find(key);
@@ -191,115 +320,155 @@ namespace NexusEngine {
 
 	void ImGuiRenderer::BeginFrame() {
 		if(!initialized_) return;
-		ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-        ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
-        ImGuizmo::BeginFrame();
-		DrawTitleBar();
-	}
-
-	void ImGuiRenderer::DrawTitleBar() {
-		const auto window = static_cast<HWND>(nativeWindow_);
-		if(!window) return;
-		auto* viewport = ImGui::GetMainViewport();
-		const float scale = static_cast<float>(GetDpiForWindow(window)) / 96.0f;
-		const float height = std::max(38.0f * scale,ImGui::GetFrameHeight()+12*scale), buttonWidth = 46.0f * scale;
-		ProjectWindow::ConfigureCustomTitleBar(window, static_cast<int>(height), static_cast<int>(buttonWidth * 3));
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
-		const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBringToFrontOnFocus;
-		if(ImGui::BeginViewportSideBar("###EditorTitleBar", viewport, ImGuiDir_Up, height, flags)) {
-            auto* title = ImGui::GetCurrentWindow();
-            title->MenuBarHeight = height;
-            title->StateStorage.SetFloat(EditorTitleBar::Key(title,"TitleScale"),scale);
-            EditorTitleBar::SetMenuBounds(title,{});
-			auto* draw = ImGui::GetWindowDrawList();
-			const auto origin = ImGui::GetWindowPos();
-			const float width = ImGui::GetWindowSize().x;
-            // MenuBar追加後もロゴとWindow操作ボタンはタイトルバー全高で描画・Hit判定する。
-            ImGui::PushClipRect(origin,{origin.x+width,origin.y+height},false);
-			const bool focused = GetForegroundWindow() == window;
-			const auto foreground = ImGui::GetColorU32(focused ? ImGuiCol_Text : ImGuiCol_TextDisabled);
-			const auto accent = IM_COL32(242, 125, 46, focused ? 255 : 160);
-			// Same NX paths and backing as Resources/Editor/Branding/NexusEngine.svg.
-			const float logoSize = 28 * scale;
-			const ImVec2 logo{origin.x + 12 * scale, origin.y + (height - logoSize) * .5f};
-			const auto point = [&](float x, float y) { return ImVec2{logo.x + x * logoSize / 256, logo.y + y * logoSize / 256}; };
-			draw->AddRectFilled(point(8, 8), point(248, 248), IM_COL32(35, 35, 35, 255), logoSize * 44 / 256);
-			const ImVec2 n[]{point(42, 180), point(42, 76), point(114, 180), point(114, 76)};
-			draw->AddPolyline(n, 4, accent, ImDrawFlags_None, logoSize * 13 / 256);
-			draw->AddLine(point(146, 76), point(214, 180), accent, logoSize * 13 / 256);
-			draw->AddLine(point(214, 76), point(146, 180), accent, logoSize * 13 / 256);
-			const float controlsStart = origin.x + width - buttonWidth * 3;
-			const bool maximized = IsZoomed(window) != FALSE;
-			const bool resizable = (GetWindowLongPtrW(window, GWL_STYLE) & WS_MAXIMIZEBOX) != 0;
-			const char* ids[]{"###Minimize", "###Maximize", "###Close"};
-			const char* hints[]{"Minimize", maximized ? "Restore" : "Maximize", "Close"};
-			for(int i = 0; i < 3; ++i) {
-				const ImVec2 start{controlsStart + buttonWidth * i, origin.y};
-				ImGui::SetCursorScreenPos(start);
-				ImGui::BeginDisabled(i == 1 && !resizable);
-				const bool clicked = ImGui::InvisibleButton(ids[i], {buttonWidth, height});
-				const bool hovered = ImGui::IsItemHovered();
-				if(hovered || ImGui::IsItemActive()) draw->AddRectFilled(start, {start.x + buttonWidth, start.y + height},
-					i == 2 ? IM_COL32(196, 43, 52, 255) : ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered));
-				const ImVec2 center{start.x + buttonWidth * .5f, start.y + height * .5f};
-				const float r = 5 * scale, stroke = 1.2f * scale;
-				const auto color = i == 2 && hovered ? IM_COL32_WHITE : (i == 1 && !resizable ? ImGui::GetColorU32(ImGuiCol_TextDisabled) : foreground);
-				if(i == 0) draw->AddLine({center.x - r, center.y}, {center.x + r, center.y}, color, stroke);
-				else if(i == 1) {
-					if(maximized) {
-						draw->AddRect({center.x - r + 3 * scale, center.y - r}, {center.x + r, center.y + r - 3 * scale}, color, 0, 0, stroke);
-						draw->AddRectFilled({center.x - r, center.y - r + 3 * scale}, {center.x + r - 3 * scale, center.y + r}, ImGui::GetColorU32(hovered ? ImGuiCol_ButtonHovered : ImGuiCol_WindowBg));
-						draw->AddRect({center.x - r, center.y - r + 3 * scale}, {center.x + r - 3 * scale, center.y + r}, color, 0, 0, stroke);
-					} else draw->AddRect({center.x - r, center.y - r}, {center.x + r, center.y + r}, color, 0, 0, stroke);
-				} else {
-					draw->AddLine({center.x - r, center.y - r}, {center.x + r, center.y + r}, color, stroke);
-					draw->AddLine({center.x - r, center.y + r}, {center.x + r, center.y - r}, color, stroke);
-				}
-				if(hovered) ImGui::SetTooltip("%s", hints[i]);
-				ImGui::EndDisabled();
-				// Queue the close request so the owner's WM_CLOSE/save-confirmation path runs next frame.
-				if(clicked) PostMessageW(window, WM_SYSCOMMAND, i == 0 ? SC_MINIMIZE : i == 1 ? (maximized ? SC_RESTORE : SC_MAXIMIZE) : SC_CLOSE, 0);
-			}
-			draw->AddLine({origin.x, origin.y + height - 1}, {origin.x + width, origin.y + height - 1}, ImGui::GetColorU32(ImGuiCol_Border));
-            ImGui::PopClipRect();
-		}
-		ImGui::End();
-		ImGui::PopStyleColor();
-		ImGui::PopStyleVar();
-	}
-
-	void ImGuiRenderer::DrawTitleBarCaption() {
-        auto* title = EditorTitleBar::Current();
-        if(!title || !nativeWindow_) return;
-        const auto menu = EditorTitleBar::MenuBounds(title);
-        const float scale = EditorTitleBar::Scale(title);
-        const auto size = ImGui::CalcTextSize("NexusEngine");
-        const float right = title->Pos.x+title->Size.x-138*scale;
-        const float left = std::max(title->Pos.x+52*scale,menu.Max.x+16*scale);
-        const float x = std::clamp(title->Pos.x+(title->Size.x-size.x)*.5f,left,std::max(left,right-size.x-8*scale));
-        auto* draw = title->DrawList;
-        if(right > left) {
-            draw->PushClipRect({left,title->Pos.y},{right,title->Pos.y+title->Size.y},true);
-            draw->AddText({x,title->Pos.y+(title->Size.y-size.y)*.5f},ImGui::GetColorU32(
-                GetForegroundWindow() == static_cast<HWND>(nativeWindow_) ? ImGuiCol_Text : ImGuiCol_TextDisabled),"NexusEngine");
-            draw->PopClipRect();
+                PollEditorIcons();
+                ImGui_ImplDX12_NewFrame();
+                ImGui_ImplWin32_NewFrame();
+                ImGui::NewFrame();
+                ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
+                ImGuizmo::BeginFrame();
+                DrawTitleBar();
         }
-        const RECT client{static_cast<LONG>(menu.Min.x-title->Pos.x),static_cast<LONG>(menu.Min.y-title->Pos.y),
-            static_cast<LONG>(menu.Max.x-title->Pos.x+1),static_cast<LONG>(menu.Max.y-title->Pos.y+1)};
-        ProjectWindow::ConfigureTitleBarClientArea(static_cast<HWND>(nativeWindow_),menu.GetWidth() > 0 ? client : RECT{});
-	}
 
-	void ImGuiRenderer::Record(GraphicsContext& context) {
-		auto* const commandList = static_cast<ID3D12GraphicsCommandList*>(context.GetNativeCommandList());
-		if(!initialized_ || commandList == nullptr) return;
-		DrawTitleBarCaption();
-		ImGui::Render();
-		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
-	}
+        void ImGuiRenderer::DrawTitleBar() {
+            const auto window = static_cast<HWND>(nativeWindow_);
+            if (!window) {
+                return;
+            }
+            auto *viewport = ImGui::GetMainViewport();
+            const float scale = static_cast<float>(GetDpiForWindow(window)) / 96.0f;
+            const float height = std::max(38.0f * scale, ImGui::GetFrameHeight() + 12 * scale),
+                        buttonWidth = 46.0f * scale;
+            ProjectWindow::ConfigureCustomTitleBar(window, static_cast<int>(height), static_cast<int>(buttonWidth * 3));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+            const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
+                               ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBringToFrontOnFocus;
+            if (ImGui::BeginViewportSideBar("###EditorTitleBar", viewport, ImGuiDir_Up, height, flags)) {
+                auto *title = ImGui::GetCurrentWindow();
+                title->MenuBarHeight = height;
+                title->StateStorage.SetFloat(EditorTitleBar::Key(title, "TitleScale"), scale);
+                EditorTitleBar::SetMenuBounds(title, {});
+                auto *draw = ImGui::GetWindowDrawList();
+                const auto origin = ImGui::GetWindowPos();
+                const float width = ImGui::GetWindowSize().x;
+                // MenuBar追加後もロゴとWindow操作ボタンはタイトルバー全高で描画・Hit判定する。
+                ImGui::PushClipRect(origin, {origin.x + width, origin.y + height}, false);
+                const bool focused = GetForegroundWindow() == window;
+                const auto foreground = ImGui::GetColorU32(focused ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+                const auto accent = IM_COL32(242, 125, 46, focused ? 255 : 160);
+                // Same NX paths and backing as Resources/Editor/Branding/NexusEngine.svg.
+                const float logoSize = 28 * scale;
+                const ImVec2 logo{origin.x + 12 * scale, origin.y + (height - logoSize) * .5f};
+                const auto point = [&](float x, float y) {
+                    return ImVec2{logo.x + x * logoSize / 256, logo.y + y * logoSize / 256};
+                };
+                draw->AddRectFilled(point(8, 8), point(248, 248), IM_COL32(35, 35, 35, 255), logoSize * 44 / 256);
+                const ImVec2 n[]{point(42, 180), point(42, 76), point(114, 180), point(114, 76)};
+                draw->AddPolyline(n, 4, accent, ImDrawFlags_None, logoSize * 13 / 256);
+                draw->AddLine(point(146, 76), point(214, 180), accent, logoSize * 13 / 256);
+                draw->AddLine(point(214, 76), point(146, 180), accent, logoSize * 13 / 256);
+                const float controlsStart = origin.x + width - buttonWidth * 3;
+                const bool maximized = IsZoomed(window) != FALSE;
+                const bool resizable = (GetWindowLongPtrW(window, GWL_STYLE) & WS_MAXIMIZEBOX) != 0;
+                const char *ids[]{"###Minimize", "###Maximize", "###Close"};
+                const char *hints[]{"Minimize", maximized ? "Restore" : "Maximize", "Close"};
+                for (int i = 0; i < 3; ++i) {
+                    const ImVec2 start{controlsStart + buttonWidth * i, origin.y};
+                    ImGui::SetCursorScreenPos(start);
+                    ImGui::BeginDisabled(i == 1 && !resizable);
+                    const bool clicked = ImGui::InvisibleButton(ids[i], {buttonWidth, height});
+                    const bool hovered = ImGui::IsItemHovered();
+                    if (hovered || ImGui::IsItemActive()) {
+                        draw->AddRectFilled(start, {start.x + buttonWidth, start.y + height},
+                                            i == 2
+                                                ? IM_COL32(196, 43, 52, 255)
+                                                : ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive
+                                                                                           : ImGuiCol_ButtonHovered));
+                    }
+                    const ImVec2 center{start.x + buttonWidth * .5f, start.y + height * .5f};
+                    const float r = 5 * scale, stroke = 1.2f * scale;
+                    const auto color =
+                        i == 2 && hovered
+                            ? IM_COL32_WHITE
+                            : (i == 1 && !resizable ? ImGui::GetColorU32(ImGuiCol_TextDisabled) : foreground);
+                    if (i == 0) {
+                        draw->AddLine({center.x - r, center.y}, {center.x + r, center.y}, color, stroke);
+                    } else if (i == 1) {
+                        if (maximized) {
+                            draw->AddRect({center.x - r + 3 * scale, center.y - r},
+                                          {center.x + r, center.y + r - 3 * scale}, color, 0, 0, stroke);
+                            draw->AddRectFilled(
+                                {center.x - r, center.y - r + 3 * scale}, {center.x + r - 3 * scale, center.y + r},
+                                ImGui::GetColorU32(hovered ? ImGuiCol_ButtonHovered : ImGuiCol_WindowBg));
+                            draw->AddRect({center.x - r, center.y - r + 3 * scale},
+                                          {center.x + r - 3 * scale, center.y + r}, color, 0, 0, stroke);
+                        } else {
+                            draw->AddRect({center.x - r, center.y - r}, {center.x + r, center.y + r}, color, 0, 0,
+                                          stroke);
+                        }
+                    } else {
+                        draw->AddLine({center.x - r, center.y - r}, {center.x + r, center.y + r}, color, stroke);
+                        draw->AddLine({center.x - r, center.y + r}, {center.x + r, center.y - r}, color, stroke);
+                    }
+                    if (hovered) {
+                        ImGui::SetTooltip("%s", hints[i]);
+                    }
+                    ImGui::EndDisabled();
+                    // Queue the close request so the owner's WM_CLOSE/save-confirmation path runs next frame.
+                    if (clicked) {
+                        PostMessageW(window, WM_SYSCOMMAND,
+                                     i == 0   ? SC_MINIMIZE
+                                     : i == 1 ? (maximized ? SC_RESTORE : SC_MAXIMIZE)
+                                              : SC_CLOSE,
+                                     0);
+                    }
+                }
+                draw->AddLine({origin.x, origin.y + height - 1}, {origin.x + width, origin.y + height - 1},
+                              ImGui::GetColorU32(ImGuiCol_Border));
+                ImGui::PopClipRect();
+            }
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
+        }
+
+        void ImGuiRenderer::DrawTitleBarCaption() {
+            auto *title = EditorTitleBar::Current();
+            if (!title || !nativeWindow_) {
+                return;
+            }
+            const auto menu = EditorTitleBar::MenuBounds(title);
+            const float scale = EditorTitleBar::Scale(title);
+            const auto size = ImGui::CalcTextSize("NexusEngine");
+            const float right = title->Pos.x + title->Size.x - 138 * scale;
+            const float left = std::max(title->Pos.x + 52 * scale, menu.Max.x + 16 * scale);
+            const float x = std::clamp(title->Pos.x + (title->Size.x - size.x) * .5f, left,
+                                       std::max(left, right - size.x - 8 * scale));
+            auto *draw = title->DrawList;
+            if (right > left) {
+                draw->PushClipRect({left, title->Pos.y}, {right, title->Pos.y + title->Size.y}, true);
+                draw->AddText({x, title->Pos.y + (title->Size.y - size.y) * .5f},
+                              ImGui::GetColorU32(GetForegroundWindow() == static_cast<HWND>(nativeWindow_)
+                                                     ? ImGuiCol_Text
+                                                     : ImGuiCol_TextDisabled),
+                              "NexusEngine");
+                draw->PopClipRect();
+            }
+            const RECT client{
+                static_cast<LONG>(menu.Min.x - title->Pos.x), static_cast<LONG>(menu.Min.y - title->Pos.y),
+                static_cast<LONG>(menu.Max.x - title->Pos.x + 1), static_cast<LONG>(menu.Max.y - title->Pos.y + 1)};
+            ProjectWindow::ConfigureTitleBarClientArea(static_cast<HWND>(nativeWindow_),
+                                                       menu.GetWidth() > 0 ? client : RECT{});
+        }
+
+        void ImGuiRenderer::Record(GraphicsContext &context) {
+            auto *const commandList = static_cast<ID3D12GraphicsCommandList *>(context.GetNativeCommandList());
+            if (!initialized_ || commandList == nullptr)
+                return;
+            DrawTitleBarCaption();
+            ImGui::Render();
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+        }
 
     void ImGuiRenderer::AfterSubmit() {
         if(!initialized_ || !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)) return;
@@ -308,43 +477,74 @@ namespace NexusEngine {
     }
 
 	void ImGuiRenderer::Shutdown() noexcept {
-		ProjectWindow::ConfigureCustomTitleBar(static_cast<HWND>(nativeWindow_), 0, 0);
-		nativeWindow_ = nullptr;
-		graphicsSystem_ = nullptr;
-		if(initialized_) {
-            for(auto& [key, texture] : icons_) {
-                static_cast<void>(key);
-                if(!ImGui::GetPlatformIO().Textures.contains(texture.get())) ImGui::GetPlatformIO().Textures.push_back(texture.get());
+            iconWatcher_.Stop();
+            if (iconTask_.valid()) {
+                iconTask_.wait();
             }
-            // NewFrame前に作られた画像もBackendの停止対象へ含める。
-            for(auto& [key, texture] : previews_) {
-                static_cast<void>(key);
-                if(!ImGui::GetPlatformIO().Textures.contains(texture.get())) ImGui::GetPlatformIO().Textures.push_back(texture.get());
+            changedIcons_.clear();
+            ProjectWindow::ConfigureCustomTitleBar(static_cast<HWND>(nativeWindow_), 0, 0);
+            nativeWindow_ = nullptr;
+            graphicsSystem_ = nullptr;
+            if (initialized_) {
+                for (auto &[key, texture] : icons_) {
+                    static_cast<void>(key);
+                    if (!ImGui::GetPlatformIO().Textures.contains(texture.get())) {
+                        ImGui::GetPlatformIO().Textures.push_back(texture.get());
+                    }
+                }
+                for (auto &texture : retiredIcons_) {
+                    if (!ImGui::GetPlatformIO().Textures.contains(texture.get())) {
+                        ImGui::GetPlatformIO().Textures.push_back(texture.get());
+                    }
+                }
+                // NewFrame前に作られた画像もBackendの停止対象へ含める。
+                for (auto &[key, texture] : previews_) {
+                    static_cast<void>(key);
+                    if (!ImGui::GetPlatformIO().Textures.contains(texture.get())) {
+                        ImGui::GetPlatformIO().Textures.push_back(texture.get());
+                    }
+                }
+                ImGui_ImplDX12_Shutdown();
+                ImGui_ImplWin32_Shutdown();
+                initialized_ = false;
             }
-			ImGui_ImplDX12_Shutdown();
-			ImGui_ImplWin32_Shutdown();
-			initialized_ = false;
-		}
-        if(ImGui::GetCurrentContext() != nullptr) {
-            UI::ClearEditorIcons();
-            for(auto& [key, texture] : icons_) { static_cast<void>(key); ImGui::UnregisterUserTexture(texture.get()); }
-            icons_.clear();
-            for(auto& [key, texture] : previews_) { static_cast<void>(key); ImGui::UnregisterUserTexture(texture.get()); }
-            previews_.clear();
-            ImGui::DestroyContext();
+            if (ImGui::GetCurrentContext() != nullptr) {
+                UI::ClearEditorIcons();
+                UI::ClearEditorIconTheme();
+                for (auto &[key, texture] : icons_) {
+                    static_cast<void>(key);
+                    ImGui::UnregisterUserTexture(texture.get());
+                }
+                icons_.clear();
+                for (auto &texture : retiredIcons_) {
+                    ImGui::UnregisterUserTexture(texture.get());
+                }
+                retiredIcons_.clear();
+                for (auto &[key, texture] : previews_) {
+                    static_cast<void>(key);
+                    ImGui::UnregisterUserTexture(texture.get());
+                }
+                previews_.clear();
+                ImGui::DestroyContext();
+            }
+            // GraphicsSystemはShutdown前にGPU idleを保証するため、ここで安全に全slotを返せる。
+            if (descriptors_ != nullptr) {
+                for (const auto &allocation : allocations_) {
+                    static_cast<void>(descriptors_->Free(allocation));
+                }
+            }
+            allocations_.clear();
+            descriptors_ = nullptr;
         }
-		// GraphicsSystemはShutdown前にGPU idleを保証するため、ここで安全に全slotを返せる。
-		if(descriptors_ != nullptr) {
-			for(const auto& allocation : allocations_) static_cast<void>(descriptors_->Free(allocation));
-		}
-		allocations_.clear();
-		descriptors_ = nullptr;
-	}
 
-	bool ImGuiRenderer::HandleWindowMessage(void* const window, const uint32_t message, const uintptr_t wParam, const intptr_t lParam) noexcept {
-		if(ImGui::GetCurrentContext() == nullptr) return false;
-		return ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(window), message, static_cast<WPARAM>(wParam), static_cast<LPARAM>(lParam)) != 0;
-	}
+        bool ImGuiRenderer::HandleWindowMessage(void *const window, const uint32_t message, const uintptr_t wParam,
+                                                const intptr_t lParam) noexcept {
+            if (ImGui::GetCurrentContext() == nullptr) {
+                return false;
+            }
+            return ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(window), message, static_cast<WPARAM>(wParam),
+                                                  static_cast<LPARAM>(lParam)) != 0;
+        }
 
 #if 0
 	void ImGuiRenderer::AllocateDescriptor(ImGui_ImplDX12_InitInfo* const info, D3D12_CPU_DESCRIPTOR_HANDLE* const cpu, D3D12_GPU_DESCRIPTOR_HANDLE* const gpu) {

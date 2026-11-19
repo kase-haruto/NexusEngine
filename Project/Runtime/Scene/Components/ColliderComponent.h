@@ -2,6 +2,7 @@
 #include "RigidBodyComponent.h"
 #include <string>
 NEXUS_REFLECT_COMPONENT(ColliderComponent, "Collider", "component.collider", enabled, meshAsset, shape, halfExtent, radius, halfHeight, friction, restitution, sensor, collisionLayer, collisionMask)
+NEXUS_COMPONENT_EDITOR(ColliderComponent, "Physics", "componentBrowser.description.collider", "component.Physics")
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
  * ColliderComponent

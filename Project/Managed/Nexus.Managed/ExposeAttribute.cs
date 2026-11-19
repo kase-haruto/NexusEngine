@@ -23,3 +23,14 @@ public sealed class ScriptTypeAttribute(string id) : Attribute
     public int Version { get; set; } = 1;
     public string[] Aliases { get; set; } = [];
 }
+
+/// <summary>Component Browserの表示ヒント。ゲームの保存IDや実行処理には影響しない。</summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class ComponentEditorAttribute : Attribute
+{
+    public string DisplayName { get; set; } = "";
+    public string Category { get; set; } = "Gameplay";
+    public string Description { get; set; } = "";
+    public string Icon { get; set; } = "component.Script";
+    public string[] Keywords { get; set; } = [];
+}

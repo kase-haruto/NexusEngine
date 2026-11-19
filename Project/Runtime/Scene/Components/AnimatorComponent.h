@@ -3,6 +3,7 @@
 #include <string>
 
 NEXUS_REFLECT_COMPONENT(AnimatorComponent, "Animator", "component.animator", controllerAsset, playing, parameters)
+NEXUS_COMPONENT_EDITOR(AnimatorComponent, "Animation", "componentBrowser.description.animator", "details.Animation")
 namespace NexusEngine {
 /** Controllerは共有資産、現在状態とパラメーターは個体ごとに所有する。 */
 struct AnimatorComponent {

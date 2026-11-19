@@ -28,7 +28,9 @@ function Invoke-Expected([string[]]$Arguments,[int]$Expected = 0) {
 }
 $null = Invoke-Expected @('engine-register',$file,$registry)
 $null = Invoke-Expected @('engine-register',$file,$registry)
-if(@(Get-ChildItem -LiteralPath (Join-Path $clone 'SDK') -Recurse -Filter '*.cpp').Count) { throw 'Installed SDK contains Engine implementation cpp files.' }
+$unexpectedCpp = @(Get-ChildItem -LiteralPath (Join-Path $clone 'SDK') -Recurse -Filter '*.cpp' | Where-Object { $_.FullName -ne (Join-Path $clone 'SDK/Public/Nexus/GameInputActions.cpp') })
+if($unexpectedCpp.Count) { throw 'Installed SDK contains Engine implementation cpp files.' }
+if(-not (Test-Path -LiteralPath (Join-Path $clone 'SDK/Public/Nexus/GameInputActions.cpp'))) { throw 'Installed SDK is missing the public Input Actions facade implementation.' }
 if(Test-Path -LiteralPath (Join-Path $clone 'SDK/Runtime/Reflection/Generated/GeneratedReflection.h')) { throw 'Installed SDK exported the legacy Game-dependent reflection header.' }
 $gameIncludes = @(Get-ChildItem -LiteralPath (Join-Path $clone 'SDK') -Recurse -File | Where-Object { $_.Extension -in @('.h','.hpp','.inl') } | Select-String -Pattern '#\s*include\s*["<](Game|Samples)[/\\]')
 if($gameIncludes.Count) { throw 'Installed SDK public headers depend on a specific Game/Sample.' }

@@ -84,6 +84,9 @@ void MaterialPage::Draw(const EditorContext& context) {
         ImGui::TextWrapped("%s", context.text.Text("material.textureScope").c_str());
         DrawReflectedProperty(context, "PrimitiveRender", "baseColorTexture", true);
         DrawReflectedProperty(context, "PrimitiveRender", "tint", true);
+        DrawReflectedProperty(context, "PrimitiveRender", "uvScale", true);
+        DrawReflectedProperty(context, "PrimitiveRender", "uvOffset", true);
+        ImGui::TextWrapped("%s", context.text.Text("material.uvHelp").c_str());
     }
     ImGui::EndDisabled();
 }

@@ -59,7 +59,7 @@ void EditorComponentRoundTrip() {
     std::filesystem::create_directories(file.parent_path());
     assert(session.GetLevel()->Save(file));
     const auto saved = ReadFile(file);
-    assert(saved.starts_with("NEXUS_LEVEL 14\n"));
+    assert(saved.starts_with("NEXUS_LEVEL 15\n"));
     assert(saved.find("COMPONENT \"Game.Move\"") != std::string::npos);
     assert(session.Open(file)); properties.Reset(session.GetLevel());
     assert(session.GetLevel()->FindEntity(id).GetComponent<MoveComponent>()->speed == 7.5f);
@@ -95,16 +95,28 @@ void GeneratedComponentMenuAndDetails() {
         ImGui::Begin("Generated Component Details");
         if(open) {
             const auto key = std::to_string(id.high) + ":" + std::to_string(id.low);
-            ImGui::PushID(key.c_str()); ImGui::OpenPopup("AddComponent"); ImGui::PopID();
+            const auto entitySeed = ImHashStr(key.c_str(), 0, ImGui::GetCurrentWindow()->ID);
+            ImGui::FocusWindow(ImGui::GetCurrentWindow());
+            ImGui::ActivateItemByID(ImHashStr("###AddComponentButton", 0, entitySeed));
         }
         panel.Draw(context); ImGui::End(); ImGui::Render();
     };
-    frame(); frame(true); frame();
+    frame(); frame(true); frame(); frame();
     assert(!ImGui::GetCurrentContext()->OpenPopupStack.empty());
-    auto* popup = ImGui::GetCurrentContext()->OpenPopupStack.back().Window; assert(popup);
-    const auto* type = types.Find("Game.Move"); assert(type);
-    ImGui::FocusWindow(popup);
-    ImGui::ActivateItemByID(popup->GetID(text.Label(type->labelKey, type->id).c_str()));
+    io.AddInputCharactersUTF8("Game.Move");
+    frame();
+    frame();
+    ImGuiWindow* cards = nullptr;
+    for(auto* window : ImGui::GetCurrentContext()->Windows) {
+        if(window->Active && window->ParentWindow && std::string_view(window->Name).find("ComponentCards") != std::string_view::npos) {
+            cards = window;
+        }
+    }
+    assert(cards);
+    const auto* type = types.Find("Game.Move");
+    assert(type);
+    ImGui::FocusWindow(cards);
+    ImGui::ActivateItemByID(ImHashStr("##ComponentCard", 0, ImHashStr(type->id.c_str(), 0, cards->ID)));
     frame(); frame();
     assert(session.GetSelectedEntity().HasComponent<MoveComponent>());
     const auto available = categories.Available(context);

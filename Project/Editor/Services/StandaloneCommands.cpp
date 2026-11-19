@@ -3,12 +3,16 @@
 #include "Editor/Core/EditorWorkspace.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "AnimationCurvePreview.h"
 
 namespace NexusEngine {
 ////////////////////////////
 // 同じ実行操作をMenuとToolbarへ公開する
 ////////////////////////////
 void RegisterStandaloneCommands(EditorWorkspace& workspace, std::shared_ptr<StandaloneSession> session, ProjectLaunchOptions options) {
+    ConnectRemoteCurvePreview(workspace.CurveDocument(), [session] {
+        return session->CurvePreview();
+    });
     EditorCommandRegistry::Command run{[session,&workspace,options = std::move(options)] {
         workspace.Report(session->RequestStart(options));
     }, [session,&workspace] {
@@ -22,7 +26,21 @@ void RegisterStandaloneCommands(EditorWorkspace& workspace, std::shared_ptr<Stan
         workspace.Report(session->Stop());
     }, [session] { auto state = session->State(); return state && (state->building || state->running) && !state->stopping; }});
     // 完了処理はNewFrame前に実行する。非表示ToolbarからRuntime起動の進行を切り離す。
-    workspace.AddFramePoller([session,&workspace] { workspace.Report(session->Poll()); });
+    workspace.AddFramePoller([session, &workspace, previous = std::weak_ptr<CurvePreviewSender>{}, revision = size_t(-1), reference = std::string{}]() mutable {
+        workspace.Report(session->Poll());
+        const auto sender = session->CurvePreview();
+        if(sender) {
+            const auto& document = workspace.CurveDocument();
+            if(previous.lock() != sender || revision != document.Revision() || reference != document.AssetReference()) {
+                sender->SetDraft(document.AssetReference(), &document.Value());
+                revision = document.Revision();
+                reference = document.AssetReference();
+                previous = sender;
+            }
+            sender->Select(workspace.Session().GetSelection());
+            sender->Poll();
+        }
+    });
     workspace.Toolbar().RegisterSection({"project.runtime",200,12,[session](const auto& text,const auto& commands) {
         auto state = session->State();
         if(state) {
@@ -38,6 +56,13 @@ void RegisterStandaloneCommands(EditorWorkspace& workspace, std::shared_ptr<Stan
                 if(!state->buildLog.empty()) ImGui::TextWrapped("Build: %s",ConvertString(state->buildLog.wstring()).c_str());
                 if(!state->runtimeLog.empty()) ImGui::TextWrapped("Runtime: %s",ConvertString(state->runtimeLog.wstring()).c_str());
                 if(!state->error.empty()) ImGui::TextWrapped("%s",state->error.c_str());
+                if(const auto preview = session->CurvePreview()) {
+                    const auto& remote = preview->State();
+                    ImGui::Text("Curve IPC: %s / %s", remote.connected ? "Connected" : "Waiting", remote.found ? "Target bound" : "Select a Curve user");
+                    if(!remote.diagnostic.empty()) {
+                        ImGui::TextWrapped("%s", remote.diagnostic.c_str());
+                    }
+                }
                 ImGui::PopTextWrapPos(); ImGui::EndTooltip();
             }
         }

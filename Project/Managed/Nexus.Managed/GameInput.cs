@@ -100,3 +100,79 @@ public sealed class GamepadInputState
     }
     public GamepadState this[int slot] => slot>=0 && slot<Count ? pads[slot] : throw new ArgumentOutOfRangeException(nameof(slot));
 }
+
+/// <summary>全操作の不変snapshot。同じframeの押下は読むたびに消費しない。</summary>
+public sealed class InputActions
+{
+    private readonly Dictionary<string, ActionValue> actions = new(StringComparer.Ordinal);
+    public string Context { get; }
+    public bool Focused { get; }
+    private readonly struct ActionValue
+    {
+        public readonly Vector2 Value;
+        public readonly bool Down, Pressed, Released;
+        public ActionValue(Vector2 value, bool down, bool pressed, bool released)
+        {
+            Value = value;
+            Down = down;
+            Pressed = pressed;
+            Released = released;
+        }
+    }
+    internal InputActions(byte[] data)
+    {
+        if(data.Length != 2888 || BitConverter.ToUInt32(data, 0) > 32 || BitConverter.ToUInt32(data, 4) > 1)
+            throw new InvalidOperationException("Input Actions ABI mismatch.");
+        Context = Name(data, 8);
+        Focused = BitConverter.ToUInt32(data, 4) != 0;
+        var count = BitConverter.ToUInt32(data, 0);
+        for(var index = 0; index < count; ++index)
+        {
+            var offset = 72 + index * 88;
+            var name = Name(data, offset);
+            var value = new Vector2(BitConverter.ToSingle(data, offset + 68), BitConverter.ToSingle(data, offset + 72));
+            if(BitConverter.ToUInt32(data, offset + 64) > 2 ||
+                float.IsNaN(value.X) || float.IsInfinity(value.X) || float.IsNaN(value.Y) || float.IsInfinity(value.Y) ||
+                BitConverter.ToUInt32(data, offset + 76) > 1 || BitConverter.ToUInt32(data, offset + 80) > 1 ||
+                BitConverter.ToUInt32(data, offset + 84) > 1 || actions.ContainsKey(name))
+                throw new InvalidOperationException("Invalid Input Action state.");
+            actions.Add(name, new ActionValue(value, BitConverter.ToUInt32(data, offset + 76) != 0,
+                BitConverter.ToUInt32(data, offset + 80) != 0, BitConverter.ToUInt32(data, offset + 84) != 0));
+        }
+    }
+    private static string Name(byte[] data, int offset)
+    {
+        var length = Array.IndexOf(data, (byte)0, offset, 64) - offset;
+        if(length < 0) throw new InvalidOperationException("Unterminated Input Action name.");
+        return System.Text.Encoding.UTF8.GetString(data, offset, length);
+    }
+    public bool Contains(string name) => actions.ContainsKey(name);
+    public bool Down(string name) => actions.TryGetValue(name, out var action) && action.Down;
+    public bool Pressed(string name) => actions.TryGetValue(name, out var action) && action.Pressed;
+    public bool Released(string name) => actions.TryGetValue(name, out var action) && action.Released;
+    public float Value(string name) => actions.TryGetValue(name, out var action) ? action.Value.X : 0;
+    public Vector2 Vector2(string name) => actions.TryGetValue(name, out var action) ? action.Value : default;
+}
+public sealed partial class GameWorld
+{
+    /// <summary>全Actionを1回のInteropで取得。未登録名の読み取りはfalse/zero。</summary>
+    public InputActions ReadActions()
+    {
+        var request = new byte[68];
+        BitConverter.GetBytes(2u).CopyTo(request, 0);
+        return new InputActions(InvokeWorldCommand("nexus.engine.input", default, request, false));
+    }
+    /// <summary>次の入力frameからContextを切り替える。空Contextの定義は常に有効。</summary>
+    public void SetInputContext(string context)
+    {
+        if(string.IsNullOrEmpty(context)) throw new ArgumentException("Context is required.", nameof(context));
+        foreach(var character in context)
+            if(character <= 32 || character == 127) throw new ArgumentException("Invalid Context name.", nameof(context));
+        var bytes = System.Text.Encoding.UTF8.GetBytes(context);
+        if(bytes.Length > 63) throw new ArgumentException("Context exceeds 63 UTF-8 bytes.", nameof(context));
+        var request = new byte[68];
+        BitConverter.GetBytes(3u).CopyTo(request, 0);
+        bytes.CopyTo(request, 4);
+        InvokeWorldCommand("nexus.engine.input", default, request, true);
+    }
+}

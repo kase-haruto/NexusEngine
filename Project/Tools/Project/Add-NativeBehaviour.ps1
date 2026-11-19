@@ -2,9 +2,11 @@
  [Parameter(Mandatory=$true)][string]$Directory,
  [Parameter(Mandatory=$true)][string]$Templates,
  [Parameter(Mandatory=$true)][string]$ModuleId,
- [Parameter(Mandatory=$true)][string]$Name
+ [Parameter(Mandatory=$true)][string]$Name,
+ [string]$Namespace='', [string]$BaseClass='', [string]$BaseHeader='', [string]$RelativeDirectory='', [string]$CloneFrom='', [string]$CloneClass=''
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Source-Identifiers.ps1')
 # Add-GameSourceがModule検証と共有lockを保持したまま呼ぶ内部生成処理。
 if($Name -cnotmatch '\A[A-Za-z][A-Za-z0-9_]{0,63}\z' -or $Name -cmatch '\A(Nexus|NEXUS_)' -or
  $Name -cin @('std','NativeMover','CrowdSimulationSystem','CrowdSimulation','GameComponents','GameState','NativeCombat',
@@ -13,6 +15,7 @@ if($Name -cnotmatch '\A[A-Za-z][A-Za-z0-9_]{0,63}\z' -or $Name -cmatch '\A(Nexus
 }
 $directoryPath=[IO.Path]::GetFullPath($Directory)
 $utf8=[Text.UTF8Encoding]::new($false)
+$locations=@{}
 $before=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 $writes=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
 function Original([string]$Name) {
@@ -35,10 +38,12 @@ function CppString([string]$Value) { return '"'+$Value.Replace('\','\\').Replace
 function Registry([string[]]$Names) {
  $types=@(); $includes=''; $register=''; $connect=''
  foreach($class in $Names) {
+  $header=if($locations.ContainsKey($class)) { $locations[$class] } else { $class+'.h' }
+  $source=[IO.Path]::ChangeExtension($header,'.cpp').Replace('\','/')
   $typeId=$ModuleId+'.behaviours.'+$class
   $types+=,[ordered]@{id=$typeId;fullName=$ModuleId+'.'+$class;version=1;aliases=@();properties=@(
-   [ordered]@{id='enabled';label='Enabled';aliases=@();kind='Bool';default=$true});sourceFiles=@(($class+'.h'),($class+'.cpp'))}
-  $includes+='#include "'+$class+'.h"'+"`n"
+   [ordered]@{id='enabled';label='Enabled';aliases=@();kind='Bool';default=$true});sourceFiles=@($header,$source)}
+  $includes+='#include "'+$header+'"'+"`n"
   $system='behaviour.'+$class
   $systemLiteral=CppString $system; $typeLiteral=CppString $typeId
   $register+=@"
@@ -107,6 +112,9 @@ $names=@()
 if($null -ne $configuration) {
  $saved=$configuration | ConvertFrom-Json
  if($saved.schemaVersion -ne 1 -or $saved.moduleId -cne $ModuleId -or @($saved.classes).Count -ge 254) { throw 'Invalid or full generated Behaviour registry.' }
+ if($saved.PSObject.Properties['locations']) { foreach($entry in $saved.locations.PSObject.Properties) {
+  if($entry.Value -notmatch '\A(?:[A-Za-z0-9_-]+/)*[A-Za-z][A-Za-z0-9_]*\.h\z') { throw 'Invalid registered source path.' }; $locations[$entry.Name]=$entry.Value
+ } }
  $names=@($saved.classes)
  foreach($class in $names) {
   if($class -cnotmatch '\A[A-Za-z][A-Za-z0-9_]{0,63}\z') { throw 'Invalid generated Behaviour name.' }
@@ -151,13 +159,38 @@ const auto mover = RegisterNativeMover(state.systems);
 if($names -ccontains $Name) { throw 'Behaviour already exists.' }
 foreach($extension in @('h','cpp')) {
  $text=[IO.File]::ReadAllText((Join-Path $Templates ('Behaviour/Native.'+$extension+'.in'))).Replace('@CLASS@',$Name)
- Plan ($Name+'.'+$extension) $text $true
+ if($CloneFrom) {
+  if($names -cnotcontains $CloneClass) { throw 'Choose a registered Native Behaviour to clone.' }
+  $original=[IO.Path]::GetFullPath((Join-Path $directoryPath ([IO.Path]::ChangeExtension($CloneFrom,'.'+$extension))))
+  if(-not $original.StartsWith($directoryPath+'\',[StringComparison]::OrdinalIgnoreCase) -or -not [IO.File]::Exists($original)) { throw 'Clone source pair is invalid.' }
+  $text=Rename-NexusSourceIdentifier ([IO.File]::ReadAllText($original)) $CloneClass $Name
+  $text=$text.Replace('"'+[IO.Path]::GetFileNameWithoutExtension($CloneFrom)+'.h"','"'+$Name+'.h"')
+ }
+ if($CloneFrom) {
+  # clone済みのnamespace/base宣言を保持する。
+ } elseif($extension -eq 'h') {
+  if($BaseClass) { $text=$text.Replace('class '+$Name+' final {','class '+$Name+' final : public '+$BaseClass.Replace('.','::')+' {') }
+  if($BaseHeader) { $text=$text.Replace('#pragma once','#pragma once'+"`n"+'#include "'+$BaseHeader+'"') }
+  if($Namespace) {
+   $qualified=$Namespace.Replace('.','::')
+   $text=$text.Replace('class '+$Name+' final', 'namespace '+$qualified+" {`nclass "+$Name+' final')+"`n}`nusing "+$Name+' = '+$qualified+'::'+$Name+";`n"
+  }
+ } elseif($Namespace) {
+  $qualified=$Namespace.Replace('.','::')
+  $anchor='#include "'+$Name+'.h"'
+  $text=$text.Replace($anchor,$anchor+"`nnamespace "+$qualified+" {`n")+"`n}`n"
+ }
+ $relative=if($RelativeDirectory) { $RelativeDirectory.TrimEnd('/','\').Replace('\','/')+'/'+$Name+'.'+$extension } else { $Name+'.'+$extension }
+ Plan $relative $text $true
 }
+if($RelativeDirectory) { $locations[$Name]=$RelativeDirectory.TrimEnd('/','\').Replace('\','/')+'/'+$Name+'.h' }
 $names+=,$Name
 $registry=Registry $names
 Plan 'NexusGeneratedBehaviours.h' $registry.Header
 Plan 'NexusGeneratedBehaviours.cpp' $registry.Source
-Plan 'NexusGeneratedBehaviours.json' (ConvertTo-Json -InputObject ([ordered]@{schemaVersion=1;moduleId=$ModuleId;classes=@($names)}) -Depth 4 -Compress)
+$configuration=[ordered]@{schemaVersion=1;moduleId=$ModuleId;classes=@($names)}
+if($locations.Count) { $configuration.locations=$locations }
+Plan 'NexusGeneratedBehaviours.json' (ConvertTo-Json -InputObject $configuration -Depth 4 -Compress)
 
 $committed=@()
 try {
@@ -166,6 +199,7 @@ try {
   if($current -cne $before[$entry.Key]) { throw 'Concurrent source modification; generation cancelled.' }
  }
  foreach($entry in $writes.GetEnumerator()) {
+  [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($entry.Key)) | Out-Null
   $temporary=$entry.Key+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
   try {
    [IO.File]::WriteAllText($temporary,$entry.Value,$utf8)

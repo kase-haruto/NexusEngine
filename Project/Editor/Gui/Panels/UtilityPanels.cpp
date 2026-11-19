@@ -5,10 +5,13 @@
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/SelectionService.h"
 #include "Editor/Services/SourceFileActions.h"
+#include "Editor/Services/ContentDragPayload.h"
+#include "Editor/Services/ContentBrowserServices.h"
 #include "Editor/Services/SceneEditService.h"
 #include "Editor/Core/EditorSession.h"
 #include "Foundation/Logging/Logger.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Platform/FileSystem/AtomicFile.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/imgui_internal.h"
 #include <algorithm>
@@ -224,114 +227,6 @@ namespace NexusEngine {
 		}
 		ImGui::TextUnformatted(context.text.Text("console.help").c_str());
 	}
-	void ContentBrowserPanel::Draw(const EditorContext& context) {
-        // 同じBrowserでAssets / Sourceを切り替える。カタログの所有権はWorkspaceに置く。
-        if(sources_) {
-            if(ImGui::RadioButton(context.text.Text("browser.assets").c_str(), !showSources_)) showSources_ = false;
-            ImGui::SameLine();
-            if(ImGui::RadioButton(context.text.Text("browser.source").c_str(), showSources_)) showSources_ = true;
-        }
-        auto& catalog = showSources_ && sources_ ? *sources_ : assets_;
-		if(ImGui::Button(context.text.Label("asset.up", "up").c_str())) catalog.Navigate(catalog.Current().parent_path());
-		ImGui::SameLine();
-		if(ImGui::Button(context.text.Label("asset.refresh", "refresh").c_str())) catalog.Refresh();
-		ImGui::SameLine();
-		ImGui::TextUnformatted(AssetCatalog::Utf8(catalog.Current()).c_str());
-		UI::SearchBar("ContentBrowserSearch", search_, context.text.Text("search").c_str());
-		if(!ImGui::BeginTable("browser", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) return;
-		ImGui::TableSetupColumn("folders", ImGuiTableColumnFlags_WidthFixed, 180);
-		ImGui::TableSetupColumn("assets", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-		std::optional<std::filesystem::path>					  navigate;
-		std::function<void(const std::filesystem::path&, size_t)> tree = [&](const auto& path, size_t depth) {
-			auto id = AssetCatalog::Utf8(path);
-			ImGui::PushID(id.c_str());
-            const bool folderIcon = UI::FindEditorIcon("asset.folder") || UI::FindEditorIcon("asset.folderOpen");
-            const float side = ImGui::GetFontSize();
-            const auto padding = folderIcon ? std::string(static_cast<size_t>((side+ImGui::GetStyle().ItemInnerSpacing.x)/std::max(1.f,ImGui::CalcTextSize(" ").x))+1,' ') : std::string{};
-			bool open = ImGui::TreeNodeEx("folder", ImGuiTreeNodeFlags_OpenOnArrow, "%s%s", padding.c_str(), AssetCatalog::Utf8(path.filename()).c_str());
-            const auto* texture = UI::FindEditorIcon(open ? "asset.folderOpen" : "asset.folder");
-            if(!texture) texture = UI::FindEditorIcon("asset.folder");
-            if(texture) {
-                const auto p = ImGui::GetItemRectMin();
-                const float x = p.x+ImGui::GetTreeNodeToLabelSpacing(), y = p.y+(ImGui::GetItemRectSize().y-side)*.5f;
-                ImGui::GetWindowDrawList()->AddImage(*texture,{x,y},{x+side,y+side},{0,0},{1,1},ImGui::GetColorU32(ImVec4{1,1,1,1}));
-            }
-			if(ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) navigate = path;
-			if(open) {
-				if(depth < 12) {
-					auto entries = catalog.Snapshot(path);
-					for(const auto& entry : *entries)
-						if(entry.directory) tree(entry.path, depth + 1);
-				}
-				ImGui::TreePop();
-			}
-			ImGui::PopID();
-		};
-		tree(catalog.Root(), 0);
-		ImGui::TableNextColumn();
-		ImGui::BeginChild("asset-list", {0, 0});
-		auto				entries = catalog.Snapshot(catalog.Current());
-        // Scene交換で古いEditorContextのEntity参照を使わないよう、構造変更は描画後に確定する。
-        std::optional<std::string> attach;
-		std::vector<size_t> matching;
-		for(size_t i = 0; i < entries->size(); ++i)
-			if(search_.empty() || (*entries)[i].name.find(search_) != std::string::npos) matching.push_back(i);
-		ImGuiListClipper assetClipper;
-		assetClipper.Begin(static_cast<int>(matching.size()));
-		while(assetClipper.Step())
-			for(int row = assetClipper.DisplayStart; row < assetClipper.DisplayEnd; ++row) {
-				const auto& entry = (*entries)[matching[row]];
-				auto		path  = AssetCatalog::Utf8(entry.path);
-				ImGui::PushID(path.c_str());
-				auto label = entry.name + "  [" + context.text.Text(entry.typeKey) + ']';
-                UI::EditorInlineIcon(entry.typeKey);
-				if(ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick) && ImGui::IsMouseDoubleClicked(0)) {
-					if(entry.directory)
-						navigate = entry.path;
-					else if(open_)
-						open_(entry.path);
-				}
-                const bool source = !entry.directory && showSources_ && SourceFileActions::IsSource(entry.path);
-				if(!entry.directory && ImGui::BeginDragDropSource()) {
-					// OS handleやResource pointerでなくUTF-8 pathをコピーする拡張用payload。
-					ImGui::SetDragDropPayload(source ? "NEXUS_SOURCE_PATH" : "NEXUS_ASSET_PATH", path.c_str(), path.size() + 1);
-					ImGui::TextUnformatted(entry.name.c_str());
-					ImGui::EndDragDropSource();
-				}
-                if(source && ImGui::BeginPopupContextItem("SourceActions")) {
-                    if(ImGui::MenuItem(context.text.Text("source.open").c_str()) && open_) open_(entry.path);
-                    const auto types = SourceFileActions::TypesFor(sources_->Root(), entry.path, context.types);
-                    const bool editable = !context.session.IsPlaying() && !context.selection.All().empty();
-                    if(ImGui::BeginMenu(context.text.Text("source.attach").c_str(), editable && !types.empty())) {
-                        for(const auto& id : types) {
-                            const auto* type = context.types.Find(id);
-                            auto* level = context.session.GetLevel();
-                            const bool attached = level && std::ranges::all_of(context.selection.All(),
-                                [&](PersistentId entity) { return type->contains(level->FindEntity(entity)); });
-                            if(ImGui::MenuItem(context.text.Label(type->labelKey, id).c_str(), nullptr, attached, !attached)) attach = id;
-                        }
-                        ImGui::EndMenu();
-                    }
-                    if(types.empty()) ImGui::TextDisabled("%s", context.text.Text("source.noType").c_str());
-                    ImGui::EndPopup();
-                }
-				if(context.assets && !entry.directory && (entry.typeKey == "asset.model" || entry.typeKey == "asset.texture") && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-					ImGui::BeginTooltip();
-					context.assets->DrawPreview(path, entry.typeKey == "asset.texture", -1, 160);
-					ImGui::EndTooltip();
-				}
-				ImGui::PopID();
-			}
-		ImGui::EndChild();
-		ImGui::EndTable();
-		if(navigate) catalog.Navigate(*navigate);
-        if(attach) {
-            if(const auto* type = context.types.Find(*attach); !type || !context.sceneEdits.AddComponent(*type))
-                NEXUS_LOG_WARNING("ContentBrowser", context.text.Text("edit.rejected"));
-        }
-	}
 	void PreferencesPanel::Draw(const EditorContext& context) {
 		bool changed = false;
 		if(!ImGui::BeginTable("PreferencesLayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) return;
@@ -397,6 +292,51 @@ namespace NexusEngine {
 		if(auto image = session_.Image(); image && image->IsValid()) {
 			const auto origin = ImGui::GetCursorScreenPos();
 			ImGui::Image(static_cast<ImTextureID>(image->nativeId), size);
+                        if (session_.IsLocalPreview() && !context.session.IsPlaying() && ImGui::BeginDragDropTarget()) {
+                            const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("NEXUS_CONTENT_ITEMS");
+                            const bool multi = payload != nullptr;
+                            if (!payload) {
+                                payload = ImGui::AcceptDragDropPayload("NEXUS_ASSET_PATH");
+                            }
+                            if (payload && context.content) {
+                                const auto files = multi ? ContentDragPayload::Decode(
+                                                               payload->Data, static_cast<size_t>(payload->DataSize))
+                                                         : ContentDragPayload::Legacy(
+                                                               payload->Data, static_cast<size_t>(payload->DataSize));
+                                std::vector<std::pair<std::string, std::string>> models;
+                                bool valid = files.has_value();
+                                if (files) {
+                                    for (const auto &file : *files) {
+                                        const auto checked = ResolveFileWithinRoot(
+                                            context.content->Root(),
+                                            AssetCatalog::Utf8(file.lexically_relative(context.content->Root())));
+                                        std::error_code error;
+                                        if (!checked || !std::filesystem::is_regular_file(*checked, error) ||
+                                            context.content->Types().Classify(file, false).preview !=
+                                                ContentPreview::Model) {
+                                            valid = false;
+                                            break;
+                                        }
+                                        const auto reference = context.content->StableReference(*checked);
+                                        if (!reference) {
+                                            valid = false;
+                                            break;
+                                        }
+                                        models.emplace_back(AssetCatalog::Utf8(file.stem()), *reference);
+                                    }
+                                }
+                                if (valid && context.sceneEdits.CreateModels(models)) {
+                                    if (context.browser) {
+                                        context.browser->ClearSelection();
+                                    }
+                                } else {
+                                    NEXUS_LOG_WARNING("ContentBrowser",
+                                                      "Drop project model files into the viewport. Import "
+                                                      "Engine/Plugin content into the project first.");
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
             const auto mainOrigin=ImGui::GetMainViewport()->Pos;
             session_.SetGameInputRegion(origin.x-mainOrigin.x,origin.y-mainOrigin.y,size.x,size.y);
 			session_.SetGameInputFocus(session_.IsLocalPreview() && ImGui::IsWindowFocused() &&

@@ -8,16 +8,20 @@
 #include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Runtime/Scene/Components/AnimatorComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/CameraEffectComponent.h"
 #include "Runtime/Scene/Components/ColliderComponent.h"
+#include "Runtime/Scene/Components/CurveBindingComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/ExponentialHeightFogComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
+#include "Runtime/Scene/Components/KeyframeAnimationComponent.h"
 #include "Runtime/Scene/Components/NameComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/RigidBodyComponent.h"
 #include "Runtime/Scene/Components/ScriptComponent.h"
+#include "Runtime/Scene/Components/SkeletalAnimationComponent.h"
 #include "Runtime/Scene/Components/SkyAtmosphereComponent.h"
 #include "Runtime/Scene/Components/SkyLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
@@ -65,6 +69,18 @@ template<> struct ReflectionTraits<CameraComponent> {
         visitor("frustumSize", &CameraComponent::smallFrustum);
     }
 };
+template<> struct ReflectionTraits<CameraEffectComponent> {
+    static constexpr const char* Id = "CameraEffect";
+    static constexpr const char* Label = "component.cameraEffect";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("shader", &CameraEffectComponent::shader);
+        visitor("enabled", &CameraEffectComponent::enabled);
+        visitor("parameters0", &CameraEffectComponent::parameters0);
+        visitor("parameters1", &CameraEffectComponent::parameters1);
+        visitor("parameters2", &CameraEffectComponent::parameters2);
+        visitor("parameters3", &CameraEffectComponent::parameters3);
+    }
+};
 template<> struct ReflectionTraits<ColliderComponent> {
     static constexpr const char* Id = "Collider";
     static constexpr const char* Label = "component.collider";
@@ -80,6 +96,26 @@ template<> struct ReflectionTraits<ColliderComponent> {
         visitor("sensor", &ColliderComponent::sensor);
         visitor("collisionLayer", &ColliderComponent::collisionLayer);
         visitor("collisionMask", &ColliderComponent::collisionMask);
+    }
+};
+template<> struct ReflectionTraits<CurveBindingComponent> {
+    static constexpr const char* Id = "CurveBinding";
+    static constexpr const char* Label = "component.curveBinding";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("curveAsset", &CurveBindingComponent::curveAsset);
+        visitor("target", &CurveBindingComponent::target);
+        visitor("targetComponent", &CurveBindingComponent::targetComponent);
+        visitor("targetProperty", &CurveBindingComponent::targetProperty);
+        visitor("channel", &CurveBindingComponent::channel);
+        visitor("duration", &CurveBindingComponent::duration);
+        visitor("elapsed", &CurveBindingComponent::elapsed);
+        visitor("playbackSpeed", &CurveBindingComponent::playbackSpeed);
+        visitor("loop", &CurveBindingComponent::loop);
+        visitor("playing", &CurveBindingComponent::playing);
+        visitor("manual", &CurveBindingComponent::manual);
+        visitor("input", &CurveBindingComponent::input);
+        visitor("outputScale", &CurveBindingComponent::outputScale);
+        visitor("outputBias", &CurveBindingComponent::outputBias);
     }
 };
 template<> struct ReflectionTraits<DirectionalLightComponent> {
@@ -140,6 +176,22 @@ template<> struct ReflectionTraits<HierarchyComponent> {
         visitor("parent", &HierarchyComponent::parent);
     }
 };
+template<> struct ReflectionTraits<KeyframeAnimationComponent> {
+    static constexpr const char* Id = "KeyframeAnimation";
+    static constexpr const char* Label = "component.keyframeAnimation";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("clipAsset", &KeyframeAnimationComponent::clipAsset);
+        visitor("speedCurveAsset", &KeyframeAnimationComponent::speedCurveAsset);
+        visitor("playbackSpeed", &KeyframeAnimationComponent::playbackSpeed);
+        visitor("loop", &KeyframeAnimationComponent::loop);
+        visitor("playing", &KeyframeAnimationComponent::playing);
+        visitor("elapsed", &KeyframeAnimationComponent::elapsed);
+        visitor("speedCurveDuration", &KeyframeAnimationComponent::speedCurveDuration);
+        visitor("controllerAsset", &KeyframeAnimationComponent::controllerAsset);
+        visitor("controllerParameters", &KeyframeAnimationComponent::controllerParameters);
+        visitor("reverseEvents", &KeyframeAnimationComponent::reverseEvents);
+    }
+};
 template<> struct ReflectionTraits<MaterialOverride> {
     static constexpr const char* Id = "MaterialOverride";
     static constexpr const char* Label = "";
@@ -188,6 +240,8 @@ template<> struct ReflectionTraits<PrimitiveRenderComponent> {
         visitor("baseColorTexture", &PrimitiveRenderComponent::baseColorTexture);
         visitor("material", &PrimitiveRenderComponent::material);
         visitor("shape", &PrimitiveRenderComponent::shape);
+        visitor("uvScale", &PrimitiveRenderComponent::uvScale);
+        visitor("uvOffset", &PrimitiveRenderComponent::uvOffset);
     }
 };
 template<> struct ReflectionTraits<Quaternion> {
@@ -231,6 +285,33 @@ template<> struct ReflectionTraits<ScriptComponent> {
         visitor("propertyState", &ScriptComponent::propertyState);
         visitor("additional", &ScriptComponent::additional);
         visitor("slotId", &ScriptComponent::slotId);
+    }
+};
+template<> struct ReflectionTraits<SkeletalAnimationComponent> {
+    static constexpr const char* Id = "SkeletalAnimation";
+    static constexpr const char* Label = "component.skeletalAnimation";
+    template<class Visitor> static void Visit(Visitor&& visitor) {
+        visitor("clipAsset", &SkeletalAnimationComponent::clipAsset);
+        visitor("speedCurveAsset", &SkeletalAnimationComponent::speedCurveAsset);
+        visitor("playbackSpeed", &SkeletalAnimationComponent::playbackSpeed);
+        visitor("loop", &SkeletalAnimationComponent::loop);
+        visitor("playing", &SkeletalAnimationComponent::playing);
+        visitor("elapsed", &SkeletalAnimationComponent::elapsed);
+        visitor("speedCurveDuration", &SkeletalAnimationComponent::speedCurveDuration);
+        visitor("blendClipAsset", &SkeletalAnimationComponent::blendClipAsset);
+        visitor("blendSpeed", &SkeletalAnimationComponent::blendSpeed);
+        visitor("blendLoop", &SkeletalAnimationComponent::blendLoop);
+        visitor("blendWeight", &SkeletalAnimationComponent::blendWeight);
+        visitor("crossfadeDuration", &SkeletalAnimationComponent::crossfadeDuration);
+        visitor("layerAsset", &SkeletalAnimationComponent::layerAsset);
+        visitor("controllerAsset", &SkeletalAnimationComponent::controllerAsset);
+        visitor("controllerParameters", &SkeletalAnimationComponent::controllerParameters);
+        visitor("rootMotion", &SkeletalAnimationComponent::rootMotion);
+        visitor("rootMotionJoint", &SkeletalAnimationComponent::rootMotionJoint);
+        visitor("rootMotionAxes", &SkeletalAnimationComponent::rootMotionAxes);
+        visitor("rootMotionRotation", &SkeletalAnimationComponent::rootMotionRotation);
+        visitor("applyRootMotion", &SkeletalAnimationComponent::applyRootMotion);
+        visitor("reverseEvents", &SkeletalAnimationComponent::reverseEvents);
     }
 };
 template<> struct ReflectionTraits<SkyAtmosphereComponent> {

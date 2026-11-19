@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdio>
 #include <set>
+#include "Platform/FileSystem/AssetIdentity.h"
 
 namespace NexusEngine {
 namespace {
@@ -110,9 +111,14 @@ bool AnimationStudioPanel::AssetField(const char* label, std::string& value, con
         if(const auto* payload = ImGui::AcceptDragDropPayload("NEXUS_ASSET_PATH")) {
             const auto path = std::filesystem::path(reinterpret_cast<const char8_t*>(payload->Data));
             const auto relative = path.lexically_relative(document_.root);
-            if(!relative.empty() && !relative.is_absolute() && *relative.begin() != ".." && path.extension() == extension) {
+            const bool model = std::string_view(extension) == "model" && (path.extension() == ".gltf" || path.extension() == ".glb");
+            if(!relative.empty() && !relative.is_absolute() && *relative.begin() != ".." && (path.extension() == extension || model)) {
                 const auto text = relative.generic_u8string();
                 value.assign(reinterpret_cast<const char*>(text.data()), text.size());
+                const auto identity = EnsureAssetIdentity(document_.root, path);
+                if(identity) {
+                    value = *identity;
+                }
                 changed = true;
             }
         }
@@ -126,6 +132,11 @@ bool AnimationStudioPanel::AssetField(const char* label, std::string& value, con
         for(const auto& asset : document_.Assets(extension)) {
             if(ImGui::Selectable(asset.c_str(), value == asset)) {
                 value = asset;
+                const auto file = document_.root / std::filesystem::path(reinterpret_cast<const char8_t*>(asset.c_str()));
+                const auto identity = EnsureAssetIdentity(document_.root, file);
+                if(identity) {
+                    value = *identity;
+                }
                 changed = true;
             }
         }
@@ -304,6 +315,13 @@ void AnimationStudioPanel::Draw(const EditorContext& context) {
     if(!document.status.empty()) {
         ImGui::TextWrapped("%s", document.status.c_str());
     }
+    if(auto* level = context.session.GetPreviewLevel(); level && !level->Animations().Diagnostics().empty()) {
+        if(ImGui::CollapsingHeader("アニメーションの警告", ImGuiTreeNodeFlags_DefaultOpen)) {
+            for(const auto& message : level->Animations().Diagnostics()) {
+                ImGui::TextWrapped("%s", message.c_str());
+            }
+        }
+    }
 }
 void AnimationStudioPanel::DrawClip(const EditorContext& context, AnimationClipDocument& clip, bool& changed) {
     ImGui::SeparatorText("Animation Clip");
@@ -316,8 +334,15 @@ void AnimationStudioPanel::DrawClip(const EditorContext& context, AnimationClipD
     for(const auto& event : clip.events) {
         minimumDuration = (std::max)(minimumDuration, event.time);
     }
-    changed |= ImGui::DragFloat("長さ（秒）", &clip.duration, .01f, minimumDuration, 100000, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    if(ImGui::DragFloat("長さ（秒）", &clip.duration, .01f, minimumDuration, 100000, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+        changed = true;
+        clip.durationExplicit = true;
+    }
     changed |= ImGui::Checkbox("ループ", &clip.loop);
+    if(EffectiveAnimationClipKind(clip) == AnimationClipKind::Skeletal) {
+        changed |= TextField("Retarget Profile (.nxretarget)", clip.retargetProfile);
+        changed |= AssetField("Source Skeleton (authored keys)", clip.skeletonSource, "model");
+    }
     if(!clip.source.empty()) {
         ImGui::TextWrapped("Source: %s / %s", clip.source.c_str(), clip.clip.c_str());
         if(ImGui::Button("編集可能なキーへ展開")) {
@@ -334,6 +359,9 @@ void AnimationStudioPanel::DrawClip(const EditorContext& context, AnimationClipD
                 continue;
             }
             for(const auto& property : type.properties) {
+                if(clip.kind == AnimationClipKind::Keyframe && !property.animatable) {
+                    continue;
+                }
                 const auto value = property.get(entity);
                 const auto numbers = value ? PropertyNumbers(*value) : std::vector<float>{};
                 if(numbers.empty()) {
@@ -404,10 +432,18 @@ void AnimationStudioPanel::DrawClip(const EditorContext& context, AnimationClipD
             const float minimum = document_.key == 0 ? 0 : track.keys[document_.key-1].time + .0001f;
             const float maximum = document_.key+1 == static_cast<int>(track.keys.size()) ? clip.duration : track.keys[document_.key+1].time - .0001f;
             changed |= ImGui::DragFloat("キー時刻", &key.time, .01f, minimum, maximum, "%.4f", ImGuiSliderFlags_AlwaysClamp);
-            for(size_t dimension = 0; dimension < key.value.size(); ++dimension) {
+            size_t channelBegin = 0, channelEnd = key.value.size();
+            if(track.component == "$node" && track.property == "weights") {
+                ImGui::InputInt("先頭Morph channel", &morphChannelStart_, 4, 16);
+                morphChannelStart_ = std::clamp(morphChannelStart_, 0, static_cast<int>(key.value.size()) - 1);
+                channelBegin = static_cast<size_t>(morphChannelStart_);
+                channelEnd = (std::min)(key.value.size(), channelBegin + 4);
+            }
+            for(size_t dimension = channelBegin; dimension < channelEnd; ++dimension) {
                 ImGui::PushID(static_cast<int>(dimension));
                 const char* names[] = {"X / R", "Y / G", "Z / B", "W / A"};
-                changed |= ImGui::DragFloat(names[dimension], &key.value[dimension], .01f);
+                const auto label = track.property == "weights" ? "Morph " + std::to_string(dimension) : std::string(names[dimension % 4]);
+                changed |= ImGui::DragFloat(label.c_str(), &key.value[dimension], .01f);
                 if(track.interpolation == AnimationInterpolation::CubicSpline) {
                     key.inTangent.resize(key.value.size());
                     key.outTangent.resize(key.value.size());
@@ -445,64 +481,139 @@ void AnimationStudioPanel::DrawClip(const EditorContext& context, AnimationClipD
     }
 }
 void AnimationStudioPanel::DrawKeys(AnimationClipDocument& clip, bool& changed) {
-    const float labelWidth = 240, row = 27;
-    const float width = (std::max)(300.0f, ImGui::GetContentRegionAvail().x - labelWidth - 20);
-    ImGui::BeginChild("KeyTimeline", {0, (std::min)(260.0f, row * (static_cast<float>(clip.tracks.size()) + 2))}, ImGuiChildFlags_Borders);
-    auto origin = ImGui::GetCursorScreenPos();
-    auto* draw = ImGui::GetWindowDrawList();
+    struct Row {
+        int track = -1;
+        std::string label, group;
+    };
+    std::map<std::string, std::vector<size_t>> groups;
+    for(size_t index = 0; index < clip.tracks.size(); ++index) {
+        const auto& track = clip.tracks[index];
+        groups[(track.target.empty() ? "自身" : track.target) + " / " + track.component].push_back(index);
+    }
+    std::vector<Row> rows;
+    for(const auto& [name, indices] : groups) {
+        rows.push_back({-1, name, name});
+        if(!collapsedTracks_.contains(name)) {
+            for(size_t index : indices) {
+                rows.push_back({static_cast<int>(index), "    " + clip.tracks[index].property, name});
+            }
+        }
+    }
+    const float labelWidth = 230, row = 29;
+    const float height = std::clamp(row * (static_cast<float>(rows.size()) + 2), 150.0f, 380.0f);
+    ImGui::BeginChild("KeyTimeline", {0, height}, ImGuiChildFlags_Borders);
+    const auto origin = ImGui::GetCursorScreenPos();
+    const float width = (std::max)(100.0f, ImGui::GetContentRegionAvail().x - labelWidth - 12);
     const float duration = (std::max)(clip.duration, .001f);
+    auto* draw = ImGui::GetWindowDrawList();
+    const auto toTime = [&](float x) {
+        return std::clamp((x - origin.x - labelWidth) / width * duration, 0.0f, duration);
+    };
+    ImGui::TextUnformatted("Component / Property");
     ImGui::SetCursorScreenPos({origin.x + labelWidth, origin.y});
     ImGui::InvisibleButton("ScrubRuler", {width, row});
     if(ImGui::IsItemActive()) {
-        document_.time = std::clamp((ImGui::GetIO().MousePos.x - origin.x - labelWidth) / width * duration, 0.0f, duration);
+        document_.time = toTime(ImGui::GetIO().MousePos.x);
         document_.preview = true;
     }
+    const float bottom = origin.y + row * (static_cast<float>(rows.size()) + 1);
     for(int tick = 0; tick <= 10; ++tick) {
         const float x = origin.x + labelWidth + width * static_cast<float>(tick) / 10;
-        draw->AddLine({x, origin.y}, {x, origin.y + row * (static_cast<float>(clip.tracks.size())+1)}, IM_COL32(70,75,85,255));
+        draw->AddLine({x, origin.y}, {x, bottom}, IM_COL32(61, 67, 78, 255));
         char text[32];
         std::snprintf(text, sizeof(text), "%.2f", duration * static_cast<float>(tick) / 10);
-        draw->AddText({x+2, origin.y}, IM_COL32(160,170,185,255), text);
+        draw->AddText({x + 3, origin.y + 2}, IM_COL32(160, 170, 185, 255), text);
     }
-    for(size_t index = 0; index < clip.tracks.size(); ++index) {
-        auto& track = clip.tracks[index];
-        const float y = origin.y + row * (static_cast<float>(index)+1);
-        ImGui::PushID(static_cast<int>(index));
+    int deleteTrack = -1, deleteKey = -1;
+    for(size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+        const auto& item = rows[rowIndex];
+        const float y = origin.y + row * (static_cast<float>(rowIndex) + 1);
+        ImGui::PushID(static_cast<int>(rowIndex));
         ImGui::SetCursorScreenPos({origin.x, y});
-        const auto label = TrackLabel(track);
-        if(ImGui::Selectable(label.c_str(), document_.selected == static_cast<int>(index), 0, {labelWidth-8, row})) {
-            document_.selected = static_cast<int>(index);
+        if(item.track < 0) {
+            const auto label = std::string(collapsedTracks_.contains(item.group) ? "> " : "v ") + item.label;
+            draw->AddRectFilled({origin.x, y}, {origin.x + labelWidth + width, y + row}, IM_COL32(38, 43, 52, 255));
+            if(ImGui::Selectable(label.c_str(), false, 0, {labelWidth - 6, row})) {
+                if(collapsedTracks_.contains(item.group)) {
+                    collapsedTracks_.erase(item.group);
+                } else {
+                    collapsedTracks_.insert(item.group);
+                }
+            }
+            ImGui::PopID();
+            continue;
         }
+        auto& track = clip.tracks[static_cast<size_t>(item.track)];
+        if(ImGui::Selectable(item.label.c_str(), document_.selected == item.track, 0, {labelWidth - 6, row})) {
+            document_.selected = item.track;
+        }
+        bool overKey = false;
         for(size_t keyIndex = 0; keyIndex < track.keys.size(); ++keyIndex) {
             auto& key = track.keys[keyIndex];
             const float x = origin.x + labelWidth + key.time / duration * width;
             const float cy = y + row / 2;
-            const bool selected = document_.selected == static_cast<int>(index) && document_.key == static_cast<int>(keyIndex);
-            const ImU32 color = selected ? IM_COL32(255,199,80,255) : IM_COL32(120,190,240,255);
-            draw->AddQuadFilled({x,cy-5}, {x+5,cy}, {x,cy+5}, {x-5,cy}, color);
-            ImGui::SetCursorScreenPos({x-6, y+2});
+            const bool selected = document_.selected == item.track && document_.key == static_cast<int>(keyIndex);
+            const ImU32 color = selected ? IM_COL32(255, 199, 80, 255) : IM_COL32(120, 190, 240, 255);
+            draw->AddQuadFilled({x, cy - 6}, {x + 6, cy}, {x, cy + 6}, {x - 6, cy}, color);
+            ImGui::SetCursorScreenPos({x - 7, y + 2});
             ImGui::PushID(static_cast<int>(keyIndex));
-            ImGui::InvisibleButton("Key", {12, row-4});
-            if(ImGui::IsItemActivated()) {
-                document_.selected = static_cast<int>(index);
+            ImGui::InvisibleButton("Key", {14, row - 4});
+            overKey |= ImGui::IsItemHovered();
+            if(ImGui::IsItemActivated() || ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                document_.selected = item.track;
                 document_.key = static_cast<int>(keyIndex);
                 document_.time = key.time;
             }
-            if(ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
-                const float minimum = keyIndex == 0 ? 0 : track.keys[keyIndex-1].time + .0001f;
-                const float maximum = keyIndex+1 == track.keys.size() ? duration : track.keys[keyIndex+1].time - .0001f;
-                key.time = std::clamp(key.time + ImGui::GetIO().MouseDelta.x / width * duration, minimum, maximum);
+            if(ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                const float low = keyIndex == 0 ? 0 : track.keys[keyIndex - 1].time + .0001f;
+                const float high = keyIndex + 1 == track.keys.size() ? duration : track.keys[keyIndex + 1].time - .0001f;
+                key.time = std::clamp(key.time + ImGui::GetIO().MouseDelta.x / width * duration, low, high);
+                document_.time = key.time;
+                document_.preview = true;
                 changed = true;
+            }
+            if(ImGui::BeginPopupContextItem("KeyMenu")) {
+                if(ImGui::MenuItem("キーを削除")) {
+                    deleteTrack = item.track;
+                    deleteKey = static_cast<int>(keyIndex);
+                }
+                ImGui::EndPopup();
             }
             ImGui::PopID();
         }
+        const auto mouse = ImGui::GetIO().MousePos;
+        if(!overKey && ImGui::IsWindowHovered() && mouse.x >= origin.x + labelWidth &&
+            mouse.x <= origin.x + labelWidth + width && mouse.y >= y && mouse.y < y + row &&
+            ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            const float time = toTime(mouse.x);
+            InsertKey(track, time, SampleAnimationTrack(track, time));
+            document_.selected = item.track;
+            document_.time = time;
+            changed = true;
+        }
         ImGui::PopID();
     }
-    const float cursor = origin.x + labelWidth + document_.time / duration * width;
-    draw->AddLine({cursor, origin.y}, {cursor, origin.y + row * (static_cast<float>(clip.tracks.size())+1)}, IM_COL32(255,110,80,255), 2);
-    ImGui::SetCursorScreenPos({origin.x, origin.y + row * (static_cast<float>(clip.tracks.size())+1)});
-    ImGui::Dummy({width+labelWidth, 1});
+    if(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput &&
+        ImGui::IsKeyPressed(ImGuiKey_Delete) && document_.selected >= 0 && document_.selected < static_cast<int>(clip.tracks.size())) {
+        deleteTrack = document_.selected;
+        deleteKey = document_.key;
+    }
+    if(deleteTrack >= 0 && deleteKey >= 0 && deleteKey < static_cast<int>(clip.tracks[deleteTrack].keys.size())) {
+        auto& keys = clip.tracks[deleteTrack].keys;
+        keys.erase(keys.begin() + deleteKey);
+        if(keys.empty()) {
+            // 空trackは既存形式の制約に合わないため、最後のkeyと同時にtrackを除去する。
+            clip.tracks.erase(clip.tracks.begin() + deleteTrack);
+        }
+        document_.key = 0;
+        changed = true;
+    }
+    const float cursor = origin.x + labelWidth + std::clamp(document_.time / duration, 0.0f, 1.0f) * width;
+    draw->AddLine({cursor, origin.y}, {cursor, bottom}, IM_COL32(255, 110, 80, 255), 2);
+    ImGui::SetCursorScreenPos({origin.x, bottom});
+    ImGui::Dummy({labelWidth + width, 2});
     ImGui::EndChild();
+    ImGui::TextDisabled("上の目盛り: スクラブ / 行をダブルクリック: キー追加 / Delete: キー削除");
 }
 void AnimationStudioPanel::DrawCurve(const AnimationTrack& track, float duration) {
     if(track.keys.empty()) {
@@ -521,14 +632,16 @@ void AnimationStudioPanel::DrawCurve(const AnimationTrack& track, float duration
         }
     }
     const ImU32 colors[] = {IM_COL32(245,105,100,255), IM_COL32(100,220,140,255), IM_COL32(110,170,255,255), IM_COL32(220,210,140,255)};
-    for(size_t dimension = 0; dimension < track.keys.front().value.size(); ++dimension) {
+    const size_t dimensions = track.keys.front().value.size();
+    const size_t begin = dimensions > 4 ? static_cast<size_t>(std::clamp(morphChannelStart_, 0, static_cast<int>(dimensions) - 1)) : 0;
+    for(size_t dimension = begin; dimension < (std::min)(dimensions, begin + 4); ++dimension) {
         ImVec2 previous;
         for(int sample = 0; sample <= 160; ++sample) {
             const float amount = static_cast<float>(sample) / 160;
             const auto value = SampleAnimationTrack(track, amount * duration);
             const ImVec2 point{origin.x + amount * size.x, origin.y + size.y - 8 - (value[dimension]-low)/(high-low)*(size.y-16)};
             if(sample > 0) {
-                draw->AddLine(previous, point, colors[dimension], 1.5f);
+                draw->AddLine(previous, point, colors[dimension % 4], 1.5f);
             }
             previous = point;
         }

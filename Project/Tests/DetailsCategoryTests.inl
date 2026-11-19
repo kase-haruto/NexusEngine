@@ -94,6 +94,19 @@ void DetailsCategoryIntegration() {
     assert(override.AppliesTo(12,12) && !override.AppliesTo(13,12) && !override.AppliesTo(11,12));
     std::array<float,4> color{}, pbr{}, emission{}; override.Apply(color,pbr,emission);
     assert(color == override.baseColor && pbr[0] == .7f && pbr[1] == .65f && pbr[2] == 2 && emission[3] == .4f);
+    // 材質OverrideなしでもUVは編集でき、履歴と描画snapshotへ反映される。
+    const PropertyHandle uvScale{id,"PrimitiveRender","uvScale"};
+    const PropertyHandle uvOffset{id,"PrimitiveRender","uvOffset"};
+    const std::array<float,2> tiling{10, 5}, offset{.25f, -.5f};
+    assert(f.properties.PreviewValues(std::vector<PropertyHandle>{uvScale, uvOffset}, std::vector<PropertyValue>{tiling, offset}));
+    f.properties.Commit();
+    assert(f.properties.Undo());
+    assert((std::get<std::array<float,2>>(*f.properties.Read(uvScale)) == std::array<float,2>{1, 1}));
+    assert(f.properties.Redo());
+    assert(!f.properties.Preview(uvScale, std::array<float,2>{std::numeric_limits<float>::infinity(), 1}));
+    f.properties.Cancel();
+    const auto uvScene = RenderSceneExtractor{}.Extract(*f.session.GetLevel()->GetScene(), 1);
+    assert((uvScene && uvScene->primitives[0].uvTransform == std::array<float,4>{10, 5, .25f, -.5f}));
     const auto path = std::filesystem::absolute("Generated/EditorTests/MaterialOverride.level");
     std::filesystem::create_directories(path.parent_path()); assert(f.documents.Save(path));
     assert(!f.properties.IsDirty());
@@ -101,6 +114,8 @@ void DetailsCategoryIntegration() {
     const auto* restored = loaded.FindEntity(id).GetComponent<PrimitiveRenderComponent>();
     assert(restored && restored->material.enabled && restored->material.roughness == .65f && restored->material.metallic == .7f);
     assert(restored->material.normalScale == 2 && restored->material.emissive == override.emissive && restored->material.occlusionStrength == .4f);
+    assert(restored->uvScale == tiling && restored->uvOffset == offset);
+    assert(f.properties.Undo()); // 後続の既存履歴検証へUV編集前の位置を戻す。
     assert(source.materials[0].roughnessFactor == .3f && source.materials[0].normalScale == 1);
     // v7の既存Levelを読む場合はSource材質のままで、Overrideを有効化しない。
     const auto legacyPath = path.parent_path() / "MaterialLegacy.level";

@@ -23,30 +23,34 @@ struct VSOutput
     float2 lightmapUV : TEXCOORD4;
 };
 
-VSOutput main(VSInput input)
+VSOutput main(VSInput input, uint vertex : SV_VertexID)
 {
     VSOutput output;
-    float4 localPosition = float4(input.position, 1.0f);
-    float3 localNormal = input.normal;
-    float3 localTangent = input.tangent.xyz;
+    float3 morphedPosition = input.position;
+    float3 morphedNormal = input.normal;
+    float3 morphedTangent = input.tangent.xyz;
+    ApplyMorph(deformation, vertex, morphedPosition, morphedNormal, morphedTangent);
+    float4 localPosition = float4(morphedPosition, 1.0f);
+    float3 localNormal = morphedNormal;
+    float3 localTangent = morphedTangent;
     if (skinningEnabled != 0)
     {
         const uint4 joints = (uint4)input.jointIndices;
         localPosition =
-            mul(float4(input.position, 1.0f), jointPalette[joints.x]) * input.jointWeights.x +
-            mul(float4(input.position, 1.0f), jointPalette[joints.y]) * input.jointWeights.y +
-            mul(float4(input.position, 1.0f), jointPalette[joints.z]) * input.jointWeights.z +
-            mul(float4(input.position, 1.0f), jointPalette[joints.w]) * input.jointWeights.w;
+            mul(float4(morphedPosition, 1.0f), DeformationJoint(deformation, joints.x)) * input.jointWeights.x +
+            mul(float4(morphedPosition, 1.0f), DeformationJoint(deformation, joints.y)) * input.jointWeights.y +
+            mul(float4(morphedPosition, 1.0f), DeformationJoint(deformation, joints.z)) * input.jointWeights.z +
+            mul(float4(morphedPosition, 1.0f), DeformationJoint(deformation, joints.w)) * input.jointWeights.w;
         localNormal =
-            mul(input.normal, (float3x3)jointPalette[joints.x]) * input.jointWeights.x +
-            mul(input.normal, (float3x3)jointPalette[joints.y]) * input.jointWeights.y +
-            mul(input.normal, (float3x3)jointPalette[joints.z]) * input.jointWeights.z +
-            mul(input.normal, (float3x3)jointPalette[joints.w]) * input.jointWeights.w;
+            mul(morphedNormal, (float3x3)DeformationJoint(deformation, joints.x)) * input.jointWeights.x +
+            mul(morphedNormal, (float3x3)DeformationJoint(deformation, joints.y)) * input.jointWeights.y +
+            mul(morphedNormal, (float3x3)DeformationJoint(deformation, joints.z)) * input.jointWeights.z +
+            mul(morphedNormal, (float3x3)DeformationJoint(deformation, joints.w)) * input.jointWeights.w;
         localTangent =
-            mul(input.tangent.xyz, (float3x3)jointPalette[joints.x]) * input.jointWeights.x +
-            mul(input.tangent.xyz, (float3x3)jointPalette[joints.y]) * input.jointWeights.y +
-            mul(input.tangent.xyz, (float3x3)jointPalette[joints.z]) * input.jointWeights.z +
-            mul(input.tangent.xyz, (float3x3)jointPalette[joints.w]) * input.jointWeights.w;
+            mul(morphedTangent, (float3x3)DeformationJoint(deformation, joints.x)) * input.jointWeights.x +
+            mul(morphedTangent, (float3x3)DeformationJoint(deformation, joints.y)) * input.jointWeights.y +
+            mul(morphedTangent, (float3x3)DeformationJoint(deformation, joints.z)) * input.jointWeights.z +
+            mul(morphedTangent, (float3x3)DeformationJoint(deformation, joints.w)) * input.jointWeights.w;
     }
     output.position = mul(localPosition, worldViewProjection);
     output.worldNormal = normalize(mul(localNormal, (float3x3)worldInverseTranspose));

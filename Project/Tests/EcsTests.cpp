@@ -1,4 +1,4 @@
-// c++
+﻿// c++
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -488,13 +488,33 @@ namespace NexusEngine::Tests {
 } // namespace NexusEngine::Tests
 
 #if defined(NEXUS_ECS_TEST_MAIN)
-namespace NexusEngine::Tests { void RunAnimationSystemTests(); }
+namespace NexusEngine::Tests { void RunAnimationSystemTests(); void RunCurveTests(); void BuildAnimationDemo(const std::filesystem::path&); void RunCurveIpcTests(); int RunCurveIpcChild(const std::string&, const std::filesystem::path&); }
 int main(int argc, char** argv) {
+    if(argc == 3 && std::strcmp(argv[1], "--build-animation-demo") == 0) {
+        NexusEngine::Tests::BuildAnimationDemo(std::filesystem::path(argv[2]));
+        return 0;
+    }
+    if(argc == 4 && std::strcmp(argv[1], "--curve-ipc-child") == 0) {
+        return NexusEngine::Tests::RunCurveIpcChild(argv[2], std::filesystem::path(argv[3]));
+    }
+    if(argc == 2 && std::strcmp(argv[1], "--curve-ipc") == 0) {
+        NexusEngine::Tests::RunCurveIpcTests();
+        return 0;
+    }
+    if(argc == 2 && std::strcmp(argv[1], "--curves") == 0) {
+        NexusEngine::Tests::RunCurveTests();
+        return 0;
+    }
 	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
 	_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     if(argc == 2 && std::strcmp(argv[1], "--animation-system") == 0) {
-        NexusEngine::Tests::RunAnimationSystemTests();
+        try {
+            NexusEngine::Tests::RunAnimationSystemTests();
+        } catch(const std::exception& error) {
+            std::cerr << "Animation-system failed: " << error.what() << std::endl;
+            return 1;
+        }
         return 0;
     }
 	NexusEngine::Tests::RunEcsTests(argc == 2 && std::strcmp(argv[1], "--animation") == 0);

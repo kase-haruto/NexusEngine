@@ -2,6 +2,7 @@
 #include "Foundation/Reflection/ReflectionMarkers.h"
 #include "Graphics/Fog/FogSettings.h"
 NEXUS_REFLECT_COMPONENT(ExponentialHeightFogComponent, "ExponentialHeightFog", "component.heightFog", enabled, density, heightFalloff, heightOffset, startDistance, maxOpacity, cutoffDistance, color, atmosphereContribution)
+NEXUS_COMPONENT_EDITOR(ExponentialHeightFogComponent, "Lighting", "componentBrowser.description.heightFog", "details.Fog")
 namespace NexusEngine {
     struct ExponentialHeightFogComponent {
         bool enabled = true;

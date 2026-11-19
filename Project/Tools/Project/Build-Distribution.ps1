@@ -36,7 +36,10 @@ if($LASTEXITCODE -ne 0) { throw 'Launcher publish failed.' }
 $catalogAddress = if($CatalogUrl) { $CatalogUrl.AbsoluteUri } else { '' }
 $launcherCatalogAddress = if($LauncherCatalogUrl) { $LauncherCatalogUrl.AbsoluteUri } elseif($CatalogUrl) { [uri]::new($CatalogUrl, 'launcher-releases.json').AbsoluteUri } else { '' }
 $launcherSettings = @{catalogUrl=$catalogAddress;catalogFile=$CatalogFile;projectTool='Tools/NexusProjectTool.exe';launcherCatalogUrl=$launcherCatalogAddress;launcherVersion=$LauncherVersion}
-if($LauncherChangesFile) { $launcherSettings.launcherChanges = Get-Content -LiteralPath $LauncherChangesFile -Raw -Encoding UTF8 }
+if($LauncherChangesFile) {
+    # Get-Contentの付加propertyをJSONへ混入させず、変更履歴を純粋な文字列として保存する。
+    $launcherSettings.launcherChanges = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $LauncherChangesFile).Path, [Text.Encoding]::UTF8)
+}
 $launcherSettings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $launcherOutput 'launcher.json') -Encoding UTF8
 $tools = Join-Path $launcherOutput 'Tools'
 New-Item -ItemType Directory -Path $tools | Out-Null

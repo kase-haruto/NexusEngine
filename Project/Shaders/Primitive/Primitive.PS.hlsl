@@ -40,6 +40,8 @@ float3 SurfaceNormal(PSInput input) {
 
 float4 main(PSInput input) : SV_TARGET
 {
+    // 共通PSで適用し、通常描画とMesh Shaderの全材質Mapを揃える。
+    input.texcoord = input.texcoord * uvTransform.xy + uvTransform.zw;
     Texture2D<float4> materialTexture = NexusGetTexture2D(textureIndex);
     SamplerState materialSampler = NexusGetSampler(samplerIndex);
     const float3 lightDirection = SafeNormalize(lightDirectionIntensity.xyz, float3(0, 1, 0));

@@ -1,9 +1,12 @@
-#include "Graphics/Model/ModelLoader.h"
+﻿#include "Graphics/Model/ModelLoader.h"
 #include "Graphics/Model/ModelAssetLibrary.h"
 #include "Graphics/Model/ModelInstance.h"
 #include "Graphics/Renderer/RenderScene.h"
 #include "ThirdParty/nlohmann/json.hpp"
 #include "Runtime/Animation/AnimationDocument.h"
+#include "Runtime/Animation/AnimationClipAssets.h"
+#include "Runtime/Animation/RetargetProfile.h"
+#include "Runtime/Animation/AnimationPoseAssets.h"
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -57,6 +60,31 @@ void RunAnimationAssetTests(const char* externalModel) {
     auto loaded = ModelLoader{}.LoadGltf(folder / "multi.gltf");
     RequireAnimation(loaded);
     ExpectAnimation(loaded->animations.size() == 3, "Clip order/count changed.");
+    ExpectAnimation(loaded->meshes[0].morphTargetCount == 1 && !loaded->meshes[0].morphDeltas.empty(), "Morph deltas were not imported");
+    ModelInstance morphPose;
+    RequireAnimation(morphPose.Initialize(*loaded));
+    RequireAnimation(morphPose.Sample(2, 2, false));
+    ExpectAnimation(std::abs(morphPose.GetMorphWeights(0).at(0) - 2) < 1e-5f, "Morph weights were not evaluated");
+    ModelAssetData morphNumeric;
+    ModelNodeAssetData morphNode;
+    morphNode.morphWeights = {.2f, .4f};
+    morphNumeric.nodes.push_back(morphNode);
+    AnimationClip morphClip;
+    morphClip.duration = 1;
+    NodeAnimationChannel morphChannel;
+    morphChannel.weights = {{0, {0, .5f}, {}, {}}, {1, {1, 1.5f}, {}, {}}};
+    morphClip.channels.push_back(morphChannel);
+    morphNumeric.animations.push_back(morphClip);
+    ModelInstance morphMixed;
+    RequireAnimation(morphMixed.Initialize(morphNumeric));
+    AnimationPoseSample morphSample{"", 0, .5f, .5f, false};
+    morphSample.mode = PoseBlendMode::Override;
+    RequireAnimation(morphMixed.SampleLayers({&morphSample, 1}));
+    ExpectAnimation(std::abs(morphMixed.GetMorphWeights(0)[0] - .35f) < 1e-5f, "Morph override blend failed");
+    morphSample.mode = PoseBlendMode::Additive;
+    RequireAnimation(morphMixed.SampleLayers({&morphSample, 1}));
+    ExpectAnimation(std::abs(morphMixed.GetMorphWeights(0)[1] - .7f) < 1e-5f, "Morph additive blend failed");
+
     ExpectAnimation(loaded->animations[2].hasMorphAnimation && loaded->animations[2].duration == 5.5f,
         "Morph-only clip lost metadata/duration.");
     {
@@ -66,6 +94,15 @@ void RunAnimationAssetTests(const char* externalModel) {
     ModelAssetLibrary library(folder, ModelAssetData{});
     auto animation = library.Animation("walk.nxanim");
     RequireAnimation(animation);
+    AnimationClipAssets documents;
+    documents.SetRoot(folder);
+    auto legacyDocument = documents.Load("walk.nxanim");
+    RequireAnimation(legacyDocument);
+    ExpectAnimation((*legacyDocument)->duration == (*animation)->clip.duration && (*legacyDocument)->duration > 1,
+        "Legacy missing duration was not resolved from source times.");
+    auto aliasedDocument = documents.Load("./WALK.NXANIM");
+    RequireAnimation(aliasedDocument);
+    ExpectAnimation(*aliasedDocument == *legacyDocument, "Clip path aliases created separate snapshots.");
     auto same = library.Animation("walk.nxanim");
     RequireAnimation(same);
     ExpectAnimation(*same == *animation && (*animation)->clip.name == "Walk", "Animation asset cache failed.");
@@ -74,6 +111,54 @@ void RunAnimationAssetTests(const char* externalModel) {
     auto range = library.Resolve(request);
     RequireAnimation(range);
     ExpectAnimation(library.MatchesRequests(std::span(&request, 1)), "Prepared animation request did not match.");
+    {
+        auto differentRest = json;
+        const auto node = differentRest["animations"][0]["channels"][0]["target"]["node"].get<size_t>();
+        differentRest["nodes"][node].erase("matrix");
+        differentRest["nodes"][node]["translation"] = {999, 0, 0};
+        std::ofstream output(folder / "different-rest.gltf");
+        output << differentRest.dump(2);
+        output.close();
+        auto incompatibleRequest = request;
+        incompatibleRequest.mesh = "different-rest.gltf";
+        const auto rejected = library.Resolve(incompatibleRequest);
+        ExpectAnimation(!rejected && rejected.error().GetMessageText().find("rest pose") != std::string::npos,
+            "Same hierarchy with incompatible rest pose was accepted.");
+        auto targetModel = library.Model("different-rest.gltf");
+        RequireAnimation(targetModel);
+        auto profile = SuggestRetargetProfile(*loaded, **targetModel);
+        profile.sourceModel = "multi.gltf";
+        profile.targetModel = "different-rest.gltf";
+        auto retargeted = RetargetAnimation(**animation, **targetModel, profile);
+        RequireAnimation(retargeted);
+        for(size_t channel = 0; channel < retargeted->channels.size(); ++channel) {
+            const auto& sourceChannel = (*animation)->clip.channels[channel];
+            const auto& result = retargeted->channels[channel];
+            if(!result.translations.empty()) {
+                const auto expected = sourceChannel.translations[0].value +
+                    (*targetModel)->nodes[result.nodeIndex].localTransform.translation -
+                    (*animation)->sourceRestPose[sourceChannel.nodeIndex].translation;
+                ExpectAnimation((result.translations[0].value - expected).Length() < .001f, "Retarget rest-relative translation differs.");
+            }
+        }
+        RequireAnimation(SaveRetargetProfile(folder / "rig.nxretarget", profile));
+        RequireAnimation(LoadRetargetProfile(folder / "rig.nxretarget"));
+        AnimationClipDocument converted;
+        converted.kind = AnimationClipKind::Skeletal;
+        converted.duration = (*animation)->clip.duration;
+        converted.source = "multi.gltf";
+        converted.clip = "Walk";
+        converted.retargetProfile = "rig.nxretarget";
+        RequireAnimation(SaveAnimationDocument(folder / "retargeted.nxanim", converted));
+        auto profileRequest = incompatibleRequest;
+        profileRequest.animationAsset = "retargeted.nxanim";
+        profileRequest.blendAnimationAsset.clear();
+        RequireAnimation(library.Resolve(profileRequest));
+        profile.targetSignature = "changed";
+        ExpectAnimation(!RetargetAnimation(**animation, **targetModel, profile), "Stale retarget skeleton accepted.");
+        profile.joints.push_back(profile.joints.front());
+        ExpectAnimation(!ValidateRetargetProfile(profile), "Duplicate retarget mapping accepted.");
+    }
     PrimitiveRenderItem item;
     item.animation = PrimitiveRenderItem::AnimationSample{};
     item.animation->asset = request.animationAsset;
@@ -153,6 +238,69 @@ void RunAnimationAssetTests(const char* externalModel) {
     ModelInstance layeredPose;
     RequireAnimation(layeredPose.Initialize(library.Snapshot()));
     RequireAnimation(layeredPose.SampleLayers(layered.animation->layers));
+    // ordered layerはbase全体へ正規化せず、mask内だけをoverride/additiveする。
+    ModelAssetData layerFixture;
+    layerFixture.nodes.resize(2);
+    layerFixture.nodes[0].name = "Root";
+    layerFixture.nodes[1].name = "Arm";
+    layerFixture.nodes[1].parentIndex = 0;
+    AnimationClip baseClip, overlayClip;
+    baseClip.duration = overlayClip.duration = 1;
+    for(uint32_t fixtureNodeIndex = 0; fixtureNodeIndex < 2; ++fixtureNodeIndex) {
+        NodeAnimationChannel baseChannel, overlayChannel;
+        baseChannel.nodeIndex = overlayChannel.nodeIndex = fixtureNodeIndex;
+        baseChannel.translations = {{0, {2, 0, 0}}};
+        overlayChannel.translations = {{0, {10, 0, 0}}};
+        baseClip.channels.push_back(baseChannel);
+        overlayClip.channels.push_back(overlayChannel);
+    }
+    layerFixture.animations = {baseClip, overlayClip};
+    ModelInstance maskedPose;
+    RequireAnimation(maskedPose.Initialize(layerFixture));
+    AnimationPoseSample baseSample{"", 0, 0, 1, false}, overlaySample{"", 1, 0, .5f, false};
+    overlaySample.mode = PoseBlendMode::Override;
+    overlaySample.masked = true;
+    overlaySample.maskNodes = {1};
+    std::vector<AnimationPoseSample> orderedSamples{baseSample, overlaySample};
+    RequireAnimation(maskedPose.SampleLayers(orderedSamples));
+    ExpectAnimation(maskedPose.GetLocalTransforms()[0].translation.x == 2 &&
+        maskedPose.GetLocalTransforms()[1].translation.x == 6, "Override layer ignored its weight/mask.");
+    orderedSamples[1].mode = PoseBlendMode::Additive;
+    RequireAnimation(maskedPose.SampleLayers(orderedSamples));
+    ExpectAnimation(maskedPose.GetLocalTransforms()[1].translation.x == 7, "Additive layer did not use rest-relative delta.");
+    RequireAnimation(maskedPose.SampleLayers(orderedSamples));
+    ExpectAnimation(maskedPose.GetLocalTransforms()[1].translation.x == 7, "Additive layer accumulated previous frame.");
+    ModelAssetData rootFixture;
+    rootFixture.nodes.resize(1);
+    rootFixture.nodes[0].name = "Root";
+    AnimationClip travel;
+    travel.duration = 1;
+    NodeAnimationChannel travelChannel;
+    travelChannel.nodeIndex = 0;
+    travelChannel.translations = {{0, {0, 0, 0}}, {1, {1, 2, 0}}};
+    travel.channels = {travelChannel};
+    rootFixture.animations = {travel};
+    auto rootDelta = ExtractRootMotion(rootFixture, 0, 0, 2.5, true);
+    RequireAnimation(rootDelta);
+    ExpectAnimation(std::abs(rootDelta->translation.x - 2.5f) < 1e-5f, "Root Motion multi-loop translation differs.");
+    auto reverseDelta = ExtractRootMotion(rootFixture, 0, 2.5, .5, true);
+    RequireAnimation(reverseDelta);
+    ExpectAnimation(std::abs(reverseDelta->translation.x + 2) < 1e-5f, "Reverse Root Motion differs.");
+    ModelInstance rootPose;
+    RequireAnimation(rootPose.Initialize(rootFixture));
+    AnimationPoseSample movingRoot{"", 0, .75f, 1, false};
+    movingRoot.rootMotionNode = 0;
+    movingRoot.rootMotionAxes = {1, 0, 1};
+    movingRoot.removeRootRotation = true;
+    RequireAnimation(rootPose.SampleLayers(std::span(&movingRoot, 1)));
+    ExpectAnimation(std::abs(rootPose.GetLocalTransforms()[0].translation.x) < 1e-5f &&
+        std::abs(rootPose.GetLocalTransforms()[0].translation.y - 1.5f) < 1e-5f, "Root Motion was not removed only on selected axes.");
+    rootFixture.animations[0].channels[0].translations = {{0, {}}, {1, {0, 0, 1}}};
+    rootFixture.animations[0].channels[0].rotations = {{0, {}}, {1, Quaternion::FromEulerRadians({0, 1.57079632679f, 0})}};
+    auto turning = ExtractRootMotion(rootFixture, 0, 0, 2, true);
+    RequireAnimation(turning);
+    ExpectAnimation(std::abs(turning->translation.x - 1) < 1e-4f && std::abs(turning->translation.z - 1) < 1e-4f,
+        "Root Motion cycles did not compose rotation and translation.");
     // 別モデルに属するアセットを、対応する階層を持つモデルへ再バインドする。
     json["animations"] = nlohmann::json::array();
     {

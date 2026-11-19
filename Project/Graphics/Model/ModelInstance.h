@@ -40,16 +40,22 @@ namespace NexusEngine {
 			uint32_t second, float secondTime, bool secondLoop, float weight) noexcept;
 
         [[nodiscard]] Result<void> SampleLayers(std::span<const AnimationPoseSample> layers) noexcept;
+        /** \brief 評価済みlocal poseを参照する。snapshot取得時は呼出側で値をコピーする。 */
+        const std::vector<ModelNodeTransform>& GetLocalTransforms() const noexcept;
+        const std::vector<float>& GetMorphWeights(uint32_t node) const noexcept;
 	private:
 		void EvaluateLocalPose(uint32_t clip, float time, bool loop, std::vector<ModelNodeTransform>& transforms) noexcept;
 		void UpdateMatrices() noexcept;
+        void StripRootMotion(std::span<const AnimationPoseSample> layers) noexcept;
 		void EvaluatePose() noexcept;
+        void EvaluateMorphPose(uint32_t clip, float time, bool loop, std::vector<std::vector<float>>& weights) noexcept;
 
 		const ModelAssetData* resource_ = nullptr; //< Asset側に所有権を持たない参照
 		std::vector<ModelNodeTransform> blendTransforms_; //< 2番目のクリップ用作業領域
 		std::vector<ModelNodeTransform> localTransforms_; //< 現在のnode local姿勢
 		std::vector<Matrix4x4> nodeWorldTransforms_; //< hierarchy解決済みModel空間行列
 		std::vector<std::vector<Matrix4x4>> skinPalettes_; //< Skinごとの現在Joint Palette
+        std::vector<std::vector<float>> morphWeights_, blendMorphWeights_;
 		uint32_t animationIndex_ = UINT32_MAX; //< 現在再生中のClip。UINT32_MAXはbind pose
 		float animationTime_ = 0.0f; //< Clip内の現在時刻（秒）
 		bool loop_ = true;

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
@@ -11,6 +11,18 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="Nexus.Common.props" />
   <ItemGroup>
+    <ClCompile Include="..\Editor\Gui\Widgets\SourceAttachment.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserMutation.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentMutationService.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserImport.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentDragPayload.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentImportService.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserLibrary.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentAssetInspector.cpp" />
+    <ClCompile Include="..\Editor\Core\EditorWorkspaceContent.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentBrowserServices.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentDependencyGraph.cpp" />
+    <ClCompile Include="..\Editor\Services\SelectionService.cpp" />
     <ClCompile Include="..\Editor\Services\StandaloneSession.cpp" />
     <ClCompile Include="..\Editor\Services\StandaloneCommands.cpp" />
     <ClCompile Include="..\Editor\Services\ManagedReloadCommands.cpp" />
@@ -25,6 +37,9 @@
     <ClCompile Include="..\Editor\Gui\EditorChrome.cpp" />
     <ClCompile Include="..\Editor\Gui\MainMenuBar.cpp" />
     <ClCompile Include="..\Editor\Gui\Panels\DetailsPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\ComponentBrowser\ComponentBrowserModel.cpp" />
+    <ClCompile Include="..\Editor\Gui\ComponentBrowser\AddComponentWindow.cpp" />
+    <ClCompile Include="..\Editor\Gui\ComponentBrowser\RemoveComponentMenu.cpp" />
     <ClCompile Include="..\Editor\Gui\Panels\OutlinerPanel.cpp" />
     <ClCompile Include="..\Editor\Gui\Panels\PanelRegistry.cpp" />
     <ClCompile Include="..\Editor\Gui\Panels\UtilityPanels.cpp" />
@@ -35,6 +50,7 @@
     <ClCompile Include="..\Editor\Gui\PropertyDrawerRegistry.cpp" />
     <ClCompile Include="..\Editor\Gui\ReflectedPropertyEditor.cpp" />
     <ClCompile Include="..\Editor\Services\CollisionLayerEditor.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\InputMapPanel.cpp" />
     <ClCompile Include="..\Editor\Gui\ViewportTools.cpp" />
     <ClCompile Include="..\Editor\Gui\Widgets\AssetPropertyWidget.cpp" />
     <ClCompile Include="..\Editor\Gui\Widgets\PropertyWidgets.cpp" />
@@ -43,6 +59,22 @@
     <ClCompile Include="..\Editor\ImGui\ImGuiStyle.cpp" />
     <ClCompile Include="..\Editor\Runtime\ViewportSession.cpp" />
     <ClCompile Include="..\Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="..\Platform\FileSystem\DirectoryChangeWatcher.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentLibrary.cpp" />
+    <ClCompile Include="..\Editor\Services\AssetDocumentRegistry.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentIndex.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentMetadata.cpp" />
+
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserContextActions.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserNavigation.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserPanel.cpp" />
+    <ClCompile Include="..\Editor\Gui\ContentBrowser\ContentBrowserSourceCreation.cpp" />
+    <ClCompile Include="..\Editor\Gui\Icons\EditorIcons.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentBrowserActions.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentBrowserState.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentFileTransaction.cpp" />
+    <ClCompile Include="..\Editor\Services\ContentItemRegistry.cpp" />
+
     <ClCompile Include="..\Editor\Services\SourceFileActions.cpp" />
     <ClCompile Include="..\Editor\Services\EditorDocumentService.cpp" />
     <ClCompile Include="..\Editor\Services\EditorSettings.cpp" />
@@ -77,4 +109,13 @@
     <ClCompile Include="..\Editor\Gui\Panels\AnimationStudioPanel.cpp" />
   </ItemGroup>
 <ItemGroup><ClCompile Include="..\Editor\Gui\Nodes\NodeEditor.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Editor\Services\CurveEditDocument.cpp" />
+    <ClCompile Include="..\Editor\Gui\Panels\CurveEditorPanel.cpp" />
+  </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Editor\Gui\Properties\AnimationPage.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Editor\Services\AnimationCurvePreview.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Editor\Services\AnimationRigDocument.cpp" /><ClCompile Include="..\Editor\Gui\Panels\AnimationRigPanel.cpp" /></ItemGroup>
 </Project>

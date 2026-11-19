@@ -1,0 +1,18 @@
+# Content Browserからソースを作成する
+
+ゲームプロジェクトをEditorで開き、Content Browserの空白部分・フォルダ・ソースを右クリックして「作成」を開きます。Assets表示からも同じ作成ダイアログを利用できます。
+
+- C# スクリプト: ScriptBehaviourを継承する.csとLifecycleの空実装を生成します。
+- C++ Behaviour: Entity Behaviourの.h/.cppと、既存Native Moduleへの登録処理を生成します。
+
+ダイアログで所属モジュールとクラス名を選びます。クラス名は英字から始まる英数字・underscoreで指定し、拡張子は付けません。保存先は表示されたモジュール直下です。Source内で右クリックした場合は、そのフォルダを所有するモジュールを初期選択します。
+
+対応する言語のモジュールがない場合は「Project画面を開く」から追加します。Sourceファイルはゲームプロジェクトのビルド対象へ所属する必要があるため、Engine単体を開いた状態では作成できません。
+
+「作成」を押すと既存Add-GameSource処理を非同期で実行します。成功するとSourceタブへ切り替えて生成先を表示し、一覧を更新します。「作成後にコードエディタで開く」が有効なら、既存のSourceCodeEditor設定でファイルを開きます。既存ファイルの上書きや、Sourceファイルへの自動アタッチは行いません。
+
+作成後はBuildしてください。C#はReload C#、C++はEditorを再起動して新しい型を読み込み、DetailsやSourceのアタッチ操作からEntityへ追加します。Play・別Window実行・ProjectのBuildやReload中は新規作成を抑止します。
+
+生成失敗はBrowserと既存のProjectログへ表示します。C++登録ファイルが手動変更されているなど、既存generatorが安全に拡張できない場合はそのgeneratorの検証結果に従い、部分的な登録や既存コードの置換を行いません。
+
+検証はContentSourceCreationIntegration（右クリック、両言語の作成ダイアログ、Module選択、一覧更新、Open callback、重複・不正名・busy拒否、再構成時のcallback寿命）とHybridGeneration.Tests.ps1（実C#/C++生成、登録、既存コードの保護）で行います。

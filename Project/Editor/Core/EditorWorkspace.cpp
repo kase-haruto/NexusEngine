@@ -1,4 +1,6 @@
+#include "Editor/Gui/Panels/InputMapPanel.h"
 #include "EditorWorkspace.h"
+#include "Editor/Services/ContentBrowserServices.h"
 #include "Editor/ImGui/ImGuiStyle.h"
 #include "Editor/Gui/EditorChrome.h"
 #include "Editor/Gui/Widgets/EditorIconButton.h"
@@ -11,6 +13,11 @@
 #include "Foundation/Logging/Logger.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include "ThirdParty/imgui/imgui.h"
+#include "Editor/Gui/Panels/CurveEditorPanel.h"
+#include "Editor/Gui/Panels/AnimationRigPanel.h"
+#include "Editor/Services/AnimationCurvePreview.h"
+#include "Runtime/Scene/Components/SkeletalAnimationComponent.h"
+#include "Platform/FileSystem/AtomicFile.h"
 #include "Runtime/Reflection/ReflectedInspector.h"
 #include "Platform/Development/LiveCodingAgent.h"
 #include "Tools/Project/SourceCodeEditor.h"
@@ -22,6 +29,18 @@
 #include <Windows.h>
 
 namespace NexusEngine {
+SourceCreationService& EditorWorkspace::SourceCreation() {
+    if(!sourceCreation_) {
+        sourceCreation_ = std::make_shared<SourceCreationService>();
+    }
+    return *sourceCreation_;
+}
+CurveEditDocument& EditorWorkspace::CurveDocument() noexcept {
+    return curveDocument_;
+}
+AnimationRigDocument& EditorWorkspace::AnimationRig() noexcept {
+    return rigDocument_;
+}
 EditorWorkspace::EditorWorkspace(EditorSession& session)
     : session_(session), properties_(types_), sceneEdits_(session, properties_), documents_(session, properties_), viewportTools_(session, properties_) {}
 AnimationStudioDocument& EditorWorkspace::AnimationStudio() noexcept {
@@ -31,6 +50,8 @@ EditorWorkspace::~EditorWorkspace() noexcept {
     animationStudio_.StopPreview(session_);
     // 部分初期化時も、Panel/Factoryが借用するAsset・Viewport・編集サービスより先に破棄する。
     reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear(); panels_.Clear(); properties_.Reset(nullptr);
+    sourceCreation_.reset();
+    contentBrowser_.reset();
     if(logSink_) Logger::Get().RemoveSink(logSink_);
 }
 Result<void> EditorWorkspace::ReloadCSharp(const std::filesystem::path& assembly, ManagedReloadState* outcome) {
@@ -74,6 +95,35 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     properties_.Reset(session_.GetLevel()); generation_ = session_.Generation();
     assets_ = std::make_unique<AssetCatalog>(root / std::filesystem::path{ConvertString(settings_.project.assetPath)});
     animationStudio_.Initialize(assets_->Root());
+    curveDocument_.Initialize(assets_->Root());
+    ConnectAnimationCurvePreview(curveDocument_, animationStudio_, session_);
+    curveDocument_.changed = [this](const std::string& reference, std::shared_ptr<const FloatCurve> curve) {
+        if(!curve && session_.GetLevel()) {
+            // mini previewの保存済みcacheも保存/再読込で失効させる。draftは編集Worldへ適用しない。
+            session_.GetLevel()->Animations().Curves().RemoveOverride(reference, true);
+        }
+        // 編集Worldにはoverrideを入れない。previewの寿命はsessionが所有する。
+        if(session_.HasAnimationPreview() || session_.IsPlaying()) {
+            if(auto* level = session_.GetPreviewLevel()) {
+                if(curve) {
+                    Report(level->Animations().Curves().Override(reference, *curve));
+                } else {
+                    level->Animations().Curves().RemoveOverride(reference, true);
+                }
+            }
+        }
+    };
+    panels_.RegisterFactory("CurveEditor", "panel.curveEditor", [this] {
+        return std::make_unique<CurveEditorPanel>(curveDocument_, assets_->Root());
+    }, false);
+    commands_.Register("curve.open", {[this] { panels_.Open("CurveEditor"); }, {}});
+    menu_.RegisterTool({"panel.curveEditor", "curve.open"});
+    rigDocument_.Initialize(assets_->Root());
+    panels_.RegisterFactory("AnimationRig", "panel.animationRig", [this] {
+        return std::make_unique<AnimationRigPanel>(rigDocument_, assets_->Root());
+    }, false);
+    commands_.Register("animation.rig.open", {[this] { panels_.Open("AnimationRig"); }, {}});
+    menu_.RegisterTool({"panel.animationRig", "animation.rig.open"});
     if(session_.GetLevel()) {
         session_.GetLevel()->Animations().SetRoot(assets_->Root());
     }
@@ -81,18 +131,105 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
         return std::make_unique<AnimationStudioPanel>(animationStudio_);
     }, false);
     commands_.Register("animation.open", {[this] { panels_.Open("AnimationStudio"); }, {}});
-    menu_.RegisterTool({"animation.open", "panel.animationStudio"});
+    menu_.RegisterTool({"panel.animationStudio", "animation.open"});
+    for(const auto* type : {"KeyframeAnimation", "SkeletalAnimation", "CurveBinding"}) {
+        const std::string id = type;
+        const std::string curveProperty = id == "CurveBinding" ? "curveAsset" : "speedCurveAsset";
+        commands_.Register("curve.editSelection." + id, {[this, id, curveProperty] {
+            const auto value = properties_.Read({session_.GetSelection(), id, curveProperty, {}});
+            if(value && std::holds_alternative<std::string>(*value)) {
+                auto path = ResolveFileWithinRoot(assets_->Root(), std::get<std::string>(*value));
+                if(path) {
+                    pendingCurve_ = *path;
+                }
+            }
+            panels_.Open("CurveEditor");
+        }, {}});
+        commands_.Register("curve.newSelection." + id, {[this, id, curveProperty] {
+            panels_.Open("CurveEditor");
+            if(curveDocument_.IsDirty()) {
+                notifications_.Push("編集中のCurveを保存または破棄してから新規作成してください。", true);
+                return;
+            }
+            std::string reference;
+            for(size_t index = 1; index < 10000; ++index) {
+                reference = "Curves/Curve" + std::to_string(index) + ".curve";
+                auto path = ResolveFileWithinRoot(assets_->Root(), reference);
+                if(path && !std::filesystem::exists(*path)) {
+                    break;
+                }
+                reference.clear();
+            }
+            if(reference.empty()) {
+                return;
+            }
+            curveDocument_.New();
+            auto saved = curveDocument_.Save(reference);
+            Report(saved);
+            if(saved) {
+                const PropertyHandle handle{session_.GetSelection(), id, curveProperty, {}};
+                properties_.Begin(handle);
+                if(!properties_.Preview(handle, curveDocument_.AssetReference())) {
+                    properties_.Cancel();
+                }
+                properties_.Commit();
+            }
+        }, {}});
+        commands_.Register("animation.previewSelection." + id, {[this, id] {
+            panels_.Open("AnimationStudio");
+            if(animationStudio_.dirty) {
+                notifications_.Push("編集中のアニメーションを保存または破棄してからプレビューしてください。", true);
+                return;
+            }
+            const auto value = properties_.Read({session_.GetSelection(), id, "clipAsset", {}});
+            if(value && std::holds_alternative<std::string>(*value)) {
+                auto path = ResolveFileWithinRoot(assets_->Root(), std::get<std::string>(*value));
+                if(path) {
+                    auto opened = animationStudio_.Open(*path);
+                    Report(opened);
+                    if(opened) {
+                        animationStudio_.preview = true;
+                    }
+                }
+            }
+        }, {}});
+    }
+    commands_.Register("animation.previewCrossfade.SkeletalAnimation", {[this] {
+        auto started = session_.BeginAnimationPreview();
+        Report(started);
+        if(!started) {
+            return;
+        }
+        auto target = session_.GetPreviewLevel()->FindEntity(session_.GetSelection());
+        if(auto* component = target.GetComponent<SkeletalAnimationComponent>()) {
+            component->CrossFade(component->blendClipAsset, component->crossfadeDuration, component->blendSpeed, component->blendLoop);
+            animationStudio_.preview = false;
+            componentPreview_ = true;
+        }
+    }, {}});
+    commands_.Register("animation.stopComponentPreview", {[this] {
+        componentPreview_ = false;
+        animationStudio_.StopPreview(session_);
+    }, {}});
+    menu_.RegisterTool({"animation.stopPreview", "animation.stopComponentPreview"});
     levels_ = std::make_unique<AssetCatalog>(project ? project->Levels() : assets_->Root() / "Levels");
     sources_ = std::make_unique<AssetCatalog>(project ? project->Source() : root / "Source");
     logs_ = std::make_shared<BufferedLogBuffer>();
     auto sink = std::make_unique<BufferedLogSink>(logs_); logSink_ = sink.get();
     if(!Logger::Get().AddSink(std::move(sink))) logSink_ = nullptr;
     panels_.RegisterFactory("Outliner", "panel.outliner", [] { return std::make_unique<OutlinerPanel>(); });
-    panels_.RegisterFactory("Details", "panel.details", [this] { return std::make_unique<DetailsPanel>(categories_); });
+    panels_.RegisterFactory("Details", "panel.details", [this] { return std::make_unique<DetailsPanel>(categories_, &settings_); });
     panels_.RegisterFactory("CollisionLayers", "physics.settings", [this] {
         return std::make_unique<CollisionLayersPanel>(collisionLayers_);
     }, false);
     commands_.Register("physics.open", {[this] { panels_.Open("CollisionLayers"); }, {}});
+    const auto inputMapFile = (project ? project->Config() : std::filesystem::absolute(root) / "Config") / "InputMap.settings";
+    Report(session_.SetInputConfiguration(inputMapFile));
+    panels_.RegisterFactory("InputMap", "inputMap.title", [inputMapFile] {
+        return std::make_unique<InputMapPanel>(inputMapFile);
+    }, false);
+    commands_.Register("inputMap.open", {[this] { panels_.Open("InputMap"); }, {}});
+    menu_.RegisterTool({"inputMap.title", "inputMap.open"});
     panels_.RegisterFactory("Viewport", "panel.viewport", [this] { return std::make_unique<ViewportPanel>(viewport_, viewportTools_, logs_); }, settings_.editor.viewport);
     panels_.RegisterFactory("OutputLog", "panel.log", [this] { return std::make_unique<OutputLogPanel>(logs_); });
     panels_.RegisterFactory("PostProcessGraph", "panel.postProcessGraph", [this] { return std::make_unique<PostProcessGraphPanel>(renderGraph_); }, false);
@@ -102,17 +239,37 @@ void EditorWorkspace::Initialize(const std::filesystem::path& root, const std::v
     panels_.RegisterFactory("EditorIconGuide", "help.iconGuide", [iconGuide] {
         return std::make_unique<EditorIconGuidePanel>(iconGuide);
     }, false);
-    panels_.RegisterFactory("ContentBrowser", "panel.content", [this] {
-        return std::make_unique<ContentBrowserPanel>(*assets_, [this](const auto& path) {
-            if((path.extension() == ".json" || path.extension() == ".level") && path.parent_path() == levels_->Root()) OpenLevel(path);
-            else if(path.extension() == ".nxanim" || path.extension() == ".nxcontroller" || path.extension() == ".nxtimeline") {
-                animationStudio_.pendingOpen = path;
-                panels_.Open("AnimationStudio");
-            }
-            else if(SourceFileActions::Contains(sources_->Root(), path)) Report(SourceCodeEditor::OpenFile(path));
-            else notifications_.Push(AssetCatalog::Utf8(path));
-        }, sources_.get());
-    });
+    InitializeContentServices(root, engineRoot, project);
+    for (int index = 1; index <= 4; ++index) {
+        const auto browserId = index == 1 ? std::string("ContentBrowser") : "ContentBrowser" + std::to_string(index);
+        const auto title = index == 1 ? std::string("panel.content") : "panel.content" + std::to_string(index);
+        panels_.RegisterFactory(
+            browserId, title,
+            [this, browserId] {
+                return std::make_unique<ContentBrowserPanel>(
+                    *assets_,
+                    [this](const auto &path) {
+                        if ((path.extension() == ".json" || path.extension() == ".level") &&
+                            path.parent_path() == levels_->Root()) {
+                            OpenLevel(path);
+                        } else if (path.extension() == ".nxanim" || path.extension() == ".nxcontroller" ||
+                                   path.extension() == ".nxtimeline") {
+                            animationStudio_.pendingOpen = path;
+                            panels_.Open("AnimationStudio");
+                        } else if (path.extension() == ".curve") {
+                            // panel生成前でもdocument交換を保留し、未保存確認を経由する。
+                            pendingCurve_ = path;
+                            panels_.Open("CurveEditor");
+                        } else if (SourceFileActions::Contains(sources_->Root(), path)) {
+                            Report(SourceCodeEditor::OpenFile(path));
+                        } else {
+                            notifications_.Push(AssetCatalog::Utf8(path));
+                        }
+                    },
+                    sources_.get(), &SourceCreation(), &settings_, levels_.get(), contentBrowser_, browserId);
+            },
+            index == 1);
+    }
     panels_.RegisterFactory("Preferences", "edit.preferences", [this] {
         return std::make_unique<PreferencesPanel>(settings_, [this] {
             settingsChanged_ = true;
@@ -183,17 +340,33 @@ void EditorWorkspace::OpenLevel(const std::filesystem::path& path) {
     if(auto* document = session_.GetLevelDocument(); document && document->GetFilePath() == path) RememberLevel(path);
 }
 void EditorWorkspace::RememberLevel(const std::filesystem::path& path) {
+    // 保存・作成を通知したときだけ候補を無効化する。Level一覧の定期走査は行わない。
+    if(levels_) {
+        levels_->Refresh();
+    }
     auto value = AssetCatalog::Utf8(path); std::erase(recent_, value); recent_.insert(recent_.begin(), value);
     if(recent_.size() > 10) recent_.resize(10);
     settings_.user.recentLevels = recent_;
     if(!settings_.SaveUser()) notifications_.Push(text_.Text("settings.saveFailed"), true);
 }
 void EditorWorkspace::RequestExit() {
+    if(curveDocument_.IsDirty() && !curveExitApproved_) {
+        curveExitRequested_ = true;
+        panels_.Open("CurveEditor");
+        return;
+    }
+    if(rigDocument_.IsDirty() && !rigExitApproved_) {
+        rigExitRequested_ = true;
+        panels_.Open("AnimationRig");
+        return;
+    }
     if(animationStudio_.dirty) {
         animationStudio_.exitRequested = true;
         panels_.Open("AnimationStudio");
         return;
     }
+    curveExitApproved_ = false;
+    rigExitApproved_ = false;
     session_.StopPlay(); documents_.Request(EditorDocumentService::Action::Exit);
 }
 void EditorWorkspace::RegisterToolbar() {
@@ -247,19 +420,33 @@ void EditorWorkspace::RegisterCommands() {
     commands_.Register("file.saveAs", {[this] { fileOperation_ = "saveAs"; filePath_.fill(0); }, editing});
     commands_.Register("file.exit", {[this] { RequestExit(); }, {}});
     commands_.Register("edit.undo", {[this] {
+        if(curveDocument_.focused) {
+            curveDocument_.Undo();
+            return;
+        }
         const bool success = collisionLayers_.focused ? collisionLayers_.Undo() : properties_.Undo();
         if(!success) {
             notifications_.Push(text_.Text("edit.rejected"), true);
         }
     }, [this, editing] {
+        if(curveDocument_.focused) {
+            return curveDocument_.CanUndo();
+        }
         return editing() && (collisionLayers_.focused ? collisionLayers_.CanUndo() : properties_.CanUndo());
     }});
     commands_.Register("edit.redo", {[this] {
+        if(curveDocument_.focused) {
+            curveDocument_.Redo();
+            return;
+        }
         const bool success = collisionLayers_.focused ? collisionLayers_.Redo() : properties_.Redo();
         if(!success) {
             notifications_.Push(text_.Text("edit.rejected"), true);
         }
     }, [this, editing] {
+        if(curveDocument_.focused) {
+            return curveDocument_.CanRedo();
+        }
         return editing() && (collisionLayers_.focused ? collisionLayers_.CanRedo() : properties_.CanRedo());
     }});
     commands_.Register("edit.delete", {[this, sceneResult] { sceneResult(sceneEdits_.DeleteSelection()); },
@@ -398,21 +585,117 @@ void EditorWorkspace::Draw() {
         toolbarLayoutRevision_ = toolbar_.LayoutRevision();
     }
     layout_.Draw();
-    const EditorContext context{session_, session_.Selection(), properties_, types_, drawers_, text_, commands_, sceneEdits_, &assetEditor_, sources_.get(), &collisionLayers_};
+    const EditorContext context{
+        session_,        session_.Selection(), properties_,   types_,         drawers_,          text_,
+        commands_,       sceneEdits_,          &assetEditor_, sources_.get(), &collisionLayers_, assets_.get(),
+        &curveDocument_, contentBrowser_.get()};
     // Panelを閉じた後にProject履歴へUndoを送り続けないよう、実際のfocusを毎frame確認する。
     collisionLayers_.focused = false;
     viewport_.SetCameraPreviewVisible(false);
     animationStudio_.focused = false;
+    curveDocument_.focused = false;
     renderGraph_.capturesKeyboard = false;
+    if (contentBrowser_) {
+        contentBrowser_->UpdateSourceTypes(types_, sources_->Root());
+        contentBrowser_->Poll();
+    }
     panels_.Draw(context, session_.IsPlaying() || session_.HasAnimationPreview());
+    if(pendingCurve_) {
+        for(auto& entry : panels_.Entries()) {
+            if(entry.Id() == "CurveEditor" && entry.panel) {
+                static_cast<CurveEditorPanel*>(entry.panel.get())->RequestOpen(*pendingCurve_);
+                pendingCurve_.reset();
+                break;
+            }
+        }
+    }
+    if(curveExitRequested_) {
+        ImGui::OpenPopup("Curveを保存して終了");
+    }
+    if(ImGui::BeginPopupModal("Curveを保存して終了", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Curveに未保存の変更があります。");
+        bool proceed = false;
+        if(ImGui::Button("保存")) {
+            auto saved = curveDocument_.Save(curveDocument_.Reference());
+            Report(saved);
+            proceed = saved.has_value();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("破棄")) {
+            proceed = true;
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("キャンセル")) {
+            curveExitRequested_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        if(proceed) {
+            curveExitRequested_ = false;
+            curveExitApproved_ = true;
+            ImGui::CloseCurrentPopup();
+            RequestExit();
+        }
+        ImGui::EndPopup();
+    }
+    if(rigExitRequested_) {
+        ImGui::OpenPopup("Rig/Layerを保存して終了");
+    }
+    if(ImGui::BeginPopupModal("Rig/Layerを保存して終了", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Rig/Layerに未保存の変更があります。");
+        bool proceed = false;
+        if(ImGui::Button("保存")) {
+            const auto saved = rigDocument_.Save(rigDocument_.Reference());
+            Report(saved);
+            proceed = saved.has_value();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("破棄")) {
+            proceed = true;
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("キャンセル")) {
+            rigExitRequested_ = false;
+            curveExitApproved_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        if(proceed) {
+            rigExitRequested_ = false;
+            rigExitApproved_ = true;
+            ImGui::CloseCurrentPopup();
+            RequestExit();
+        }
+        ImGui::EndPopup();
+    }
     if(animationStudio_.exitReady) {
         animationStudio_.exitReady = false;
         RequestExit();
     }
+    curveDocument_.RefreshLocation();
+    rigDocument_.RefreshLocation();
+    if(rigSavedRevision_ != rigDocument_.SavedRevision()) {
+        // 保存したLayer/profileを次の評価から使う。EditorだけのdraftをRuntimeへ直結しない。
+        if(auto* level = session_.GetLevel()) {
+            level->Animations().Invalidate();
+        }
+        if(auto* preview = session_.GetPreviewLevel(); preview && preview != session_.GetLevel()) {
+            preview->Animations().Invalidate();
+        }
+        rigSavedRevision_ = rigDocument_.SavedRevision();
+    }
+    animationStudio_.RefreshLocation();
+    if((session_.HasAnimationPreview() || session_.IsPlaying()) && (curveDocument_.HasSavedFile() || curveDocument_.IsDirty())) {
+        if(auto* level = session_.GetPreviewLevel()) {
+            // previewの作り直し・接続し直し後も現在draftを再公開する。
+            // CurveAssets側で同一内容のsnapshot再作成を省略する。
+            Report(level->Animations().Curves().Override(curveDocument_.AssetReference(), curveDocument_.Value()));
+        }
+    }
     const bool studioOpen = std::ranges::any_of(panels_.Entries(), [](const auto& entry) {
         return entry.Id() == "AnimationStudio" && entry.isOpen;
     });
-    if(!studioOpen || session_.IsPlaying()) {
+    if(componentPreview_ && session_.HasAnimationPreview() && !session_.IsPlaying()) {
+        Report(session_.GetPreviewLevel()->Update(ImGui::GetIO().DeltaTime));
+    } else if(!studioOpen || session_.IsPlaying()) {
         animationStudio_.StopPreview(session_);
     } else {
         animationStudio_.Report(animationStudio_.Preview(session_, ImGui::GetIO().DeltaTime));
@@ -425,7 +708,7 @@ void EditorWorkspace::Draw() {
     const auto& io = ImGui::GetIO();
     if(!io.WantTextInput && !ImGui::IsAnyItemActive() && !viewportTools_.IsManipulating() && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
         commands_.Dispatch(io.KeyCtrl, io.KeyShift, io.KeyAlt, [this](int key) {
-            return ((!renderGraph_.capturesKeyboard && !animationStudio_.focused) || key==ImGuiKey_F5) && ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false);
+            return ((!renderGraph_.capturesKeyboard && !animationStudio_.focused && !curveDocument_.focused && !rigDocument_.focused) || key==ImGuiKey_F5) && ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false);
         });
     if(showAbout_) { ImGui::OpenPopup("###About"); showAbout_ = false; }
     if(ImGui::BeginPopupModal(text_.Label("help.about", "About").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -450,6 +733,8 @@ void EditorWorkspace::Shutdown() {
     // 借用先のサービスを切断する前に、ツールバーの描画コールバックを解除する。
     reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear();
     panels_.Clear();
+    sourceCreation_.reset();
+    contentBrowser_.reset();
     viewport_.Detach();
     properties_.Reset(nullptr);
     if(logSink_) { Logger::Get().RemoveSink(logSink_); logSink_ = nullptr; }

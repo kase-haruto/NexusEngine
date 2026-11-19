@@ -2,6 +2,7 @@
 #include "IEditorPanel.h"
 #include "Editor/Services/AnimationStudioDocument.h"
 #include "Editor/Gui/Nodes/NodeEditor.h"
+#include <set>
 
 namespace NexusEngine {
 /** 同じアセットをClip/Animator/Timelineの各編集画面から扱う。 */
@@ -23,9 +24,11 @@ private:
     AnimationStudioDocument& document_;
     int pendingNew_ = -1;
     float zoom_ = 1;
+    int morphChannelStart_ = 0; //< 大きなweight配列も4channelずつ編集・描画する
     UI::NodeEditor nodeEditor_;
     float nodeZoom_ = 1;
     std::string graphReference_;
     std::vector<std::string> graphStateNames_;
+    std::set<std::string> collapsedTracks_; //< timelineのComponent階層。assetには保存しない
 };
 }

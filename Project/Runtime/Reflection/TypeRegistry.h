@@ -26,6 +26,16 @@ struct PropertyDescriptor {
     std::function<std::string(Entity)> unavailableReason; //< 取得失敗時の値Metadata由来の理由。UIやManaged objectは所有しない
     std::function<std::optional<PropertyValue>(Entity,PersistentId)> getInstance; //< 同型複数instanceを永続IDで解決する任意accessor
     std::function<bool(Entity,PersistentId,const PropertyValue&)> setInstance; //< 対象instanceだけを検証付きで更新する
+    bool animatable = false; //< 新keyframe bindingでの明示許可。安定IDと型検査も別途必須
+};
+/* 表示用の値ヒントだけを保持する。Runtimeは翻訳・画像解決・ImGuiを参照しない。 */
+struct ComponentEditorMetadata {
+    std::string displayName; //< 空なら既存labelKeyを使う。翻訳キーまたは表示文字列
+    std::string category; //< 拡張可能な安定カテゴリID。未指定はOther
+    std::string description; //< 翻訳キーまたは説明文
+    std::string icon; //< Editorの既存IconRegistryで解決する抽象ID
+    std::string origin; //< Engine / Game / Plugin / Customなどの表示用分類
+    std::vector<std::string> keywords; //< 型名以外の検索語。保存IDへ影響させない
 };
 struct TypeDescriptor {
     std::string id, labelKey; //< 安定型IDと表示metadata
@@ -38,33 +48,26 @@ struct TypeDescriptor {
     std::function<std::vector<PersistentId>(Entity)> instances; //< 共通Detailsへ渡す順序付きinstance ID。実行objectは公開しない
     std::function<bool(Entity)> addInstance; //< 同型の既存instanceがあっても独立した値を追加する明示操作
     std::function<bool(Entity,PersistentId)> removeInstance; //< 永続IDの一つだけを解除する構造変更
+    ComponentEditorMetadata editor; //< 登録時に提供するUI非依存の値Metadata
+    std::function<std::string(Entity)> addUnavailableReason; //< World全体の追加制約。空なら追加候補
 };
 class TypeRegistry final {
 public:
     /** \brief 型を登録する。既存のIDは上書きしない */
-    bool Register(TypeDescriptor type) { auto id = type.id; return types_.emplace(std::move(id), std::move(type)).second; }
-    /** 生成情報を補完する。専用 UI の同一 ID の getter/setter は置換しない。 */
-    void MergeGenerated(TypeDescriptor type) {
-        auto found = types_.find(type.id);
-        if(found == types_.end()) { Register(std::move(type)); return; }
-        // 専用Inspectorのaccessorを維持し、生成器だけが知るソース対応を補完する。
-        if(!found->second.remove) found->second.remove = std::move(type.remove);
-        for(auto& source : type.sourceFiles)
-            if(std::ranges::find(found->second.sourceFiles, source) == found->second.sourceFiles.end())
-                found->second.sourceFiles.push_back(std::move(source));
-        for(auto& property : type.properties) {
-            const bool exists = std::ranges::any_of(found->second.properties, [&](const auto& current) { return current.id == property.id; });
-            if(!exists) found->second.properties.push_back(std::move(property));
-        }
-    }
+    bool Register(TypeDescriptor type);
+    /** 生成情報を補完する。専用UIのgetter/setterと追加制約を維持する。 */
+    void MergeGenerated(TypeDescriptor type);
+    /** 登録・解除・補完の成功時だけ変わる。Registryのcopy/交換にも対応する。 */
+    uint64_t Generation() const noexcept;
     /** \brief 安定IDで型情報を取得する */
     const TypeDescriptor* Find(std::string_view id) const {
         auto it = types_.find(id); return it == types_.end() ? nullptr : &it->second;
     }
     const auto& Types() const { return types_; }
     /** \brief 所有Catalogの差替え時だけ削除する。呼出側がframe境界で編集履歴とDescriptor参照を先に解除する */
-    bool Unregister(std::string_view id) { auto found = types_.find(id); if(found == types_.end()) return false; types_.erase(found); return true; }
+    bool Unregister(std::string_view id);
 private:
+    uint64_t generation_ = 0; //< 値snapshotの変更世代。Editorキャッシュの失効に使う
     std::map<std::string, TypeDescriptor, std::less<>> types_; //< 初期登録後は読み取り専用
 };
 /** \brief 既存Componentを型記述へ接続する。Editor UIは具体型を知らない */

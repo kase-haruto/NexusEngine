@@ -1,6 +1,7 @@
 #pragma once
 #include "Foundation/Reflection/ReflectionMarkers.h"
 NEXUS_REFLECT_COMPONENT(DirectionalLightComponent, "DirectionalLight", "component.light", light, enabled)
+NEXUS_COMPONENT_EDITOR(DirectionalLightComponent, "Lighting", "componentBrowser.description.light", "details.Light")
 #include "Graphics/Shadow/ShadowTypes.h"
 #include <cmath>
 

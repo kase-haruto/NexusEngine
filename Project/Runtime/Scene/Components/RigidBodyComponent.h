@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 NEXUS_REFLECT_COMPONENT(RigidBodyComponent, "RigidBody", "component.rigidBody", enabled, motion, shape, halfExtent, radius, halfHeight, mass, friction, restitution, gravityScale, velocity, angularVelocity, sensor, continuous, collisionLayer, collisionMask)
+NEXUS_COMPONENT_EDITOR(RigidBodyComponent, "Physics", "componentBrowser.description.rigidBody", "component.Physics")
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------

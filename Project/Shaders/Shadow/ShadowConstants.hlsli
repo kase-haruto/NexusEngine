@@ -1,6 +1,7 @@
 #ifndef NEXUS_SHADOW_CONSTANTS
 #define NEXUS_SHADOW_CONSTANTS
-// Matches ShadowGpuConstants (4352 bytes). All matrices use Engine row-vector convention.
+// Matches ShadowGpuConstants (288 bytes). All matrices use Engine row-vector convention.
+#include "../Common/Deformation.hlsli"
 cbuffer ShadowConstants : register(b0)
 {
     row_major float4x4 worldViewProjection;
@@ -10,7 +11,7 @@ cbuffer ShadowConstants : register(b0)
     float4 shadowBiases;
     uint4 shadowIndices;
     uint4 shadowDimensions;
-    row_major float4x4 jointPalette[64];
+    DeformationData deformation;
 };
 
 float3 ReconstructShadowSurface(uint2 pixel, float depth)

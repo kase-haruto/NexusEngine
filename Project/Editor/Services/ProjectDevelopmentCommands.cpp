@@ -1,4 +1,5 @@
 #include "ProjectDevelopmentCommands.h"
+#include "Editor/Services/SourceFileActions.h"
 #include "Editor/Core/EditorWorkspace.h"
 #include "Runtime/Project/ProjectService.h"
 #include "Runtime/Project/ProjectJson.h"
@@ -28,15 +29,32 @@ struct ProjectDevelopmentJob {
     EngineInstallation engine; //< 選択済みEngine。Registryからの自動fallbackは行わない
     ProjectBuildOptions options; //< 通常・Native patchの成果物を区別する
     std::string status = "Idle"; //< UI threadが表示する結果文字列
+    SourceCreationService* sourceCreation = nullptr; //< Workspace所有。結果配送はUI threadで行う
+    std::filesystem::path pendingSource;
     std::filesystem::path log; //< 子processごとに新規作成するログ
     ~ProjectDevelopmentJob() { cancel.request_stop(); if(future.valid()) future.wait(); }
     /** \brief 完了を所有Threadで回収する。futureの例外も既存Consoleへ値として通知する */
     void Poll(EditorWorkspace& workspace) {
         if(future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             try {
-                auto result = future.get(); workspace.Report(result); status = result ? "Completed. Build and restart after changing Modules." : result.error().GetMessageText();
+                auto result = future.get();
+                if(sourceCreation && !pendingSource.empty()) {
+                    if(result) {
+                        sourceCreation->Complete(pendingSource);
+                    } else {
+                        sourceCreation->Complete(std::unexpected(result.error()));
+                    }
+                    pendingSource.clear();
+                }
+                workspace.Report(result);
+                status = result ? "Completed. Build and restart after changing Modules." : result.error().GetMessageText();
             } catch(const std::exception& exception) { status = exception.what(); workspace.Report(std::unexpected(Error(ErrorCategory::Framework, 246, status))); }
               catch(...) { status = "Unknown project operation failure."; workspace.Report(std::unexpected(Error(ErrorCategory::Framework, 246, status))); }
+            // future自体の例外でもBrowserへ失敗を配送し、要求を次jobへ持ち越さない。
+            if(sourceCreation && !pendingSource.empty()) {
+                sourceCreation->Complete(std::unexpected(Error(ErrorCategory::Framework, 246, status)));
+                pendingSource.clear();
+            }
         }
     }
     /** \brief 描画上の無効化に加えて実行直前にも競合を確認する。Worldはworkerへ渡さない */
@@ -140,6 +158,30 @@ public:
 }
 void RegisterProjectDevelopmentCommands(EditorWorkspace& workspace, std::shared_ptr<const ProjectContext> project, EngineInstallation engine, ProjectBuildOptions options) {
     auto job = std::make_shared<ProjectDevelopmentJob>(); job->project = std::move(project); job->engine = std::move(engine); job->options = std::move(options);
+    job->sourceCreation = &workspace.SourceCreation();
+    workspace.SourceCreation().Configure(
+        job->project->File(),
+        [&workspace, job] {
+            return !job->future.valid() && !workspace.Session().IsPlaying() &&
+                   !workspace.Commands().IsChecked("project.runStandalone") && !workspace.IsProjectOperationActive();
+        },
+        [&workspace, job](const SourceCreationRequest &request) -> Result<void> {
+            job->Start(workspace, "Add-GameSource",
+                       {L"-ModuleId", ProjectJson::Path(request.module).wstring(), L"-Name",
+                        ProjectJson::Path(request.name).wstring(), L"-Kind",
+                        ProjectJson::Path(request.options.kind).wstring(), L"-Namespace",
+                        ProjectJson::Path(request.options.nameSpace).wstring(), L"-BaseClass",
+                        ProjectJson::Path(request.options.baseClass).wstring(), L"-BaseHeader",
+                        ProjectJson::Path(request.options.baseHeader).wstring(), L"-RelativeDirectory",
+                        ProjectJson::Path(request.options.directory).wstring(), L"-CloneFrom",
+                        ProjectJson::Path(request.options.cloneFrom).wstring(), L"-CloneClass",
+                        ProjectJson::Path(request.options.cloneClass).wstring()});
+            if (!job->future.valid()) {
+                return std::unexpected(Error(ErrorCategory::Resource, 281, job->status));
+            }
+            job->pendingSource = request.file;
+            return {};
+        });
     workspace.Panels().Register(std::make_unique<ProjectDevelopmentPanel>(workspace, job), false);
     EditorCommandRegistry::Command development{[&workspace] { workspace.Panels().Open("project.development"); }};
     // Panelを開く操作は許可したまま、Job寿命だけを他の開始条件へ公開する。

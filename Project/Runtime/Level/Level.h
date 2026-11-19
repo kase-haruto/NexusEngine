@@ -16,6 +16,7 @@
 #include "Runtime/Scene/SystemScheduler.h"
 #include "Runtime/Reflection/ReflectionRegistration.h"
 #include "Foundation/Input/InputFrame.h"
+#include "Runtime/Input/InputMap.h"
 #include "Runtime/Physics/PhysicsWorld.h"
 #include "Runtime/Audio/AudioWorld.h"
 #include "Runtime/Animation/AnimationRuntime.h"
@@ -113,7 +114,11 @@ namespace NexusEngine {
 		[[nodiscard]] SystemScheduler&	 GetSystemScheduler() noexcept { return scheduler_; }
         /** \brief Runtimeへ渡されたこのframeの入力。保存せず、全ゲーム言語から同じ値を参照する */
         const InputFrame& Input() const noexcept { return input_; }
-        void SetFrameInput(const InputFrame& input) noexcept { input_ = input; }
+        void SetFrameInput(const InputFrame& input) noexcept;
+        const NexusInputActionsFrameV1& InputActions() const noexcept;
+        bool RequestInputContext(std::string_view context) noexcept;
+        Result<void> SetInputConfiguration(const std::filesystem::path& file);
+        const std::filesystem::path& InputConfiguration() const noexcept;
 
 		void SetName(const std::string& name) noexcept { name_ = name; }
 		std::optional<LevelLightingSettings>& Lighting() noexcept { return lighting_; }
@@ -126,6 +131,8 @@ namespace NexusEngine {
 		friend class LevelSerializer;
 		friend class GameRuntime; //< 開始前に値Metadataを確定する。稼働中の公開setterは設けない
 		ReflectionRegistration reflection_; //< ホスト側の登録関数。Levelより長く生存するコードを参照する
+        std::filesystem::path inputConfiguration_; //< Project独自のConfigパスもLevel遷移へ継承する
+        InputMapRuntime inputMap_; //< Play Worldごとに保持し、Editorと入力edgeを共有しない
         InputFrame input_; //< Sceneの保存/Clone対象外。Runtimeが更新し、Reloadで値を複製しない
 		std::optional<LevelLightingSettings> lighting_;
         std::vector<ScreenEffect> screenEffects_;

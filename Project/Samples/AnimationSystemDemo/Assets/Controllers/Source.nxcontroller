@@ -1,0 +1,85 @@
+{
+  "entry": "Locomotion",
+  "parameters": [
+    {
+      "name": "Speed",
+      "type": "Float",
+      "value": 0.699999988079071
+    },
+    {
+      "name": "Wave",
+      "type": "Trigger",
+      "value": 0.0
+    }
+  ],
+  "states": [
+    {
+      "asset": "",
+      "blend": "1D",
+      "loop": true,
+      "motions": [
+        {
+          "asset": "asset://a23ba66b-faca-4c2d-b181-54c61fea193b",
+          "speed": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset": "asset://d26fc72e-61c3-4d60-866e-ec95b24f0beb",
+          "speed": 1.0,
+          "x": 1.0,
+          "y": 0.0
+        }
+      ],
+      "name": "Locomotion",
+      "parameterX": "Speed",
+      "parameterY": "Direction",
+      "position": [
+        80.0,
+        80.0
+      ],
+      "speed": 1.0
+    },
+    {
+      "asset": "asset://157559f6-33c3-4b84-85d3-332b3ab093b8",
+      "blend": "Clip",
+      "loop": true,
+      "motions": [],
+      "name": "Wave",
+      "parameterX": "Speed",
+      "parameterY": "Direction",
+      "position": [
+        400.0,
+        80.0
+      ],
+      "speed": 1.0
+    }
+  ],
+  "transitions": [
+    {
+      "conditions": [
+        {
+          "operation": "True",
+          "parameter": "Wave",
+          "value": 0.0
+        }
+      ],
+      "duration": 0.20000000298023224,
+      "exitTime": 1.0,
+      "from": "Locomotion",
+      "hasExitTime": false,
+      "offset": 0.0,
+      "to": "Wave"
+    },
+    {
+      "conditions": [],
+      "duration": 0.20000000298023224,
+      "exitTime": 1.0,
+      "from": "Wave",
+      "hasExitTime": true,
+      "offset": 0.0,
+      "to": "Locomotion"
+    }
+  ],
+  "version": 1
+}

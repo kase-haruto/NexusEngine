@@ -17,6 +17,8 @@
 #include "Editor/Services/PropertyEditService.h"
 #include "Editor/Services/PostProcessGraphDocument.h"
 #include "Editor/Services/AnimationStudioDocument.h"
+#include "Editor/Services/CurveEditDocument.h"
+#include "Editor/Services/AnimationRigDocument.h"
 #include "Editor/Services/SceneEditService.h"
 #include "EditorSession.h"
 #include "Foundation/Logging/BufferedLogSink.h"
@@ -24,40 +26,47 @@
 #include <vector>
 
 namespace NexusEngine {
-	/*-----------------------------------------------------------------------------------------
-	 * EditorWorkspace
-	 * - 既存EditorSessionと独立したPanel・Command・Settingsサービスを組み立てる
-	 * - RenderingとRuntime processの実装は所有しない
-	 *---------------------------------------------------------------------------------------*/
-	class EditorWorkspace final {
-	public:
-		explicit EditorWorkspace(EditorSession& session);
-		~EditorWorkspace() noexcept;
-		/** \brief ImGui初期化後にPanelとサービスを接続する */
-		void Initialize(const std::filesystem::path& root, const std::vector<std::function<void(EditorWorkspace&)>>& extensions = {},
-		                const std::filesystem::path& engineRoot = {}, const ProjectContext* project = nullptr);
-		/** \brief OSとメニューから同じ未保存確認を要求する */
-		void RequestExit();
-		/** \brief OSのDPI変更を次frameのStyleへ反映する */
-		void SetDpiScale(float scale) {
-			if(dpiScale_ != scale) {
-				dpiScale_		 = scale;
-				settingsChanged_ = true;
-			}
-		}
-		/** \brief ImGui NewFrame前にStyle・font・scaleの変更を反映する */
-		void PrepareFrame();
-		/** \brief 共通Menu、DockSpace、登録Panelを描画する */
-		void Draw();
-		/** \brief Context破棄前に設定と配置を保存する */
-		void Shutdown();
-		/** 編集値と表示状態だけを保存し、旧レイアウトのクロージャは持ち越さない。 */
-		ReflectionValue					   CaptureForReinstancing();
-		void							   ReleaseForReinstancing() noexcept;
-		void							   RestoreAfterReinstancing(const ReflectionValue& snapshot);
-		PanelRegistry&					   Panels() { return panels_; }
+    class SourceCreationService;
+    class ContentBrowserServices;
+    /*-----------------------------------------------------------------------------------------
+     * EditorWorkspace
+     * - 既存EditorSessionと独立したPanel・Command・Settingsサービスを組み立てる
+     * - RenderingとRuntime processの実装は所有しない
+     *---------------------------------------------------------------------------------------*/
+    class EditorWorkspace final {
+      public:
+        explicit EditorWorkspace(EditorSession &session);
+        ~EditorWorkspace() noexcept;
+        /** \brief ImGui初期化後にPanelとサービスを接続する */
+        void Initialize(const std::filesystem::path &root,
+                        const std::vector<std::function<void(EditorWorkspace &)>> &extensions = {},
+                        const std::filesystem::path &engineRoot = {}, const ProjectContext *project = nullptr);
+        /** \brief OSとメニューから同じ未保存確認を要求する */
+        void RequestExit();
+        /** \brief OSのDPI変更を次frameのStyleへ反映する */
+        void SetDpiScale(float scale) {
+            if (dpiScale_ != scale) {
+                dpiScale_ = scale;
+                settingsChanged_ = true;
+            }
+        }
+        /** \brief ImGui NewFrame前にStyle・font・scaleの変更を反映する */
+        void PrepareFrame();
+        /** \brief 共通Menu、DockSpace、登録Panelを描画する */
+        void Draw();
+        /** \brief Context破棄前に設定と配置を保存する */
+        void Shutdown();
+        /** 編集値と表示状態だけを保存し、旧レイアウトのクロージャは持ち越さない。 */
+        ReflectionValue CaptureForReinstancing();
+        void ReleaseForReinstancing() noexcept;
+        void RestoreAfterReinstancing(const ReflectionValue &snapshot);
+        PanelRegistry &Panels() {
+            return panels_;
+        }
         PostProcessGraphDocument& RenderGraph() noexcept { return renderGraph_; }
         AnimationStudioDocument& AnimationStudio() noexcept;
+        CurveEditDocument& CurveDocument() noexcept;
+        AnimationRigDocument& AnimationRig() noexcept;
 		const EditorSettingsStore::Editor& EditorPreferences() const { return settings_.editor; }
 		MainMenuBar&					   Menu() { return menu_; }
 		EditorCommandRegistry&			   Commands() { return commands_; }
@@ -65,6 +74,8 @@ namespace NexusEngine {
 		void Report(const Result<void>& result);
         /** \brief 候補Registryを事前検証し、Reload成功後に履歴と型情報を差し替える */
         [[nodiscard]] Result<void> ReloadCSharp(const std::filesystem::path& assembly, ManagedReloadState* outcome = nullptr);
+        SourceCreationService& SourceCreation();
+        std::shared_ptr<ContentBrowserServices> ContentServices();
         EditorSession& Session() noexcept { return session_; }
         /** \brief 非同期Compileの監視を描画から分離し、ImGui開始前の所有Threadへ接続する */
         void SetReloadPoller(std::function<void()> poller) { reloadPoller_ = std::move(poller); }
@@ -87,56 +98,68 @@ namespace NexusEngine {
 		PropertyCategoryRegistry& PropertyCategories() { return categories_; }
 
 	private:
-		enum class PlayMode { Editor, SeparateWindow };
-		PlayMode playMode_ = PlayMode::Editor; //< 実行中は変更しないEditorセッション内の選択
-		std::unique_ptr<AssetCatalog> levels_; //< Asset Rootと独立したLevel保存先の一覧
-        std::unique_ptr<AssetCatalog> sources_; //< Source一覧。Panelより長寿命で同じAssetCatalogの範囲検証を使う
-		void							   RegisterCommands();
-		void							   RegisterToolbar();
-		void							   DrawFileDialog();
-		void							   DrawUnsavedDialog();
-		void							   ReportDocumentError();
-		void							   OpenLevel(const std::filesystem::path& path);
-		void							   RememberLevel(const std::filesystem::path& path);
-		void							   ApplyUserSettings();
-		void							   SynchronizeDocument();
-		EditorSession&					   session_;					   //< Application所有
-		TypeRegistry					   types_;						   //< Runtime型情報
-		PropertyDrawerRegistry			   drawers_;					   //< UI型別描画
-		PropertyCategoryRegistry		   categories_;					   //< Panelより長寿命の専門ページ登録情報
-		AssetPropertyWidget				   assetEditor_;				   //< Asset PickerとプレビューUI
-		PropertyEditService				   properties_;					   //< 操作履歴
-		SceneEditService				   sceneEdits_;					   //< 原子的な構造編集
-		EditorDocumentService			   documents_;					   //< 保存・切替・終了の進行
-		NotificationService				   notifications_;				   //< 操作結果の表示
-		ViewportTools					   viewportTools_;				   //< 編集CameraとGizmo、CPU picking
-		LocalizationService				   text_;						   //< UTF-8辞書
-		EditorSettingsStore				   settings_;					   //< scope別設定
-		EditorCommandRegistry			   commands_;					   //< Menuの操作窓口
-		EditorToolbarRegistry			   toolbar_;					   //< コマンドボタンと機能別UIの登録先
-		ConsoleService					   console_;					   //< 登録済みConsoleのみ
-        AnimationStudioDocument animationStudio_;
-        PostProcessGraphDocument renderGraph_;
-        CollisionLayerEditor collisionLayers_; //< Levelと独立したProject共通設定・履歴
-        std::function<void()> reloadPoller_; //< Workspace寿命の監視callback。Shutdown / patch前に解除する
-        std::vector<std::function<void()>> framePollers_; //< 拡張初期化時だけ登録する。旧コードとworkerの所有をpatch前に解除する
-		PanelRegistry					   panels_;						   //< Panel所有
-		MainMenuBar						   menu_;						   //< メニュー描画
-		DockingLayout					   layout_;						   //< 配置永続化
-		ViewportSession					   viewport_;					   //< 接続未設定ならDisconnected表示
-		std::unique_ptr<AssetCatalog>	   assets_;						   //< ファイル閲覧サービス
-		std::shared_ptr<BufferedLogBuffer> logs_;						   //< ログSinkと寿命共有
-		ILogSink*						   logSink_ = nullptr;			   //< Logger所有、終了時に同期解除する識別参照
-		std::vector<std::string>		   recent_;						   //< session内の最近使ったLevel
-		std::array<char, 1024>			   filePath_{};					   //< Path dialog入力
-		std::string						   fileOperation_;				   //< open/saveAs要求
-		std::string						   lastDocumentError_;			   //< 同じエラーの通知連打を防ぐ
-		size_t							   generation_ = 0, revision_ = 0; //< document切替と編集の同期
-		size_t							   toolbarLayoutRevision_ = 0;	   //< 個人設定へ保存したツールバー配置の更新番号
-		bool							   settingsChanged_		  = true;  //< 次frame先頭でUI設定を適用する
-		float							   dpiScale_			  = 1;	   //< 手動UI倍率と独立したOS倍率
-		bool							   showAbout_			  = false; //< About modal要求
-		bool							   initialized_			  = false; //< 部分初期化時の終了処理を保護
-		PersistentId					   previousSelection_;			   //< 選択変更時にプロパティ操作を確定する
-	};
+          void InitializeContentServices(const std::filesystem::path &root, const std::filesystem::path &engineRoot,
+                                         const ProjectContext *project);
+          size_t rigSavedRevision_ = 0;
+          enum class PlayMode { Editor, SeparateWindow };
+          PlayMode playMode_ = PlayMode::Editor;  //< 実行中は変更しないEditorセッション内の選択
+          std::unique_ptr<AssetCatalog> levels_;  //< Asset Rootと独立したLevel保存先の一覧
+          std::unique_ptr<AssetCatalog> sources_; //< Source一覧。Panelより長寿命で同じAssetCatalogの範囲検証を使う
+          void RegisterCommands();
+          void RegisterToolbar();
+          void DrawFileDialog();
+          void DrawUnsavedDialog();
+          void ReportDocumentError();
+          void OpenLevel(const std::filesystem::path &path);
+          void RememberLevel(const std::filesystem::path &path);
+          void ApplyUserSettings();
+          void SynchronizeDocument();
+          EditorSession &session_;              //< Application所有
+          TypeRegistry types_;                  //< Runtime型情報
+          PropertyDrawerRegistry drawers_;      //< UI型別描画
+          PropertyCategoryRegistry categories_; //< Panelより長寿命の専門ページ登録情報
+          AssetPropertyWidget assetEditor_;     //< Asset PickerとプレビューUI
+          PropertyEditService properties_;      //< 操作履歴
+          SceneEditService sceneEdits_;         //< 原子的な構造編集
+          EditorDocumentService documents_;     //< 保存・切替・終了の進行
+          NotificationService notifications_;   //< 操作結果の表示
+          ViewportTools viewportTools_;         //< 編集CameraとGizmo、CPU picking
+          LocalizationService text_;            //< UTF-8辞書
+          EditorSettingsStore settings_;        //< scope別設定
+          EditorCommandRegistry commands_;      //< Menuの操作窓口
+          EditorToolbarRegistry toolbar_;       //< コマンドボタンと機能別UIの登録先
+          ConsoleService console_;              //< 登録済みConsoleのみ
+          AnimationStudioDocument animationStudio_;
+          CurveEditDocument curveDocument_;  //< Curve draftはpanelを閉じても保持する
+          AnimationRigDocument rigDocument_; //< Rig/Layer draftと共通履歴
+          bool rigExitRequested_ = false, rigExitApproved_ = false;
+          std::optional<std::filesystem::path> pendingCurve_;           //< 内容を破棄せずpanelへ開く要求を渡す
+          bool curveExitRequested_ = false, curveExitApproved_ = false; //< hidden panelの未保存も確認する
+          bool componentPreview_ = false;                               //< Crossfade専用previewも複製Worldを使用する
+          PostProcessGraphDocument renderGraph_;
+          std::shared_ptr<ContentBrowserServices> contentBrowser_; //< 共有する文書・Collection・index。Panelより長寿命
+          std::shared_ptr<SourceCreationService> sourceCreation_;  //< BrowserとProject generatorの共有接続
+          CollisionLayerEditor collisionLayers_;                   //< Levelと独立したProject共通設定・履歴
+          std::function<void()> reloadPoller_; //< Workspace寿命の監視callback。Shutdown / patch前に解除する
+          std::vector<std::function<void()>>
+              framePollers_;                     //< 拡張初期化時だけ登録する。旧コードとworkerの所有をpatch前に解除する
+          PanelRegistry panels_;                 //< Panel所有
+          MainMenuBar menu_;                     //< メニュー描画
+          DockingLayout layout_;                 //< 配置永続化
+          ViewportSession viewport_;             //< 接続未設定ならDisconnected表示
+          std::unique_ptr<AssetCatalog> assets_; //< ファイル閲覧サービス
+          std::shared_ptr<BufferedLogBuffer> logs_; //< ログSinkと寿命共有
+          ILogSink *logSink_ = nullptr;             //< Logger所有、終了時に同期解除する識別参照
+          std::vector<std::string> recent_;         //< session内の最近使ったLevel
+          std::array<char, 1024> filePath_{};       //< Path dialog入力
+          std::string fileOperation_;               //< open/saveAs要求
+          std::string lastDocumentError_;           //< 同じエラーの通知連打を防ぐ
+          size_t generation_ = 0, revision_ = 0;    //< document切替と編集の同期
+          size_t toolbarLayoutRevision_ = 0;        //< 個人設定へ保存したツールバー配置の更新番号
+          bool settingsChanged_ = true;             //< 次frame先頭でUI設定を適用する
+          float dpiScale_ = 1;                      //< 手動UI倍率と独立したOS倍率
+          bool showAbout_ = false;                  //< About modal要求
+          bool initialized_ = false;                //< 部分初期化時の終了処理を保護
+          PersistentId previousSelection_;          //< 選択変更時にプロパティ操作を確定する
+    };
 } // namespace NexusEngine

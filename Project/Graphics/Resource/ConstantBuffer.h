@@ -50,6 +50,7 @@ namespace NexusEngine {
 
 	private:
 		friend class GraphicsResourceFactory;
+        void* NativeResource() const noexcept;
 		[[nodiscard]] Result<void> Initialize(void* nativeDevice, size_t dataSize, uint32_t frameCount);
 
 		class Impl;

@@ -1,7 +1,9 @@
 #pragma once
 #include "IEditorPanel.h"
+#include "Editor/Gui/ContentBrowser/ContentBrowserPanel.h"
 #include "Editor/Services/ConsoleService.h"
 #include "Editor/Services/AssetCatalog.h"
+#include "Editor/Services/SourceFileActions.h"
 #include "Editor/Services/EditorSettings.h"
 #include "Editor/Runtime/ViewportSession.h"
 #include "Editor/Gui/ViewportTools.h"
@@ -72,26 +74,6 @@ private:
     std::string suggestionPrefix_, pendingCompletion_;
     int suggestionIndex_ = 0;
     bool suggestionsOpen_ = false, scrollToSuggestion_ = false;
-};
-/*-----------------------------------------------------------------------------------------
- * ContentBrowserPanel
- * - フォルダ・ファイルカタログを表示する
- * - Asset importやGPU uploadは担当しない
- *---------------------------------------------------------------------------------------*/
-class ContentBrowserPanel final : public IEditorPanel {
-public:
-    explicit ContentBrowserPanel(AssetCatalog& assets, std::function<void(const std::filesystem::path&)> open,
-                                 AssetCatalog* sources = nullptr)
-        : assets_(assets), sources_(sources), open_(std::move(open)) {}
-    std::string_view Id() const noexcept override { return "ContentBrowser"; }
-    std::string_view TitleKey() const noexcept override { return "panel.content"; }
-    void Draw(const EditorContext& context) override;
-private:
-    AssetCatalog& assets_; //< host所有
-    AssetCatalog* sources_ = nullptr; //< Workspace所有のSource一覧。Assetsと同じカタログ実装を借用する
-    bool showSources_ = false; //< タブ選択だけを保持する。ファイルや型の参照をReload後へ残さない
-    std::function<void(const std::filesystem::path&)> open_; //< ダブルクリックの拡張ポイント
-    std::string search_; //< 共通SearchBarのUTF-8検索入力
 };
 /*-----------------------------------------------------------------------------------------
  * PreferencesPanel

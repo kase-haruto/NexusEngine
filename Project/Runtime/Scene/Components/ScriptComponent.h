@@ -8,6 +8,7 @@
 #include "Runtime/Scene/PersistentIdGenerator.h"
 
 NEXUS_REFLECT_COMPONENT(ScriptComponent, "Script", "component.script", scriptType, enabled, propertyState, additional, slotId)
+NEXUS_COMPONENT_EDITOR(ScriptComponent, "Gameplay", "componentBrowser.description.scriptContainer", "component.Script")
 
 namespace NexusEngine {
 /** \brief 既存の永続ID発行元を再利用し、保存/Undoでruntime tokenと異なる関連付けIDを保つ */

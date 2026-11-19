@@ -2,6 +2,7 @@
 #include "Foundation/Reflection/ReflectionMarkers.h"
 #include "Graphics/Fog/FogSettings.h"
 NEXUS_REFLECT_COMPONENT(FogComponent, "Fog", "component.fog", enabled, startDistance, endDistance, color)
+NEXUS_COMPONENT_EDITOR(FogComponent, "Lighting", "componentBrowser.description.fog", "details.Fog")
 
 namespace NexusEngine {
     // Scene-wide distance fog. No component means no fog.

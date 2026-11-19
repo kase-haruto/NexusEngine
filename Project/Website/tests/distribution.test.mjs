@@ -14,6 +14,7 @@ test('launcher versions retain old installers, reject duplicates and exclude unp
   assert.equal(catalog[0].id, 'nexus-launcher');
   assert.equal(catalog[0].version, '1.2.0');
   assert.equal(catalog[0].changes, setup.changes);
+  assert.throws(() => launcherCatalog({ ...setup, changes: { value: 'text', PSPath: 'local-path' } }, { [key]: uploaded }), /plain text/);
   assert.equal(launcherCatalog(null, { [key]: { ...uploaded, changes: setup.changes } })[0].changes, setup.changes);
   const oldKey = `launcher/${'b'.repeat(64)}/launcherSetup.exe`;
   const old = { ...uploaded, sha256: 'b'.repeat(64), version: '1.1.0' };

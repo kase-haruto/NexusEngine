@@ -7,7 +7,10 @@
 
 // engine
 #include "Runtime/Scene/Components/CameraComponent.h"
+#include "Runtime/Scene/Components/CameraEffectComponent.h"
 #include "Runtime/Scene/Components/AnimationPlayerComponent.h"
+#include "Runtime/Scene/Components/SkeletalAnimationComponent.h"
+#include "Runtime/Scene/Components/KeyframeAnimationComponent.h"
 #include "Runtime/Scene/Components/DirectionalLightComponent.h"
 #include "Runtime/Scene/Components/SkyRendererComponent.h"
 #include "Runtime/Scene/Components/FogComponent.h"
@@ -49,6 +52,7 @@ namespace NexusEngine {
 		result.primitives.clear();
         scene.CopyDebugLines(result.debugLines);
 		result.camera.reset();
+        result.screenEffects.clear();
         result.atmosphere = {};
         result.skyLight.reset();
         result.fog = {};
@@ -144,11 +148,23 @@ namespace NexusEngine {
                             player->animationAsset, player->blendAnimationAsset, player->samples};
                         item.staticLighting = false;
                     }
+                    if(const auto* keyframe = entity.GetComponent<KeyframeAnimationComponent>(); keyframe && keyframe->IsValid() &&
+                        (!keyframe->clipAsset.empty() || !keyframe->controllerAsset.empty())) {
+                        // propertyで移動する物体を、保存時の静的照明対象へ固定しない。
+                        item.staticLighting = false;
+                    }
+                    if(const auto* skeletal = entity.GetComponent<SkeletalAnimationComponent>(); skeletal && skeletal->IsValid() && (skeletal->timelineDriven || !skeletal->samples.empty())) {
+                        PrimitiveRenderItem::AnimationSample animation;
+                        animation.layers = skeletal->samples;
+                        item.animation = skeletal->samples.empty() ? std::nullopt : std::optional(std::move(animation));
+                        item.staticLighting = false;
+                    }
                     item.meshAsset = primitive.meshAsset;
                     item.shape = primitive.shape;
                     if(primitive.shape == PrimitiveShape::Asset && primitive.meshAsset.empty()) item.nodeEnd = 0;
                     item.baseColorTexture = primitive.baseColorTexture;
                     item.material = primitive.material;
+                    item.uvTransform = {primitive.uvScale[0], primitive.uvScale[1], primitive.uvOffset[0], primitive.uvOffset[1]};
 					if(const auto* id = entity.GetComponent<PersistentIdComponent>()) {
 						// ECSの世代番号に依存せず、Levelの永続IDから照合キーを作る。
 						item.lightingId = id->value.high ^ (id->value.low * 1099511628211ull);
@@ -185,6 +201,18 @@ namespace NexusEngine {
 				result.camera = RenderCamera {
 					MakeRenderObjectId(entity.GetId()), *viewMatrix, projection, Multiply(*viewMatrix, projection)
 				};
+                if(const auto* effect = entity.GetComponent<CameraEffectComponent>(); effect && effect->enabled && effect->IsValid()) {
+                    ScreenEffect output;
+                    const auto& text = effect->shader;
+                    output.shaderPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+                    for(size_t channel = 0; channel < 4; ++channel) {
+                        output.parameters[channel] = effect->parameters0[channel];
+                        output.parameters[4 + channel] = effect->parameters1[channel];
+                        output.parameters[8 + channel] = effect->parameters2[channel];
+                        output.parameters[12 + channel] = effect->parameters3[channel];
+                    }
+                    result.screenEffects.push_back(std::move(output));
+                }
 			});
 
 		if(cameraError.has_value()) {

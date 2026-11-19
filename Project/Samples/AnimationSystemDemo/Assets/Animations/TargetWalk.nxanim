@@ -1,0 +1,23 @@
+{
+  "clip": "Walk",
+  "duration": 2.0,
+  "events": [
+    {
+      "name": "Step",
+      "payload": "Left",
+      "time": 0.5
+    },
+    {
+      "name": "Step",
+      "payload": "Right",
+      "time": 1.5
+    }
+  ],
+  "kind": "Skeletal",
+  "loop": true,
+  "retargetProfile": "asset://7b34338e-58f5-43d9-b41d-c291cad23131",
+  "skeletonSource": "",
+  "source": "asset://f2eef8e8-9c7d-4944-9185-c25ec30eb1f8",
+  "tracks": [],
+  "version": 4
+}

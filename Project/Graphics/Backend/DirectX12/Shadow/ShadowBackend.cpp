@@ -1,4 +1,5 @@
 #include "ShadowBackend.h"
+#include "Graphics/Model/ModelAnimation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -226,13 +227,32 @@ namespace NexusEngine {
 		commands->RSSetViewports(1, &viewport); commands->RSSetScissorRects(1, &scissor);
 		commands->SetGraphicsRootSignature(root.Get()); commands->SetPipelineState(depthPipeline_.Get());
 		context.SetPrimitiveTopology(PrimitiveTopology::TriangleList);
+        size_t drawIndex = 0;
 		for(const auto& draw : draws) {
-			if(!draw.mesh || draw.jointPalette.size() > constants.jointPalette.size()) {
+            if(!draw.mesh || draw.jointPalette.size() > kMaxSkinJoints) {
 				return std::unexpected(Error(ErrorCategory::Graphics, kShadowFailure, "Invalid shadow mesh/palette."));
 			}
 			constants.worldViewProjection = Multiply(draw.world, viewProjection);
 			constants.dimensions[2] = draw.jointPalette.empty() ? 0U : 1U;
-			std::copy(draw.jointPalette.begin(), draw.jointPalette.end(), constants.jointPalette.begin());
+            constants.deformation = draw.deformation;
+            if(!draw.jointPalette.empty() && !constants.deformation.jointCount) {
+                // 専用Renderer以外から渡されたCPU paletteも同じ可変長SRVへ転送する。
+                if(paletteBuffers_.size() <= drawIndex) {
+                    paletteBuffers_.resize(drawIndex + 1);
+                }
+                if(!paletteBuffers_[drawIndex]) {
+                    paletteBuffers_[drawIndex] = std::make_unique<FrameDataBuffer>();
+                }
+                const auto bytes = std::as_bytes(draw.jointPalette);
+                const auto view = paletteBuffers_[drawIndex]->Write(*resources, context.GetFrameIndex(),
+                    {reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()});
+                if(!view) {
+                    return std::unexpected(view.error());
+                }
+                constants.deformation.poseBuffer = *view;
+                constants.deformation.jointCount = static_cast<uint32_t>(draw.jointPalette.size());
+            }
+            ++drawIndex;
 			auto address = WriteConstants(context.GetFrameIndex(), constants);
 			if(!address) return std::unexpected(std::move(address.error()));
 			commands->SetGraphicsRootConstantBufferView(0, *address);
@@ -277,7 +297,9 @@ namespace NexusEngine {
 		const bool wantRt = settings.mode != ShadowMode::ShadowMap;
 		// Existing Skinning is Vertex Shader-only. Until a deformed Geometry buffer is
 		// available, Map rasterizes the same palette instead of tracing incorrect bind-pose BLAS.
-		const bool skinned = std::any_of(draws.begin(), draws.end(), [](const auto& draw) { return !draw.jointPalette.empty(); });
+        const bool skinned = std::any_of(draws.begin(), draws.end(), [](const auto& draw) {
+            return !draw.jointPalette.empty() || draw.deformation.jointCount || draw.deformation.targetCount;
+        });
 		fallback_ = wantRt && (!capabilities.SupportsRayTracing() || rtFailed_ || skinned);
 		if(wantRt && !fallback_ && !rayTracing_) {
 			rayTracing_ = std::make_unique<RayTracedShadowTechnique>();
@@ -350,6 +372,7 @@ namespace NexusEngine {
 		if(map_) map_->Shutdown(*this);
 		rayTracing_.reset(); map_.reset(); current_ = nullptr;
 		ReleaseTexture(surface); ReleaseTexture(mask); constants_.clear();
+        paletteBuffers_.clear();
 		depthPipeline_.Reset(); root.Reset(); device.Reset();
 		resources = nullptr; queue = nullptr; descriptors = nullptr; bindless = nullptr;
 	}

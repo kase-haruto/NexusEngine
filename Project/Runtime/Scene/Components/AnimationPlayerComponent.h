@@ -5,6 +5,7 @@
 #include "Graphics/Model/ModelAnimation.h"
 
 NEXUS_REFLECT_COMPONENT(AnimationPlayerComponent, "AnimationPlayer", "component.animationPlayer", animationIndex, playbackSpeed, loop, playing, time, animationAsset, blendAnimationAsset, blendAnimationIndex, blendTime, blendLoop, blendWeight, fadeDuration, fadeElapsed)
+NEXUS_COMPONENT_EDITOR(AnimationPlayerComponent, "Animation", "componentBrowser.description.animationPlayer", "details.Animation")
 
 namespace NexusEngine {
 /** 再生状態はEntityが所有する。Asset参照を優先し、番号は既存Levelとの互換用に残す。 */

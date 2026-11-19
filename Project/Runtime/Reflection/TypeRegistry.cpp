@@ -45,6 +45,13 @@ PropertyDescriptor MaterialProperty(const char* id, const char* label, PropertyK
 template<class C>
 void RegisterEnvironmentType(TypeRegistry& registry, const char* id, const char* label) {
     auto type = Type<C>(id, label);
+    type.addUnavailableReason = [](Entity entity) -> std::string {
+        bool exists = false;
+        entity.GetScene()->ForEach<C>([&](Entity, const auto&) {
+            exists = true;
+        });
+        return exists ? "componentBrowser.worldUnique" : "";
+    };
     type.add = [](Entity entity) {
         bool exists = false;
         entity.GetScene()->ForEach<C>([&](Entity, const auto&) { exists = true; });
@@ -223,6 +230,9 @@ void RegisterSceneTypes(TypeRegistry& registry) {
             const float factor = std::abs(squared - 1) < 1e-6f ? 1.0f : 1.0f / std::sqrt(squared);
             c.rotation = {v[0] * factor, v[1] * factor, v[2] * factor, v[3] * factor}; return true;
         }));
+    for(auto& property : transform.properties) {
+        property.animatable = true;
+    }
     registry.Register(std::move(transform));
     auto primitive = Type<PrimitiveRenderComponent>("PrimitiveRender", "component.primitive");
     primitive.add = [](Entity entity) { return entity.AddComponent<PrimitiveRenderComponent>() != nullptr; };
@@ -246,6 +256,27 @@ void RegisterSceneTypes(TypeRegistry& registry) {
         [](auto& c, int v) { if(v < -1) return false; c.nodeIndex = v == -1 ? PrimitiveRenderComponent::kAllNodes : static_cast<uint32_t>(v); return true; }));
     primitive.properties.push_back(Property<PrimitiveRenderComponent, std::string>("baseColorTexture", "property.baseColorTexture", PropertyKind::TextureAsset,
         [](const auto& c) { return c.baseColorTexture; }, [validPath](auto& c, const auto& v) { if(!validPath(v)) return false; c.baseColorTexture = v; return true; }));
+    // Texture置換と同じEntity単位で編集し、材質Overrideの有効状態には依存しない。
+    primitive.properties.push_back(Property<PrimitiveRenderComponent, std::array<float, 2>>("uvScale", "material.uvScale", PropertyKind::Vector2,
+        [](const auto& c) { return c.uvScale; }, [](auto& c, const auto& value) {
+            for(float channel : value) {
+                if(!std::isfinite(channel)) {
+                    return false;
+                }
+            }
+            c.uvScale = value;
+            return true;
+        }));
+    primitive.properties.push_back(Property<PrimitiveRenderComponent, std::array<float, 2>>("uvOffset", "material.uvOffset", PropertyKind::Vector2,
+        [](const auto& c) { return c.uvOffset; }, [](auto& c, const auto& value) {
+            for(float channel : value) {
+                if(!std::isfinite(channel)) {
+                    return false;
+                }
+            }
+            c.uvOffset = value;
+            return true;
+        }));
     primitive.properties.push_back(Property<PrimitiveRenderComponent, bool>("enabled", "property.visible", PropertyKind::Bool,
         [](const auto& c) { return c.enabled; }, [](auto& c, bool v) { c.enabled = v; return true; }));
     primitive.properties.push_back(Property<PrimitiveRenderComponent, bool>("staticLighting", "property.staticLighting", PropertyKind::Bool,
@@ -263,6 +294,10 @@ void RegisterSceneTypes(TypeRegistry& registry) {
     primitive.properties.push_back(MaterialProperty("materialNormalScale", "material.normalScale", PropertyKind::Float, &MaterialOverride::normalScale));
     primitive.properties.push_back(MaterialProperty("materialEmissive", "material.emissive", PropertyKind::Vector3, &MaterialOverride::emissive));
     primitive.properties.push_back(MaterialProperty("materialOcclusion", "material.occlusion", PropertyKind::Float, &MaterialOverride::occlusionStrength));
+    for(auto& property : primitive.properties) {
+        property.animatable = property.id == "tint" || property.id == "materialBaseColor" || property.id == "materialMetallic" ||
+            property.id == "materialRoughness" || property.id == "materialNormalScale" || property.id == "materialEmissive" || property.id == "materialOcclusion";
+    }
     registry.Register(std::move(primitive));
     auto camera = Type<CameraComponent>("Camera", "component.camera");
     camera.add = [](Entity entity) {
@@ -310,6 +345,9 @@ void RegisterSceneTypes(TypeRegistry& registry) {
                 if(primary) c->primary = *v; else c->enabled = *v; return true;
             }, {}};
         camera.properties.push_back(std::move(flag));
+    }
+    for(auto& property : camera.properties) {
+        property.animatable = property.id == "fov";
     }
     registry.Register(std::move(camera));
     auto light = Type<DirectionalLightComponent>("DirectionalLight", "component.light");

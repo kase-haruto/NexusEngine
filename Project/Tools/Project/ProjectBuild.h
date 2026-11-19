@@ -34,6 +34,7 @@ struct ProjectBuildTargets {
     std::string managedRuntime = "CoreCLR"; //< 旧BuildTargetsはCoreCLR互換。新規Mono Projectは明示して保存する
 };
 struct ProjectLaunchOptions {
+    std::string curvePreviewPipe; //< Editorが生成したローカルIPC endpoint。空なら通信しない
     bool checkOnly = false; //< GPUを使わない既存CPU検証
     bool hidden = false; //< ウィンドウとコンソールを表示しない
     uint32_t frames = 0; //< 0は通常実行。有限frameは明示的な検証用

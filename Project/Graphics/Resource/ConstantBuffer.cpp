@@ -29,6 +29,9 @@ namespace NexusEngine {
 	};
 
 	ConstantBuffer::ConstantBuffer() noexcept = default;
+    void* ConstantBuffer::NativeResource() const noexcept {
+        return impl_ ? impl_->resource.Get() : nullptr;
+    }
 	ConstantBuffer::~ConstantBuffer() noexcept { Shutdown(); }
 
 	/////////////////////////////////////////////////////////////////////////////////////////

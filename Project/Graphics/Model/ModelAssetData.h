@@ -34,6 +34,9 @@ namespace NexusEngine {
 	};
 
 	/** Loaderが生成するGPU upload前の1 Mesh分CPU data。 */
+    struct MorphVertexDelta {
+        float position[3]{}, normal[3]{}, tangent[3]{};
+    };
 	struct MeshAssetData {
 		static constexpr uint32_t kNoSkin = UINT32_MAX;
 
@@ -43,6 +46,8 @@ namespace NexusEngine {
 		IndexFormat indexFormat = IndexFormat::UInt16;
 		std::vector<SubmeshRange> submeshes;
 		uint32_t skinIndex = kNoSkin;
+        uint32_t morphTargetCount = 0;
+        std::vector<MorphVertexDelta> morphDeltas; //< target順、各target内は元のvertex順。Z反転済み
 		uint64_t resourceId = NextModelResourceIdentity(); //< 統合時の参照番号変更では維持し、頂点・Index・描画範囲の変更時は再採番する
 	};
 
@@ -76,6 +81,7 @@ namespace NexusEngine {
 		uint32_t parentIndex = kNoParent;
 		ModelNodeTransform localTransform;
 		std::vector<uint32_t> meshIndices;
+        std::vector<float> morphWeights; //< node指定優先、なければmesh既定値、未指定は0
 	};
 
 	/*-----------------------------------------------------------------------------------------

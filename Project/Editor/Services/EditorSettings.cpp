@@ -96,6 +96,18 @@ void EditorSettingsStore::Load(const std::filesystem::path& root, const ProjectC
             user.toolbarOffsets[key.substr(offsetPrefix.size())] = normalized;
         }
     }
+    for(size_t index = 0; index < 256; ++index) {
+        const auto found = u.find("component.favorite." + std::to_string(index));
+        if(found != u.end() && !found->second.empty() && found->second.size() <= 512 &&
+            std::ranges::find(user.componentFavorites, found->second) == user.componentFavorites.end()) {
+            user.componentFavorites.push_back(found->second);
+        }
+    }
+    for(const auto& [key, value] : u) {
+        if (key.starts_with("contentBrowser.") && value.size() <= (key.ends_with(".library") ? 16777216 : 262144)) {
+            user.contentBrowser[key.substr(15)] = value;
+        }
+    }
     user.recentLevels.clear();
     constexpr std::string_view placementPrefix = "toolbar.placement.";
     for(const auto& [key,value] : u) if(key.starts_with(placementPrefix) && key.size() > placementPrefix.size()) {
@@ -113,6 +125,12 @@ void EditorSettingsStore::Load(const std::filesystem::path& root, const ProjectC
 bool EditorSettingsStore::SaveUser() const {
     Values values {{"language", user.language}, {"theme", user.theme}, {"workspace", user.workspace}, {"fontSize", std::to_string(user.fontSize)},
         {"uiScale", std::to_string(user.uiScale)}, {"autoSaveLayout", user.autoSaveLayout ? "true" : "false"}};
+    for(size_t index = 0; index < std::min<size_t>(user.componentFavorites.size(), 256); ++index) {
+        values["component.favorite." + std::to_string(index)] = user.componentFavorites[index];
+    }
+    for(const auto& [key, value] : user.contentBrowser) {
+        values["contentBrowser." + key] = value;
+    }
     for(const auto& [key, open] : user.panels) values["panel." + key] = open ? "true" : "false";
     for(size_t i = 0; i < std::min<size_t>(user.recentLevels.size(), 10); ++i) values["recent." + std::to_string(i)] = user.recentLevels[i];
 
@@ -150,4 +168,8 @@ bool EditorSettingsStore::SaveEditor() const {
     return Write(projectDirectory_ / "Editor.settings", {{"grid", editor.grid ? "true" : "false"},
         {"gizmo", editor.gizmo ? "true" : "false"}, {"viewport", editor.viewport ? "true" : "false"}, {"giMode", editor.giMode}});
 }
+const std::filesystem::path &EditorSettingsStore::ProjectDirectory() const noexcept {
+    return projectDirectory_;
 }
+
+} // namespace NexusEngine

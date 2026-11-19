@@ -1,0 +1,41 @@
+NEXUS_LEVEL 14
+LEVEL "Level"
+LIGHTING 0
+ENVIRONMENT "" 1 0
+ENTITY 4500916344392038768 1 "Camera / Curve Effect"
+TRANSFORM 0 1.20000005 -7 0 0 0 1 1 1 1
+PARENT 0 0
+CAMERA 1 0.785398185 0.100000001 1000 1 1 0
+PRIMITIVE 0
+DIRECTIONAL_LIGHT 0
+COMPONENTS 2
+COMPONENT "CameraEffect" object 2 "fields" object 6 "enabled" bool 1 "parameters0" array 4 float 0.80000001192092896 float 1 float 0 float 0 "parameters1" array 4 float 0 float 0 float 0 float 0 "parameters2" array 4 float 0 float 0 float 0 float 0 "parameters3" array 4 float 0 float 0 float 0 float 0 "shader" string "PostProcess/ColorAdjust.PS.hlsl" "type" string "CameraEffect"
+COMPONENT "CurveBinding" object 2 "fields" object 14 "channel" int 0 "curveAsset" string "asset://7eecca0f-e1fc-4025-af72-ab56c34b2543" "duration" float 4 "elapsed" float 0 "input" float 0 "loop" bool 1 "manual" bool 0 "outputBias" float 0 "outputScale" float 1 "playbackSpeed" float 1 "playing" bool 1 "target" string "" "targetComponent" string "CameraEffect" "targetProperty" string "parameters0" "type" string "CurveBinding"
+END_ENTITY
+ENTITY 4500916344392038768 2 "Directional Light"
+TRANSFORM 0 0 0 0 0 0 1 1 1 1
+PARENT 0 0
+CAMERA 0
+PRIMITIVE 0
+DIRECTIONAL_LIGHT 1 1 0.300000012 0.5 -1 1 1 1 4 0.00465000002
+COMPONENTS 0
+END_ENTITY
+ENTITY 4500916344392038768 3 "Source / Shared Clip Assets"
+TRANSFORM -1.20000005 0 0 0 0 0 1 1 1 1
+PARENT 0 0
+CAMERA 0
+PRIMITIVE 1 0.5 0.800000012 1 1 1 4294967295 0 "asset://f2eef8e8-9c7d-4944-9185-c25ec30eb1f8" "" 0 0 1 1 1 1 0 1 1 0 0 0 1 0
+DIRECTIONAL_LIGHT 0
+COMPONENTS 1
+COMPONENT "SkeletalAnimation" object 2 "fields" object 21 "applyRootMotion" bool 1 "blendClipAsset" string "" "blendLoop" bool 1 "blendSpeed" float 1 "blendWeight" float 0 "clipAsset" string "asset://d26fc72e-61c3-4d60-866e-ec95b24f0beb" "controllerAsset" string "asset://63808f46-cf24-41ca-9d36-559b1e8d60f4" "controllerParameters" string "{\"Speed\":0.699999988079071,\"Wave\":0.0}" "crossfadeDuration" float 0.20000000298023224 "elapsed" float 0 "layerAsset" string "asset://c67c7e64-ddee-4906-81e1-47432f452d4c" "loop" bool 1 "playbackSpeed" float 1 "playing" bool 1 "reverseEvents" bool 0 "rootMotion" bool 0 "rootMotionAxes" object 2 "fields" object 3 "x" float 1 "y" float 0 "z" float 1 "type" string "Vector3" "rootMotionJoint" string "4:Root/" "rootMotionRotation" bool 1 "speedCurveAsset" string "asset://b93e1179-887a-43aa-8581-81f9b368c4d8" "speedCurveDuration" float 4 "type" string "SkeletalAnimation"
+END_ENTITY
+ENTITY 4500916344392038768 4 "Target / Retargeted 130 percent"
+TRANSFORM 1.20000005 0 0 0 0 0 1 1 1 1
+PARENT 0 0
+CAMERA 0
+PRIMITIVE 1 1 0.649999976 0.400000006 1 1 4294967295 0 "asset://6d17e39c-b0a0-45d1-805e-4672b68159f5" "" 0 0 1 1 1 1 0 1 1 0 0 0 1 0
+DIRECTIONAL_LIGHT 0
+COMPONENTS 1
+COMPONENT "SkeletalAnimation" object 2 "fields" object 21 "applyRootMotion" bool 1 "blendClipAsset" string "" "blendLoop" bool 1 "blendSpeed" float 1 "blendWeight" float 0 "clipAsset" string "asset://dcdc4907-d2e4-47aa-972c-d68b91346820" "controllerAsset" string "asset://ab9a5660-32fd-41a1-918d-32418a7be5b9" "controllerParameters" string "{\"Speed\":0.699999988079071,\"Wave\":0.0}" "crossfadeDuration" float 0.20000000298023224 "elapsed" float 0 "layerAsset" string "asset://4ca3d82b-fef8-4c39-bdfc-6e947616cf6e" "loop" bool 1 "playbackSpeed" float 1 "playing" bool 1 "reverseEvents" bool 0 "rootMotion" bool 0 "rootMotionAxes" object 2 "fields" object 3 "x" float 1 "y" float 0 "z" float 1 "type" string "Vector3" "rootMotionJoint" string "4:Root/" "rootMotionRotation" bool 1 "speedCurveAsset" string "asset://b93e1179-887a-43aa-8581-81f9b368c4d8" "speedCurveDuration" float 4 "type" string "SkeletalAnimation"
+END_ENTITY
+END_LEVEL

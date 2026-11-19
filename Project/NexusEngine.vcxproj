@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -155,9 +155,25 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Editor\Gui\Widgets\SourceAttachment.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserMutation.cpp" />
+    <ClCompile Include="Editor\Services\ContentMutationService.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserImport.cpp" />
+    <ClCompile Include="Editor\Services\ContentDragPayload.cpp" />
+    <ClCompile Include="Editor\Services\ContentImportService.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserLibrary.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentAssetInspector.cpp" />
+    <ClCompile Include="Editor\Core\EditorWorkspaceContent.cpp" />
+    <ClCompile Include="Editor\Services\ContentBrowserServices.cpp" />
+    <ClCompile Include="Editor\Services\ContentDependencyGraph.cpp" />
+    <ClCompile Include="Editor\Services\SelectionService.cpp" />
     <ClCompile Include="Editor\Gui\Panels\DetailsPanel.cpp" />
+    <ClCompile Include="Editor\Gui\ComponentBrowser\ComponentBrowserModel.cpp" />
+    <ClCompile Include="Editor\Gui\ComponentBrowser\AddComponentWindow.cpp" />
+    <ClCompile Include="Editor\Gui\ComponentBrowser\RemoveComponentMenu.cpp" />
     <ClCompile Include="Runtime\Application\GameRuntime.cpp" />
     <ClCompile Include="Runtime\Gameplay\GameApiBridge.cpp" />
+    <ClCompile Include="Public\Nexus\GameInputActions.cpp" />
     <ClCompile Include="Runtime\Gameplay\GameComponentAccess.cpp" />
     <ClCompile Include="Runtime\Gameplay\GameModuleLoader.cpp" />
     <ClCompile Include="Runtime\Gameplay\NativeGameSystemScope.cpp" />
@@ -251,6 +267,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Runtime\Scene\TransformSystem.cpp" />
     <ClCompile Include="Runtime\Scene\TransformUpdateSystem.cpp" />
     <ClCompile Include="Runtime\Level\Level.cpp" />
+    <ClCompile Include="Runtime\Input\InputMap.cpp" />
     <ClCompile Include="Runtime\Level\LevelSerializer.cpp" />
     <ClCompile Include="Runtime\Rendering\RenderSceneExtractor.cpp" />
     <ClCompile Include="Editor\ImGui\ImGuiRenderer.cpp" />
@@ -452,12 +469,30 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Resource\HdrImage.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\Environment\EnvironmentMapProcessor.cpp" />
     <ClCompile Include="Runtime\Reflection\TypeRegistry.cpp" />
+    <ClCompile Include="Runtime\Reflection\TypeRegistryStorage.cpp" />
     <ClCompile Include="Runtime\Reflection\ManagedScriptMetadata.cpp" />
+    <ClCompile Include="Runtime\Reflection\ComponentEditorMetadata.cpp" />
     <ClCompile Include="Runtime\Reflection\ReflectionRegistration.cpp" />
     <ClCompile Include="Runtime\Reflection\NativeComponentMetadata.cpp" />
     <ClCompile Include="Runtime\Scene\Components\GameComponentData.cpp" />
     <ClCompile Include="Editor\Gui\DockingLayout.cpp" />
     <ClCompile Include="Editor\Services\AssetCatalog.cpp" />
+    <ClCompile Include="Platform\FileSystem\DirectoryChangeWatcher.cpp" />
+    <ClCompile Include="Editor\Services\ContentLibrary.cpp" />
+    <ClCompile Include="Editor\Services\AssetDocumentRegistry.cpp" />
+    <ClCompile Include="Editor\Services\ContentIndex.cpp" />
+    <ClCompile Include="Editor\Services\ContentMetadata.cpp" />
+
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserContextActions.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserNavigation.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserPanel.cpp" />
+    <ClCompile Include="Editor\Gui\ContentBrowser\ContentBrowserSourceCreation.cpp" />
+    <ClCompile Include="Editor\Gui\Icons\EditorIcons.cpp" />
+    <ClCompile Include="Editor\Services\ContentBrowserActions.cpp" />
+    <ClCompile Include="Editor\Services\ContentBrowserState.cpp" />
+    <ClCompile Include="Editor\Services\ContentFileTransaction.cpp" />
+    <ClCompile Include="Editor\Services\ContentItemRegistry.cpp" />
+
     <ClCompile Include="Editor\Gui\MainMenuBar.cpp" />
     <ClCompile Include="Editor\Services\PropertyEditService.cpp" />
     <ClCompile Include="Editor\Services\LocalizationService.cpp" />
@@ -612,6 +647,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
 <ItemGroup>
     <ClCompile Include="Editor\Gui\ReflectedPropertyEditor.cpp" />
     <ClCompile Include="Editor\Services\CollisionLayerEditor.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\InputMapPanel.cpp" />
     <ClCompile Include="Editor\Gui\Properties\PropertyCategoryRegistry.cpp" />
     <ClCompile Include="Editor\Gui\Properties\PropertyPages.cpp" />
     <ClCompile Include="Editor\Gui\Properties\MaterialPage.cpp" />
@@ -656,4 +692,39 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Runtime\Scene\Components\AnimatorComponent.cpp" />
     <ClCompile Include="Runtime\Scene\Components\TimelinePlayerComponent.cpp" />
   </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="Runtime\Curves\FloatCurve.cpp" />
+    <ClCompile Include="Runtime\Curves\CurveSerializer.cpp" />
+    <ClCompile Include="Runtime\Animation\AnimationPlayback.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Curves\CurveAssets.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="Editor\Services\CurveEditDocument.cpp" />
+    <ClCompile Include="Editor\Gui\Panels\CurveEditorPanel.cpp" />
+  </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="Runtime\Animation\AnimationClipAssets.cpp" />
+    <ClCompile Include="Runtime\Animation\AnimationPropertyEvaluator.cpp" />
+    <ClCompile Include="Runtime\Animation\AnimationComponentEvaluator.cpp" />
+    <ClCompile Include="Runtime\Scene\Components\KeyframeAnimationComponent.cpp" />
+    <ClCompile Include="Runtime\Scene\Components\CurveBindingComponent.cpp" />
+    <ClCompile Include="Runtime\Scene\Components\SkeletalAnimationComponent.cpp" />
+  </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="Editor\Gui\Properties\AnimationPage.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="Editor\Services\AnimationCurvePreview.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Graphics\Model\GltfData.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Animation\RetargetProfile.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Animation\AnimationLayers.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Editor\Services\AnimationRigDocument.cpp" /><ClCompile Include="Editor\Gui\Panels\AnimationRigPanel.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Animation\AnimationControllerPlayer.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Graphics\Model\PoseMath.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Animation\AnimationPoseAssets.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Platform\FileSystem\AssetIdentity.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Platform\IPC\NamedPipeChannel.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Curves\CurvePreviewBridge.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Graphics\Resource\FrameDataBuffer.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Scene\Components\CameraEffectComponent.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="Runtime\Animation\TimelineEvaluation.cpp" /></ItemGroup>
 </Project>

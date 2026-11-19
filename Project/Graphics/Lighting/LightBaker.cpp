@@ -32,6 +32,7 @@ namespace NexusEngine {
 			V						   geometricNormal;
 			uint32_t				   material = 0;
 			std::array<float, 4>	   tint{1, 1, 1, 1};
+            std::array<float, 4> uvTransform {1, 1, 0, 0}; //< Rasterと同じ材質UVをベイクする
             MaterialOverride materialOverride; //< この三角形のSlotに適用するInstance値
 		};
 		struct Node {
@@ -238,6 +239,8 @@ namespace NexusEngine {
 						color  = color + From(tri.vertices[k].color) * weights[k];
 						normal = normal + tri.n[k] * weights[k];
 					}
+                    u = u * tri.uvTransform[0] + tri.uvTransform[2];
+                    v = v * tri.uvTransform[1] + tri.uvTransform[3];
                     const auto& override = tri.materialOverride;
                     const auto& base = override.enabled ? override.baseColor : source.baseColorFactor;
                     const auto& emissive = override.enabled ? override.emissive : source.emissiveFactor;
@@ -331,6 +334,12 @@ namespace NexusEngine {
 				add(item.worldMatrix);
 				add(item.tint);
                 // paddingをhashせず、描画と同じ有効材質値をBakeの照合に含める。
+                // 恒等変換は旧キャッシュの署名を維持し、UV変更時だけ再ベイクを要求する。
+                if(item.uvTransform != std::array<float, 4>{1, 1, 0, 0}) {
+                    const uint32_t uvTag = 0x55565452;
+                    add(uvTag);
+                    add(item.uvTransform);
+                }
                 if(item.material.enabled) {
                     const uint32_t materialTag = 0x4d41544f; add(materialTag);
                     add(item.material.slot); add(item.materialBegin); add(item.material.baseColor);
@@ -429,6 +438,7 @@ namespace NexusEngine {
 								Triangle tri;
 								tri.material = sub.materialSlot;
 								tri.tint	 = item.tint;
+                                tri.uvTransform = item.uvTransform;
                                 if(item.material.AppliesTo(sub.materialSlot, item.materialBegin)) tri.materialOverride = item.material;
 								for(uint32_t k = 0; k < 3; ++k) {
 									uint32_t index	 = 0;

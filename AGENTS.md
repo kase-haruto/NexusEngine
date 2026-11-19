@@ -30,3 +30,9 @@
 ユーザーの既存変更を保護する。新しいSDK・ZIPの生成先を分け、旧配布物の上書きや削除、既存プロジェクトのエンジン関連付け変更を行わない。
 
 単なるコード修正、相談、設定ファイルの編集だけを依頼された場合は、それを公開依頼と解釈しない。このファイル自体は公開処理や定期実行を開始する設定ではない。
+
+## Componentの追加・表示情報・解除
+
+新しいComponentやBehaviourを追加するときは、`Project/Docs/ComponentBrowser.md` のチェックリストに従う。表示名・カテゴリ・説明・Icon IDを登録元のMetadataへ記入し、必要な翻訳とPNGを追加する。EditorのBrowserへ具体型の分岐を追加しない。
+
+既存のTypeRegistryとReflection／Native／Managed Metadataを使う。追加可能な型には対応する解除callbackを公開し、追加・解除・Undo／Redo・保存／再読込を確認する。Name・Transformなどの必須型は解除可能にしない。画像の変更方法は`Project/Resources/Editor/Icons/README.md`にも記録する。

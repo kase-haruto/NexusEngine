@@ -64,6 +64,7 @@ namespace NexusEngine {
         bool selected = false; //< 上位層が指定するシルエット強調
         std::string meshAsset, baseColorTexture; //< 永続Asset参照。Hostが描画前に解決する
         uint32_t nodeBegin = 0, nodeEnd = UINT32_MAX; //< 解決済みモデルのNode範囲
+        std::array<float, 4> uvTransform {1, 1, 0, 0}; //< xy:倍率、zw:オフセット
         MaterialOverride material; //< 描画Instanceの材質値
         uint32_t materialBegin = 0; //< Source Slotから統合Slotへのoffset
         PrimitiveShape shape = PrimitiveShape::Asset;

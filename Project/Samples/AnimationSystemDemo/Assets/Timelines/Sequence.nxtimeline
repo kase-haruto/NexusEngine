@@ -1,0 +1,45 @@
+{
+  "duration": 6.0,
+  "loop": false,
+  "tracks": [
+    {
+      "clips": [
+        {
+          "asset": "asset://a23ba66b-faca-4c2d-b181-54c61fea193b",
+          "clipIn": 0.0,
+          "duration": 2.0,
+          "easeIn": 0.0,
+          "easeOut": 0.0,
+          "loop": false,
+          "speed": 1.0,
+          "start": 0.0
+        },
+        {
+          "asset": "asset://d26fc72e-61c3-4d60-866e-ec95b24f0beb",
+          "clipIn": 0.0,
+          "duration": 3.0,
+          "easeIn": 0.5,
+          "easeOut": 0.5,
+          "loop": false,
+          "speed": 1.0,
+          "start": 1.5
+        },
+        {
+          "asset": "asset://157559f6-33c3-4b84-85d3-332b3ab093b8",
+          "clipIn": 0.0,
+          "duration": 2.0,
+          "easeIn": 0.5,
+          "easeOut": 0.0,
+          "loop": false,
+          "speed": 1.0,
+          "start": 4.0
+        }
+      ],
+      "muted": false,
+      "name": "Reusable skeletal clips",
+      "target": "",
+      "type": "Animation"
+    }
+  ],
+  "version": 1
+}

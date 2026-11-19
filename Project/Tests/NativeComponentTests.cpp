@@ -1,4 +1,4 @@
-#include "Runtime/Reflection/NativeComponentMetadata.h"
+﻿#include "Runtime/Reflection/NativeComponentMetadata.h"
 #include "Runtime/Project/ProjectJson.h"
 #include "Runtime/Gameplay/GameApiBridge.h"
 #include "Runtime/Gameplay/NativeGameSystemScope.h"
@@ -10,7 +10,7 @@
 
 using namespace NexusEngine;
 namespace {
-constexpr auto Metadata = R"({"schemaVersion":1,"types":[{"id":"Game.Mover","fullName":"Game.NativeMover","version":2,"aliases":["Old.Mover"],"sourceFiles":["NativeMover.cpp"],"properties":[{"id":"enabled","label":"Enabled","aliases":[],"kind":"Bool","default":true},{"id":"speed","label":"Speed","aliases":["oldSpeed"],"kind":"Float","default":1}]},{"id":"Game.Tag","fullName":"Game.Tag","version":1,"aliases":[],"properties":[]}]})";
+constexpr auto Metadata = R"({"schemaVersion":1,"types":[{"id":"Game.Mover","fullName":"Game.NativeMover","version":2,"aliases":["Old.Mover"],"sourceFiles":["NativeMover.cpp"],"properties":[{"id":"enabled","label":"Enabled","aliases":[],"kind":"Bool","default":true},{"id":"speed","label":"Speed","aliases":["oldSpeed"],"kind":"Float","default":1,"animatable":true}]},{"id":"Game.Tag","fullName":"Game.Tag","version":1,"aliases":[],"properties":[]}]})";
 /*-----------------------------------------------------------------------------------------
  * BehaviourProbe
  * - 既存Scheduler経由のEntity Lifecycleと終了時の書込拒否を記録する検証用Logic
@@ -115,6 +115,7 @@ void RunNativeComponentTests() {
     const auto catalog = NativeComponentMetadata::Parse(Metadata, std::filesystem::absolute("Generated/NativeComponentTests/Source")); assert(catalog);
     ReflectionRegistration reflection; reflection.nativeComponents = *catalog;
     TypeRegistry types; reflection.RegisterInspector(types); assert(types.Find("Game.Mover") && types.Find("Game.Tag"));
+    assert(types.Find("Game.Mover")->properties[1].animatable);
     assert(types.Find("Game.Mover")->sourceFiles.size() == 1 && !(*catalog)->Register(types));
     auto duplicate = ProjectJson::Parse(Metadata); assert(duplicate);
     (*duplicate)["types"][1]["aliases"] = ProjectJson::Json::array({"Game.Mover"});

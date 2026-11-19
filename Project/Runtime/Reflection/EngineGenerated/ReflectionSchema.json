@@ -16,8 +16,18 @@
     },
     {
         "Kind":  "COMPONENT",
+        "Type":  "CameraEffectComponent",
+        "Id":  "\"CameraEffect\""
+    },
+    {
+        "Kind":  "COMPONENT",
         "Type":  "ColliderComponent",
         "Id":  "\"Collider\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "CurveBindingComponent",
+        "Id":  "\"CurveBinding\""
     },
     {
         "Kind":  "COMPONENT",
@@ -48,6 +58,11 @@
         "Kind":  "COMPONENT",
         "Type":  "HierarchyComponent",
         "Id":  "\"Hierarchy\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "KeyframeAnimationComponent",
+        "Id":  "\"KeyframeAnimation\""
     },
     {
         "Kind":  "VALUE",
@@ -88,6 +103,11 @@
         "Kind":  "COMPONENT",
         "Type":  "ScriptComponent",
         "Id":  "\"Script\""
+    },
+    {
+        "Kind":  "COMPONENT",
+        "Type":  "SkeletalAnimationComponent",
+        "Id":  "\"SkeletalAnimation\""
     },
     {
         "Kind":  "COMPONENT",

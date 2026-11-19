@@ -4,3 +4,5 @@
 // 引数は 型名、安定型 ID、表示キー（Component のみ）、保存メンバの順。
 #define NEXUS_REFLECT_VALUE(...)
 #define NEXUS_REFLECT_COMPONENT(...)
+// 任意のEditor向け表示ヒント。保存メンバ・Component生成とは独立する。
+#define NEXUS_COMPONENT_EDITOR(...)

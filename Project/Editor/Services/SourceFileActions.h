@@ -1,8 +1,11 @@
 #pragma once
 #include "Runtime/Reflection/TypeRegistry.h"
+#include "Foundation/Error/Result.h"
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <functional>
+#include <optional>
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
@@ -10,6 +13,42 @@ namespace NexusEngine {
  * - Content Browserのソースと共通Reflectionの明示的な宣言位置を照合する
  * - Componentの所有・生成は既存SceneEditServiceへ委譲し、ファイル名から実行型を推測しない
  *---------------------------------------------------------------------------------------*/
+struct SourceCreationModule {
+    std::string id;
+    std::filesystem::path directory;
+    bool cpp = false;
+};
+struct SourceCreationOptions {
+    std::string kind = "Behaviour", nameSpace, baseClass, baseHeader, directory, cloneFrom, cloneClass;
+};
+struct SourceCreationRequest {
+    std::string module, name;
+    bool cpp = false;
+    std::filesystem::path file; //< 検証済みModule内の生成先
+    SourceCreationOptions options;
+};
+/** Browserと既存Project jobの値による接続。生成・登録はAdd-GameSourceへ委譲する。 */
+class SourceCreationService final {
+public:
+    void Configure(std::filesystem::path project, std::function<bool()> ready,
+        std::function<Result<void>(const SourceCreationRequest&)> create);
+    bool Available() const noexcept;
+    bool CanCreate() const;
+    Result<std::vector<SourceCreationModule>> Modules(bool cpp) const;
+    Result<void> Create(const SourceCreationModule& module, std::string_view name);
+    Result<void> Create(const SourceCreationModule &module, std::string_view name,
+                        const SourceCreationOptions &options);
+    void Complete(Result<std::filesystem::path> result);
+    uint64_t Revision() const noexcept;
+    const std::filesystem::path& CreatedFile() const noexcept;
+    const std::string& ErrorText() const noexcept;
+private:
+    std::filesystem::path project_, created_;
+    std::function<bool()> ready_;
+    std::function<Result<void>(const SourceCreationRequest&)> create_;
+    std::string error_;
+    uint64_t revision_ = 0;
+};
 class SourceFileActions final {
 public:
     /** \brief Browserがソースとして扱う拡張子か調べる */

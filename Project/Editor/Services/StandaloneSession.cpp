@@ -34,7 +34,16 @@ Result<void> StandaloneSession::Start(const ProjectLaunchOptions& options) {
     if(!project_) return std::unexpected(Error(ErrorCategory::Framework,205,"Standalone project is not configured."));
     auto state = State(); if(!state) return std::unexpected(state.error());
     if(state->running || state->building) return std::unexpected(Failed("This Editor already owns a running Runtime or Runtime build."));
-    auto launched = ProjectBuild::Launch(*project_,engine_,ProjectHostKind::Runtime,options);
+    auto launchOptions = options;
+    if(launchOptions.curvePreviewPipe.empty()) {
+        const auto identity = CreateUuid();
+        if(!identity) {
+            return std::unexpected(identity.error());
+        }
+        launchOptions.curvePreviewPipe = *identity;
+        curvePreview_ = std::make_shared<CurvePreviewSender>(*identity);
+    }
+    auto launched = ProjectBuild::Launch(*project_,engine_,ProjectHostKind::Runtime,launchOptions);
     if(!launched) return std::unexpected(launched.error());
     child_ = std::move(*launched); runtimeLog_ = options.log;
     stopping_ = closeSent_ = exitReported_ = false; error_.clear(); return {};
@@ -60,6 +69,8 @@ Result<void> StandaloneSession::RequestStart(const ProjectLaunchOptions& options
     if(error) return std::unexpected(Failed("Cannot create Runtime log directory: " + error.message()));
     buildLog_ = *logs / (*uuid + ".build.log");
     pendingOptions_ = options;
+    pendingOptions_.curvePreviewPipe = *uuid;
+    curvePreview_ = std::make_shared<CurvePreviewSender>(*uuid);
     if(pendingOptions_.log.empty()) pendingOptions_.log = *logs / (*uuid + ".runtime.log");
     runtimeLog_ = pendingOptions_.log; error_.clear(); child_.reset();
     stopping_ = closeSent_ = exitReported_ = false;
@@ -118,5 +129,8 @@ Result<void> StandaloneSession::Stop() {
         closeDeadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     }
     return Poll();
+}
+std::shared_ptr<CurvePreviewSender> StandaloneSession::CurvePreview() const noexcept {
+    return curvePreview_;
 }
 }

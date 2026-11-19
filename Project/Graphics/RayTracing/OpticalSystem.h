@@ -33,6 +33,7 @@ namespace NexusEngine {
 		std::array<float, 4> tint {1, 1, 1, 1};
         MaterialOverride material;
         uint32_t materialBegin = 0;
+        std::array<float, 4> uvTransform {1, 1, 0, 0};
 	};
 	struct OpticalSettings {
 		bool enabled = true;

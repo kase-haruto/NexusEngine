@@ -1,4 +1,5 @@
 #pragma once
+#include "Graphics/Model/DeformationData.h"
 #include "Foundation/Reflection/ReflectionMarkers.h"
 NEXUS_REFLECT_VALUE(DirectionalLightData, "DirectionalLightData", direction, angularRadius, color, intensity)
 
@@ -52,6 +53,7 @@ namespace NexusEngine {
 		Matrix4x4 world; //< InstanceのLocal->World変換
 		std::span<const Matrix4x4> jointPalette; //< 空ならStatic Geometry。変形の拡張点
 		uint64_t instanceId = 0; //< 上位識別方式を公開しない描画Instance識別値
+        DeformationData deformation; //< Forwardと同じpose/morph snapshot
 	};
 
 	struct ShadowStatistics {

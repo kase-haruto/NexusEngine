@@ -14,6 +14,7 @@ public:
     void New(int kind);
     Result<void> Open(const std::filesystem::path& file);
     Result<void> Save();
+    void RefreshLocation();
     void Changed(const Value& before, bool continuous);
     void EndEdit();
     void Undo();
@@ -41,5 +42,6 @@ private:
     PersistentId previewEntity_;
     std::string previewReference_;
     size_t previewKind_ = 0;
+    std::string identity_, identityPath_;
 };
 }

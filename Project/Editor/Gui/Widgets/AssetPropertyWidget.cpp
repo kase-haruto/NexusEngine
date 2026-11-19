@@ -1,22 +1,55 @@
 #include "AssetPropertyWidget.h"
+#include "Editor/Services/ContentDragPayload.h"
 #include "SearchBar.h"
+#include "Editor/Gui/Icons/EditorIcons.h"
 #include "Graphics/Model/ModelAssetReference.h"
 #include <cstring>
 #include <algorithm>
 
 namespace NexusEngine {
-void AssetPropertyWidget::Configure(std::filesystem::path root, Validate validate, Model model, Preview preview) {
+void AssetPropertyWidget::Configure(std::filesystem::path root, Validate validate, Model model, Preview preview,
+                                    std::function<void()> refresh) {
     catalog_ = std::make_unique<AssetCatalog>(std::move(root));
-    validate_ = std::move(validate); model_ = std::move(model); preview_ = std::move(preview);
+    validate_ = std::move(validate);
+    model_ = std::move(model);
+    preview_ = std::move(preview);
+    refreshPreviews_ = std::move(refresh);
 }
-void AssetPropertyWidget::DrawPreview(const std::string& path, bool texture, int node, float size) {
-    if(!preview_) return;
+void AssetPropertyWidget::ConfigureExternalRefresh(std::function<void()> refresh) {
+    externalRefresh_ = std::move(refresh);
+}
+void AssetPropertyWidget::RefreshPreviews(bool reloadAssets) {
+    if (!reloadAssets && externalRefresh_) {
+        externalRefresh_();
+        if (catalog_) {
+            catalog_->Refresh();
+        }
+        return;
+    }
+    if (refreshPreviews_) {
+        refreshPreviews_();
+    }
+    if (catalog_) {
+        catalog_->Refresh();
+    }
+}
+ImTextureRef AssetPropertyWidget::PreviewImage(const std::string &path, bool texture, int node) {
+    return preview_ ? preview_(path, texture, node) : ImTextureRef{};
+}
+void AssetPropertyWidget::DrawPreview(const std::string &path, bool texture, int node, float size) {
+    if (!preview_)
+        return;
     auto image = preview_(path, texture, node);
-    if(image._TexData || image._TexID != ImTextureID_Invalid) ImGui::Image(image, {size, size});
+    if (image._TexData || image._TexID != ImTextureID_Invalid)
+        ImGui::Image(image, {size, size});
 }
-UI::ItemResult AssetPropertyWidget::Draw(const UI::ItemOptions& options, PropertyValue& value,
-    const PropertyDescriptor& property, const LocalizationService& text, const std::string& mesh, int node) {
-    if(!catalog_) { ImGui::TextDisabled("%s", text.Text("asset.unavailable").c_str()); return {}; }
+UI::ItemResult AssetPropertyWidget::Draw(const UI::ItemOptions &options, PropertyValue &value,
+                                         const PropertyDescriptor &property, const LocalizationService &text,
+                                         const std::string &mesh, int node) {
+    if (!catalog_) {
+        ImGui::TextDisabled("%s", text.Text("asset.unavailable").c_str());
+        return {};
+    }
     bool changed = false;
     ImGui::TextUnformatted(std::string(options.label).c_str());
     if(property.kind == PropertyKind::MeshNode) {
@@ -54,6 +87,14 @@ UI::ItemResult AssetPropertyWidget::Draw(const UI::ItemOptions& options, Propert
                         assign(std::filesystem::path(reinterpret_cast<const char8_t*>(bytes)));
                 }
             }
+            if (const auto *payload = ImGui::AcceptDragDropPayload("NEXUS_CONTENT_ITEMS")) {
+                const auto files = ContentDragPayload::Decode(payload->Data, static_cast<size_t>(payload->DataSize));
+                if (files && files->size() == 1) {
+                    assign(files->front());
+                } else {
+                    error_ = "Choose exactly one asset for this property.";
+                }
+            }
             ImGui::EndDragDropTarget();
         }
         if(ImGui::IsItemClicked()) ImGui::OpenPopup("asset-picker");
@@ -63,6 +104,10 @@ UI::ItemResult AssetPropertyWidget::Draw(const UI::ItemOptions& options, Propert
             if(ImGui::Button(text.Text("asset.up").c_str())) catalog_->Navigate(catalog_->Current().parent_path());
             ImGui::SameLine(); ImGui::TextUnformatted(AssetCatalog::Utf8(catalog_->Current().filename()).c_str());
             UI::SearchBar("filter", search_, text.Text("search").c_str());
+            ImGui::SameLine();
+            if(UI::IconButton("refresh", text.Label("asset.refresh", "AssetPickerRefresh").c_str())) {
+                RefreshPreviews();
+            }
             ImGui::BeginChild("choices", {350, 280});
             std::optional<std::filesystem::path> navigate;
             for(const auto& entry : *catalog_->Snapshot(catalog_->Current())) {

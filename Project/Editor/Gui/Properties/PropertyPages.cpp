@@ -1,5 +1,6 @@
 #include "PropertyCategoryRegistry.h"
 #include "MaterialPage.h"
+#include "AnimationPage.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Gui/ReflectedPropertyEditor.h"
 #include "Runtime/Reflection/TypeRegistry.h"
@@ -76,6 +77,7 @@ void OtherIcon(ImDrawList& list, ImVec2 p, float side, ImU32 color) {
 // 具体的なページの構成だけを登録する。PanelへComponent分岐や生成Factoryを追加しない。
 ////////////////////////////////////////////////////////////////////////////////////////////
 void RegisterPropertyPages(PropertyCategoryRegistry& registry) {
+    RegisterAnimationPage(registry);
     registry.Register({"Object", "properties.object", 100,
         [](const auto& context) { return HasType(context, "Transform"); },
         [](const auto& context) { DrawType(context, "Transform"); }, ObjectIcon, {"Transform"}});
@@ -83,7 +85,7 @@ void RegisterPropertyPages(PropertyCategoryRegistry& registry) {
         [](const auto& context) { return HasType(context, "PrimitiveRender"); },
         [](const auto& context) {
             // 材質の既知項目だけを除外し、今後追加される描画プロパティも自動表示する。
-            DrawType(context, "PrimitiveRender", {"baseColorTexture", "tint", "materialEnabled", "materialSlot", "materialBaseColor",
+            DrawType(context, "PrimitiveRender", {"baseColorTexture", "tint", "uvScale", "uvOffset", "materialEnabled", "materialSlot", "materialBaseColor",
                 "materialMetallic", "materialRoughness", "materialNormalScale", "materialEmissive", "materialOcclusion"});
         }, RenderingIcon, {"PrimitiveRender"}});
     registry.Register({"Material", "properties.material", 300, MaterialPage::IsAvailable, MaterialPage::Draw, MaterialIcon, {"PrimitiveRender"}});

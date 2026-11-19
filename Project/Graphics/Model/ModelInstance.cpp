@@ -1,4 +1,5 @@
 #include "ModelInstance.h"
+#include "PoseMath.h"
 
 // c++
 #include <algorithm>
@@ -13,32 +14,6 @@ namespace NexusEngine {
 
 		[[nodiscard]] Vector3 Lerp(const Vector3& left, const Vector3& right, const float amount) noexcept {
 			return left + (right - left) * amount;
-		}
-
-		[[nodiscard]] Quaternion Slerp(Quaternion left, Quaternion right, const float amount) noexcept {
-			float dot = left.x * right.x + left.y * right.y + left.z * right.z + left.w * right.w;
-			if(dot < 0.0f) {
-				dot = -dot;
-				right = { -right.x, -right.y, -right.z, -right.w };
-			}
-			if(dot > 0.9995f) {
-				return Quaternion {
-					left.x + (right.x - left.x) * amount,
-					left.y + (right.y - left.y) * amount,
-					left.z + (right.z - left.z) * amount,
-					left.w + (right.w - left.w) * amount
-				}.Normalized();
-			}
-			const float angle = std::acos((std::clamp)(dot, -1.0f, 1.0f));
-			const float sine = std::sin(angle);
-			const float leftWeight = std::sin((1.0f - amount) * angle) / sine;
-			const float rightWeight = std::sin(amount * angle) / sine;
-			return Quaternion {
-				left.x * leftWeight + right.x * rightWeight,
-				left.y * leftWeight + right.y * rightWeight,
-				left.z * leftWeight + right.z * rightWeight,
-				left.w * leftWeight + right.w * rightWeight
-			}.Normalized();
 		}
 
 		[[nodiscard]] Vector3 CubicInterpolate(
@@ -118,7 +93,34 @@ namespace NexusEngine {
 					return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid CPU skin joint."));
 			}
 		}
+        for(const auto& node : resource.nodes) {
+            if(node.morphWeights.size() > kMaxMorphTargets || std::ranges::any_of(node.morphWeights, [](float weight) {
+                return !std::isfinite(weight);
+            })) {
+                return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid default morph weights"));
+            }
+        }
+        for(const auto& clip : resource.animations) {
+            for(const auto& channel : clip.channels) {
+                float previous = -1;
+                for(const auto& key : channel.weights) {
+                    const size_t count = channel.nodeIndex < resource.nodes.size() ? resource.nodes[channel.nodeIndex].morphWeights.size() : 0;
+                    const auto finite = [](const auto& values) {
+                        return std::ranges::all_of(values, [](float value) {
+                            return std::isfinite(value);
+                        });
+                    };
+                    if(!count || key.value.size() != count || !finite(key.value) || !std::isfinite(key.time) || key.time < 0 || key.time <= previous || key.time > clip.duration ||
+                        (channel.weightsInterpolation == AnimationInterpolation::CubicSpline && (key.inTangent.size() != count || key.outTangent.size() != count || !finite(key.inTangent) || !finite(key.outTangent)))) {
+                        return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid morph keyframe dimensions or values"));
+                    }
+                    previous = key.time;
+                }
+            }
+        }
 		resource_ = &resource;
+        morphWeights_.resize(resource.nodes.size());
+        blendMorphWeights_.resize(resource.nodes.size());
 		localTransforms_.reserve(resource.nodes.size());
 		for(const ModelNodeAssetData& node : resource.nodes) localTransforms_.push_back(node.localTransform);
 		blendTransforms_.resize(resource.nodes.size());
@@ -134,6 +136,8 @@ namespace NexusEngine {
 	void ModelInstance::Shutdown() noexcept {
 		resource_ = nullptr;
 		localTransforms_.clear();
+        morphWeights_.clear();
+        blendMorphWeights_.clear();
 		blendTransforms_.clear();
 		nodeWorldTransforms_.clear();
 		skinPalettes_.clear();
@@ -196,6 +200,13 @@ namespace NexusEngine {
 		animationTime_ = firstTime;
 		loop_ = firstLoop;
 		EvaluateLocalPose(first, firstTime, firstLoop, localTransforms_);
+        EvaluateMorphPose(first, firstTime, firstLoop, morphWeights_);
+        EvaluateMorphPose(second, secondTime, secondLoop, blendMorphWeights_);
+        for(size_t node = 0; node < morphWeights_.size(); ++node) {
+            for(size_t target = 0; target < morphWeights_[node].size(); ++target) {
+                morphWeights_[node][target] += (blendMorphWeights_[node][target] - morphWeights_[node][target]) * weight;
+            }
+        }
 		// 各クリップをbind poseから評価し、trackが片方にしかない場合も過去の姿勢を残さない。
 		auto& target = blendTransforms_;
 		EvaluateLocalPose(second, secondTime, secondLoop, target);
@@ -203,7 +214,7 @@ namespace NexusEngine {
 			auto& pose = localTransforms_[index];
 			pose.translation = Lerp(pose.translation, target[index].translation, weight);
 			pose.scale = Lerp(pose.scale, target[index].scale, weight);
-			pose.rotation = Slerp(pose.rotation, target[index].rotation, weight);
+			pose.rotation = BlendPoseRotation(pose.rotation, target[index].rotation, weight);
 		}
 		UpdateMatrices();
 		return {};
@@ -211,44 +222,132 @@ namespace NexusEngine {
 
     Result<void> ModelInstance::SampleLayers(std::span<const AnimationPoseSample> layers) noexcept {
         float total = 0;
+        bool ordered = false;
         for(const auto& layer : layers) {
             if(!resource_ || layer.index >= resource_->animations.size() || !std::isfinite(layer.time) || layer.time < 0 ||
-                !std::isfinite(layer.weight) || layer.weight < 0) {
+                !std::isfinite(layer.weight) || layer.weight < 0 ||
+                static_cast<int>(layer.mode) < 0 || static_cast<int>(layer.mode) > 2 ||
+                (layer.mode != PoseBlendMode::Normalized && layer.weight > 1) ||
+                (ordered && layer.mode == PoseBlendMode::Normalized)) {
                 return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid animation layer."));
             }
-            total += layer.weight;
+            ordered |= layer.mode != PoseBlendMode::Normalized;
+            if(layer.mode == PoseBlendMode::Normalized) {
+                total += layer.weight;
+            }
+            for(auto node : layer.maskNodes) {
+                if(node >= resource_->nodes.size()) {
+                    return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Invalid layer mask node."));
+                }
+            }
         }
-        if(!std::isfinite(total) || total <= 0) {
+        if(!resource_ || !std::isfinite(total) || (total <= 0 && !ordered)) {
             return std::unexpected(Error(ErrorCategory::Resource, kInvalidModelInstance, "Animation layers require positive total weight."));
         }
-        float accumulated = 0;
+        // layerだけの再生もbind poseを基準にする。過去frameの結果を加算しない。
+        for(size_t node = 0; node < localTransforms_.size(); ++node) {
+            localTransforms_[node] = resource_->nodes[node].localTransform;
+            morphWeights_[node] = resource_->nodes[node].morphWeights;
+        }
+        float accumulated = (std::max)(0.0f, 1 - total);
         for(const auto& layer : layers) {
             if(layer.weight == 0) {
                 continue;
             }
-            if(accumulated == 0) {
-                EvaluateLocalPose(layer.index, layer.time, layer.loop, localTransforms_);
-            } else {
-                EvaluateLocalPose(layer.index, layer.time, layer.loop, blendTransforms_);
-                const float weight = layer.weight / (accumulated + layer.weight);
-                for(size_t node = 0; node < localTransforms_.size(); ++node) {
+            EvaluateLocalPose(layer.index, layer.time, layer.loop, blendTransforms_);
+            EvaluateMorphPose(layer.index, layer.time, layer.loop, blendMorphWeights_);
+            const float weight = layer.mode == PoseBlendMode::Normalized ? layer.weight / (accumulated + layer.weight) : layer.weight;
+            for(size_t node = 0; node < localTransforms_.size(); ++node) {
+                if(layer.masked && std::ranges::find(layer.maskNodes, static_cast<uint32_t>(node)) == layer.maskNodes.end()) {
+                    continue;
+                }
+                if(layer.mode != PoseBlendMode::Additive) {
                     auto& pose = localTransforms_[node];
                     const auto& target = blendTransforms_[node];
                     pose.translation = Lerp(pose.translation, target.translation, weight);
                     pose.scale = Lerp(pose.scale, target.scale, weight);
-                    pose.rotation = Slerp(pose.rotation, target.rotation, weight);
+                    pose.rotation = BlendPoseRotation(pose.rotation, target.rotation, weight);
+                } else {
+                    auto& pose = localTransforms_[node];
+                    const auto& target = blendTransforms_[node];
+                    const auto& rest = resource_->nodes[node].localTransform;
+                    pose.translation = pose.translation + (target.translation - rest.translation) * weight;
+                    // 零scaleの軸は加算倍率を定義できないため、その軸のscaleを維持する。
+                    const auto ratio = [](float value, float reference) {
+                        return std::abs(reference) > 1e-8f ? value / reference : 1.0f;
+                    };
+                    const Vector3 scaleDelta{ratio(target.scale.x, rest.scale.x), ratio(target.scale.y, rest.scale.y), ratio(target.scale.z, rest.scale.z)};
+                    const auto factor = Lerp(Vector3::One(), scaleDelta, weight);
+                    pose.scale = {pose.scale.x * factor.x, pose.scale.y * factor.y, pose.scale.z * factor.z};
+                    const auto restRotation = rest.rotation.Normalized();
+                    const Quaternion inverseRest{-restRotation.x, -restRotation.y, -restRotation.z, restRotation.w};
+                    const auto delta = Quaternion::Multiply(target.rotation, inverseRest).Normalized();
+                    pose.rotation = Quaternion::Multiply(BlendPoseRotation(Quaternion::Identity(), delta, weight), pose.rotation).Normalized();
+                }
+                for(size_t target = 0; target < morphWeights_[node].size(); ++target) {
+                    const float reference = layer.mode == PoseBlendMode::Additive ? resource_->nodes[node].morphWeights[target] : morphWeights_[node][target];
+                    morphWeights_[node][target] += (blendMorphWeights_[node][target] - reference) * weight;
                 }
             }
-            accumulated += layer.weight;
+            if(layer.mode == PoseBlendMode::Normalized) {
+                accumulated += layer.weight;
+            }
         }
         UpdateMatrices();
+        StripRootMotion(layers);
         return {};
+    }
+    void ModelInstance::StripRootMotion(std::span<const AnimationPoseSample> layers) noexcept {
+        std::vector<uint32_t> processed;
+        for(const auto& layer : layers) {
+            const auto root = layer.rootMotionNode;
+            if(root >= resource_->nodes.size() || std::ranges::find(processed, root) != processed.end()) {
+                continue;
+            }
+            processed.push_back(root);
+            auto bindWorld = MakeAffineMatrix(resource_->nodes[root].localTransform.scale,
+                resource_->nodes[root].localTransform.rotation, resource_->nodes[root].localTransform.translation);
+            Quaternion bindRotation = resource_->nodes[root].localTransform.rotation;
+            Quaternion parentRotation;
+            auto ancestor = resource_->nodes[root].parentIndex;
+            while(ancestor != ModelNodeAssetData::kNoParent) {
+                const auto& rest = resource_->nodes[ancestor].localTransform;
+                bindWorld = Multiply(bindWorld, MakeAffineMatrix(rest.scale, rest.rotation, rest.translation));
+                bindRotation = Quaternion::Multiply(rest.rotation, bindRotation).Normalized();
+                parentRotation = Quaternion::Multiply(localTransforms_[ancestor].rotation, parentRotation).Normalized();
+                ancestor = resource_->nodes[ancestor].parentIndex;
+            }
+            const auto parent = resource_->nodes[root].parentIndex;
+            const auto parentWorld = parent == ModelNodeAssetData::kNoParent ? Matrix4x4::Identity() : nodeWorldTransforms_[parent];
+            const auto inverse = TryInverse(parentWorld);
+            if(!inverse) {
+                continue;
+            }
+            const auto& current = nodeWorldTransforms_[root];
+            const auto axes = layer.rootMotionAxes;
+            const Vector3 world{current.At(3, 0) + (bindWorld.At(3, 0) - current.At(3, 0)) * axes.x,
+                current.At(3, 1) + (bindWorld.At(3, 1) - current.At(3, 1)) * axes.y,
+                current.At(3, 2) + (bindWorld.At(3, 2) - current.At(3, 2)) * axes.z};
+            auto& pose = localTransforms_[root];
+            pose.translation = {world.x * inverse->At(0, 0) + world.y * inverse->At(1, 0) + world.z * inverse->At(2, 0) + inverse->At(3, 0),
+                world.x * inverse->At(0, 1) + world.y * inverse->At(1, 1) + world.z * inverse->At(2, 1) + inverse->At(3, 1),
+                world.x * inverse->At(0, 2) + world.y * inverse->At(1, 2) + world.z * inverse->At(2, 2) + inverse->At(3, 2)};
+            if(layer.removeRootRotation) {
+                const Quaternion inverseRotation{-parentRotation.x, -parentRotation.y, -parentRotation.z, parentRotation.w};
+                pose.rotation = Quaternion::Multiply(inverseRotation, bindRotation).Normalized();
+            }
+            UpdateMatrices();
+        }
+    }
+    const std::vector<ModelNodeTransform>& ModelInstance::GetLocalTransforms() const noexcept {
+        return localTransforms_;
     }
 	void ModelInstance::EvaluatePose() noexcept {
 		if(resource_ == nullptr) {
 			return;
 		}
 		EvaluateLocalPose(animationIndex_, animationTime_, loop_, localTransforms_);
+        EvaluateMorphPose(animationIndex_, animationTime_, loop_, morphWeights_);
 		UpdateMatrices();
 	}
 
@@ -280,13 +379,60 @@ namespace NexusEngine {
 					static_cast<Vector3(*)(const VectorKeyframe&, const VectorKeyframe&, float, float)>(CubicInterpolate));
 				transform.rotation = SampleTrack(
 					channel.rotations, time, transform.rotation,
-					channel.rotationInterpolation, Slerp,
+					channel.rotationInterpolation, BlendPoseRotation,
 					static_cast<Quaternion(*)(const QuaternionKeyframe&, const QuaternionKeyframe&, float, float)>(CubicInterpolate));
 			}
 		}
 
 	}
 
+    const std::vector<float>& ModelInstance::GetMorphWeights(uint32_t node) const noexcept {
+        static const std::vector<float> empty;
+        return node < morphWeights_.size() ? morphWeights_[node] : empty;
+    }
+    void ModelInstance::EvaluateMorphPose(uint32_t clipIndex, float time, bool loop, std::vector<std::vector<float>>& weights) noexcept {
+        for(size_t node = 0; node < resource_->nodes.size(); ++node) {
+            weights[node] = resource_->nodes[node].morphWeights;
+        }
+        if(clipIndex >= resource_->animations.size()) {
+            return;
+        }
+        const auto& clip = resource_->animations[clipIndex];
+        time = clip.duration > 0 ? (loop ? std::fmod(time, clip.duration) : (std::min)(time, clip.duration)) : 0;
+        for(const auto& channel : clip.channels) {
+            if(channel.nodeIndex >= weights.size() || channel.weights.empty()) {
+                continue;
+            }
+            const auto& keys = channel.weights;
+            auto& output = weights[channel.nodeIndex];
+            if(time <= keys.front().time || keys.size() == 1) {
+                output = keys.front().value;
+                continue;
+            }
+            if(time >= keys.back().time) {
+                output = keys.back().value;
+                continue;
+            }
+            const auto next = std::upper_bound(keys.begin(), keys.end(), time, [](float value, const MorphKeyframe& key) {
+                return value < key.time;
+            });
+            const auto& a = *(next - 1);
+            const auto& b = *next;
+            const float duration = b.time - a.time;
+            const float u = (time - a.time) / duration;
+            for(size_t target = 0; target < output.size(); ++target) {
+                if(channel.weightsInterpolation == AnimationInterpolation::Step) {
+                    output[target] = a.value[target];
+                } else if(channel.weightsInterpolation == AnimationInterpolation::CubicSpline) {
+                    const float u2 = u * u, u3 = u2 * u;
+                    output[target] = (2 * u3 - 3 * u2 + 1) * a.value[target] + (u3 - 2 * u2 + u) * duration * a.outTangent[target] +
+                        (-2 * u3 + 3 * u2) * b.value[target] + (u3 - u2) * duration * b.inTangent[target];
+                } else {
+                    output[target] = a.value[target] + (b.value[target] - a.value[target]) * u;
+                }
+            }
+        }
+    }
 	void ModelInstance::UpdateMatrices() noexcept {
 		const auto& nodes = resource_->nodes;
 		// Initialize時に親indexが子より前になることを検証済みなので、1 passでhierarchyを合成できる。

@@ -135,23 +135,26 @@ namespace NexusEngine {
 		void ReleaseReinstancing() noexcept;
 		void RestoreReinstancing(const ReflectionValue& snapshot);
 		size_t sceneGeneration_ = 0;
-        std::unique_ptr<ModelAssetLibrary> modelLibrary_; //< CPU Sourceと材質Variantの所有者
-        std::unique_ptr<PrimitiveRenderer> cameraPreviewRenderer_; //< プレビュー専用GPU資源。GraphicsSystem停止まで保持する
-        RenderScene cameraPreviewScene_;
-        size_t previewAssetRevision_ = 0;
-        size_t animationStudioRevision_ = 0, animationSavedRevision_ = 0;
-        bool animationPreviewWasActive_ = false;
-        bool previewInitializationFailed_ = false;
-        size_t uploadedAssetRevision_ = 1; //< GPUへ反映済みsnapshot
-        std::set<std::string> reportedAssetErrors_; //< 同じ欠損参照による毎Frameのログ連打を防ぐ
-		std::array<char, 1024> environmentPath_ {}; //< Editor入力。RendererはScene設定だけを参照する
-		std::array<char, 1024> bakedPath_ {}; //< ベイク成果物の入力パス。GPU参照は保持しない
-		GraphicsSystem* graphicsSystem_ = nullptr; //< Non-owning post-process controls.
-		ShadowSystem*	   shadows_			   = nullptr; //< Runtime設定/診断のみ参照する。ImGuiはEditor内に限定
-		OpticalSystem*	   optics_			   = nullptr; //< Optical Passの設定のみを編集する非所有参照
-		PrimitiveRenderer* materialRenderer_   = nullptr; //< 光学Materialの設定窓口、非所有
+                std::unique_ptr<ModelAssetLibrary> previewLibrary_; //< 外部変更後の遅延thumbnail専用CPU cache
+                std::unique_ptr<ModelAssetLibrary> modelLibrary_;   //< CPU Sourceと材質Variantの所有者
+                std::unique_ptr<PrimitiveRenderer>
+                    cameraPreviewRenderer_; //< プレビュー専用GPU資源。GraphicsSystem停止まで保持する
+                RenderScene cameraPreviewScene_;
+                size_t previewAssetRevision_ = 0;
+                size_t animationStudioRevision_ = 0, animationSavedRevision_ = 0;
+                size_t rigSavedRevision_ = 0;
+                bool animationPreviewWasActive_ = false;
+                bool previewInitializationFailed_ = false;
+                size_t uploadedAssetRevision_ = 1;              //< GPUへ反映済みsnapshot
+                std::set<std::string> reportedAssetErrors_;     //< 同じ欠損参照による毎Frameのログ連打を防ぐ
+                std::array<char, 1024> environmentPath_{};      //< Editor入力。RendererはScene設定だけを参照する
+                std::array<char, 1024> bakedPath_{};            //< ベイク成果物の入力パス。GPU参照は保持しない
+                GraphicsSystem *graphicsSystem_ = nullptr;      //< Non-owning post-process controls.
+                ShadowSystem *shadows_ = nullptr;               //< Runtime設定/診断のみ参照する。ImGuiはEditor内に限定
+                OpticalSystem *optics_ = nullptr;               //< Optical Passの設定のみを編集する非所有参照
+                PrimitiveRenderer *materialRenderer_ = nullptr; //< 光学Materialの設定窓口、非所有
 
-		ImGuiRenderer imguiRenderer_;		   //< imgui描画
+                ImGuiRenderer imguiRenderer_;		   //< imgui描画
 		UI::Context	  guiContext_;			   //< gui
 		bool		  showDemoWindow_ = false; //< ImGui Demo Windowの表示フラグ
 

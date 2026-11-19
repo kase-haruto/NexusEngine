@@ -14,6 +14,8 @@ class SceneEditService;
 class AssetPropertyWidget;
 class AssetCatalog;
 class CollisionLayerEditor;
+class CurveEditDocument;
+class ContentBrowserServices;
 struct EditorContext {
     EditorSession& session; //< 既存編集documentの非所有参照
     SelectionService& selection; //< 全Panel共通の選択
@@ -26,6 +28,9 @@ struct EditorContext {
     AssetPropertyWidget* assets = nullptr; //< Application接続時にAsset編集を有効にする
     AssetCatalog* sources = nullptr; //< Workspace所有のSource範囲。drop時に外部パスと未登録型を拒否する
     CollisionLayerEditor* collisionLayers = nullptr; //< Project共通のPhysics設定と履歴
+    AssetCatalog* content = nullptr; //< Assets root。用途別pickerが安全な相対参照を選ぶ
+    CurveEditDocument* curves = nullptr; //< 任意の汎用Curve編集context。Runtime componentを所有しない
+    ContentBrowserServices *browser = nullptr; //< Asset選択・文書保存・依存情報の共有窓口
 };
 /*-----------------------------------------------------------------------------------------
  * IEditorPanel

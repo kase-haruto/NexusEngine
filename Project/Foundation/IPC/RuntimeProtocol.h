@@ -31,7 +31,13 @@ namespace NexusEngine::IPC {
 		FrameReleased,
 		RetirePool,
 		PoolRetired,
-		Heartbeat
+		Heartbeat,
+        CurveBegin,
+        CurveChunk,
+        CurveCommit,
+        CurveClear,
+        CurvePlayback,
+        CurveState
 	};
 	enum class RuntimeState : uint8_t {
 		Disconnected,

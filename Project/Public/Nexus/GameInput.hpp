@@ -1,11 +1,28 @@
 #pragma once
 #include "GameInput.h"
+#include <array>
+#include <string_view>
 namespace NexusGame {
 /*-----------------------------------------------------------------------------------------
  * Input
  * - 既存servicesからframe入力を一括取得するC++ Facade
  * - WindowやEditorを参照せず、Module寿命の借用clientだけを保持する
  *---------------------------------------------------------------------------------------*/
+/** 1frameの操作snapshot。未登録名はfalse/zeroになり、複数回読んでも消費しない。 */
+class ActionFrame final {
+public:
+    bool Down(std::string_view name) const noexcept;
+    bool Pressed(std::string_view name) const noexcept;
+    bool Released(std::string_view name) const noexcept;
+    float Value(std::string_view name) const noexcept;
+    std::array<float, 2> Vector2(std::string_view name) const noexcept;
+    bool Contains(std::string_view name) const noexcept;
+    std::string_view Context() const noexcept;
+private:
+    friend class Input;
+    const NexusInputActionStateV1* Find(std::string_view name) const noexcept;
+    NexusInputActionsFrameV1 frame_ {};
+};
 class Input final {
 public:
     /** \brief Loaderが所有するservices接続を借用する */
@@ -33,6 +50,9 @@ public:
         if(length!=sizeof(next) || next.count!=NEXUS_GAMEPAD_COUNT || next.focused>1 || next.reserved[0] || next.reserved[1]) return NEXUS_GAME_FAILED;
         output=next; return NEXUS_GAME_OK;
     }
+    /** 全Actionを一括取得する。GameModule.propsがSDKの実装cppをModuleへ組み込む。 */
+    NexusGameStatus ReadActions(ActionFrame& output) const noexcept;
+    NexusGameStatus SetContext(std::string_view context) const noexcept;
 private:
     NexusGameServicesApiV1 api_{}; //< Engine常駐の関数表コピー
     uint64_t client_=0; //< Module所有者が終了すると失効する借用接続

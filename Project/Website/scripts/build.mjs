@@ -39,6 +39,7 @@ export function launcherCatalog(launcher, published) {
   const candidates = launcher ? [launcher, ...history.filter(item => item.key !== launcher.key)] : history;
   const versions = new Set();
   return candidates.map(item => publishedDownload(item, published)).filter(item => item.available).map(item => {
+    if (item.changes != null && typeof item.changes !== 'string') throw new Error('Launcher changes must be plain text.');
     const version = item.version || `1.0.0-${item.sha256.slice(0, 12)}`;
     if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version) || versions.has(version)) throw new Error('Assign a unique launcher version before publishing.');
     versions.add(version);
@@ -68,6 +69,7 @@ async function build() {
   if (process.env.NEXUS_LAUNCHER_SETUP) {
     const file = resolve(process.env.NEXUS_LAUNCHER_SETUP);
     const settings = await readJson(resolve(dirname(file), '../Launcher/launcher.json'));
+    if (settings.launcherChanges != null && typeof settings.launcherChanges !== 'string') throw new Error('Installer launcherChanges must be plain text. Rebuild with corrected distribution tooling.');
     const origin = new URL(process.env.NEXUS_SITE_ORIGIN);
     if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || settings.catalogUrl !== new URL('/releases.json', origin).href || settings.catalogFile) throw new Error('Installer must use the production HTTPS catalog without local paths.');
     const sha256 = await hash(file), bytes = (await stat(file)).size;

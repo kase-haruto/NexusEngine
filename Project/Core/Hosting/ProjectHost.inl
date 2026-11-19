@@ -65,6 +65,7 @@ int wmain(int argc, wchar_t** argv) {
     bool checkGame = false;
     bool hidden = false;
     uint32_t frameLimit = 0;
+    std::string curvePreviewPipe;
     std::filesystem::path projectArgument, levelArgument, engineArgument;
 #ifndef NEXUS_GAME_HOST
     std::filesystem::path engineManifestArgument;
@@ -74,6 +75,12 @@ int wmain(int argc, wchar_t** argv) {
         if(argument == L"--game") gameMode = true;
         else if(argument == L"--check-game") checkGame = true;
         else if(argument == L"--hidden") hidden = true;
+        else if(argument == L"--curve-preview-pipe") {
+            if(index + 1 == argc) {
+                return failStartup("Missing Curve preview endpoint.");
+            }
+            curvePreviewPipe = NexusEngine::ConvertString(std::wstring(argv[++index]));
+        }
         else if(argument == L"--frames") {
             if(index + 1 == argc) return failStartup("Missing frame limit.");
             const std::wstring_view value{argv[++index]}; uint32_t parsed = 0;
@@ -294,6 +301,7 @@ int wmain(int argc, wchar_t** argv) {
             renderPipeline=std::move(*compiled);
         }
         NexusEngine::GameApplication game(reflection, paths);
+        game.ConnectCurvePreview(curvePreviewPipe);
         if(!game.SetGameLevelSetup(NEXUS_PROJECT_SETUP)) return failStartup("Cannot configure game systems.");
 #ifdef NEXUS_PROJECT_NATIVE_MODULE
         if(!game.SetNativeGameModule(nativeModuleSettings)) return failStartup("Cannot configure Native Game Module.");

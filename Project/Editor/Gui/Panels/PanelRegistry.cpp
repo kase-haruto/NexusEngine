@@ -47,7 +47,7 @@ void PanelRegistry::Draw(const EditorContext& context, bool disableEditing) {
         if(ImGui::Begin(title.c_str(), &entry.isOpen, flags)) {
             // DisabledAlpha also dims Image vertices. Keep the runtime viewport at full
             // brightness while preventing edits in the other panels during Play.
-            ImGui::BeginDisabled(disableEditing && entry.Id() != "Viewport" && entry.Id() != "AnimationStudio");
+            ImGui::BeginDisabled(disableEditing && entry.Id() != "Viewport" && entry.Id() != "AnimationStudio" && entry.Id() != "CurveEditor");
             entry.panel->Draw(context);
             ImGui::EndDisabled();
         }
@@ -57,5 +57,16 @@ void PanelRegistry::Draw(const EditorContext& context, bool disableEditing) {
     for(const auto& id : removed_) Unregister(id);
     removed_.clear();
 }
-void PanelRegistry::Open(std::string_view id) { for(auto& entry : entries_) if(entry.Id() == id) entry.isOpen = true; }
+void PanelRegistry::Open(std::string_view id) {
+    for(auto& entry : entries_) {
+        if(entry.Id() == id) {
+            entry.isOpen = true;
+            // 既にdockされている非選択tabも表示する。Open要求を見えないtabへ送ったままにしない。
+            if(ImGui::GetCurrentContext()) {
+                ImGui::SetWindowFocus(("###" + std::string(id)).c_str());
+            }
+            return;
+        }
+    }
+}
 }

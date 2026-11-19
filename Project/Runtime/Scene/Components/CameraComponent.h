@@ -1,6 +1,7 @@
 #pragma once
 #include "Foundation/Reflection/ReflectionMarkers.h"
 NEXUS_REFLECT_COMPONENT(CameraComponent, "Camera", "component.camera", verticalFieldOfViewRadians=fov, nearClip=near, farClip=far, primary, enabled, smallFrustum=frustumSize)
+NEXUS_COMPONENT_EDITOR(CameraComponent, "Camera", "componentBrowser.description.camera", "details.Camera")
 
 namespace NexusEngine {
 

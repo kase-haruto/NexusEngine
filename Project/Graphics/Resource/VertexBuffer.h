@@ -28,6 +28,7 @@ namespace NexusEngine {
 		void ShareFrom(const VertexBuffer& source) noexcept;
 		friend class GraphicsContext;
 		friend class VertexBufferUploader;
+        friend class GraphicsResourceFactory;
 		friend class RayTracingScene;
 		friend class OpticalBackend;
 		/** \brief AS BackendだけがGeometry Resourceを非所有参照する */

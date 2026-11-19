@@ -1,6 +1,7 @@
 #pragma once
 #include "Foundation/Reflection/ReflectionMarkers.h"
 NEXUS_REFLECT_COMPONENT(NameComponent, "Name", "component.name", name)
+NEXUS_COMPONENT_EDITOR(NameComponent, "Other", "componentBrowser.description.name", "details.Object")
 
 // c++
 #include <string>

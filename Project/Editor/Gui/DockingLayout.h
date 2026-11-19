@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <string>
 
 namespace NexusEngine {
 /*-----------------------------------------------------------------------------------------
@@ -21,6 +22,7 @@ public:
 private:
     std::filesystem::path path_; //< OSネイティブ形式の保存先。UTF-8への再変換を避ける
     std::filesystem::path directory_; //< Project別の配置保存先
+    std::string profile_ = "General"; //< 初期配置を用途に応じて構築する
     bool reset_ = false; //< 次frameのlayout再構築要求
 };
 }

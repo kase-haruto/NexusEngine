@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory=$true)][string]$SourceManifest,
     [Parameter(Mandatory=$true)][string]$Destination,
     [Parameter(Mandatory=$true)][string]$EngineId,
@@ -126,6 +126,7 @@ try {
             $item.Extension -cin @('.h','.hpp','.inl') -or $item.Name -match '^(LICENSE|COPYING|UPSTREAM)'
         }
     }
+    Copy-File (Join-Path $sdkSource 'Public/Nexus/GameInputActions.cpp') (Join-Path $sdk 'Public/Nexus/GameInputActions.cpp')
     foreach($file in @('Build/Nexus.Common.props','Build/Nexus.Game.props','Build/Nexus.GameModule.props','Build/Nexus.Compatibility.json','Tools/Reflection/Generate-Reflection.ps1','Tools/Project/Build-Game.ps1','Tools/Project/Write-GameBuildStamp.ps1','Tools/Project/Create-LauncherShortcut.ps1','Runtime/Reflection/EngineGenerated/ReflectionSchema.json')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     foreach($file in @('Build/Nexus.ManagedBootstrap.targets', 'Managed/Nexus.Managed.Bootstrap/Nexus.Managed.Bootstrap.csproj', 'Managed/Nexus.Managed.Bootstrap/EntryPoints.cs')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     # 通常SDKでもpropsのimportを解決する。Live++本体・有効profileの配布は行わない。
@@ -157,6 +158,17 @@ try {
     Copy-Tree (Join-Path $sdkSource 'Resources/Editor') (Join-Path $staging 'Data/Resources/Editor') { $true }
     Copy-Tree (Join-Path $sdkSource 'Resources/Assets/Fonts') (Join-Path $staging 'Data/Resources/Assets/Fonts') { $true }
     Copy-Tree (Within $sourceRoot $source.paths.templates) (Join-Path $staging 'Templates') { $true }
+    # 新規の配布copyだけをこのSDKへ結び付ける。source側Projectと旧SDKの関連付けは保持する。
+    $sampleSource = Join-Path $sdkSource 'Samples'
+    if([IO.Directory]::Exists($sampleSource)) {
+        $sampleDestination = Join-Path $staging 'Samples'
+        Copy-Tree $sampleSource $sampleDestination { param($item) $item.Extension -notin @('.lock', '.tmp') }
+        foreach($sampleProject in Get-ChildItem -LiteralPath $sampleDestination -Recurse -Filter '*.nxproject' -File) {
+            $sampleDefinition = Get-Content -LiteralPath $sampleProject.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            $sampleDefinition.engine = [pscustomobject]@{association='installed';id=$EngineId;version=$Version}
+            [IO.File]::WriteAllText($sampleProject.FullName, ($sampleDefinition | ConvertTo-Json -Depth 32) + "`n", $utf8)
+        }
+    }
     foreach($library in @('NexusRuntime','NexusEditorSupport')) {
         Copy-File (Join-Path $sourceRoot "Generated/Modules/x64/$configuration/$library/$library.lib") (Join-Path $sdk "Lib/x64/$configuration/$library.lib")
     }

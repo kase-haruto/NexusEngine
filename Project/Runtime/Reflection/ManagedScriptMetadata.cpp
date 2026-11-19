@@ -74,7 +74,7 @@ Result<std::shared_ptr<const ManagedScriptMetadata>> ManagedScriptMetadata::Load
         auto result = std::make_shared<ManagedScriptMetadata>();
         std::set<std::string> typeNames;
         for(const auto& source : json->at("types")) {
-            ProjectJson::Keys(source, {"id", "fullName", "version", "aliases", "properties", "sourceFiles"});
+            ProjectJson::Keys(source, {"id", "fullName", "version", "aliases", "properties", "sourceFiles", "editor"});
             auto type = std::make_shared<TypeMetadata>();
             type->id = Id(ProjectJson::Text(source, "id")); type->label = Id(ProjectJson::Text(source, "fullName"));
             if(!source.at("version").is_number_integer() || source.at("version") <= 0 || source.at("version") > INT32_MAX) throw std::runtime_error("Invalid metadata version.");
@@ -95,6 +95,7 @@ Result<std::shared_ptr<const ManagedScriptMetadata>> ManagedScriptMetadata::Load
                 type->properties.push_back(std::move(property));
             }
             TypeDescriptor descriptor;
+            descriptor.editor = EditorMetadata(source, true);
             descriptor.id = "ManagedScript:" + type->id; descriptor.labelKey = type->label;
             // 旧sidecarは省略を許容する。パスは値Metadataとして扱い、使用時にEditorがRoot内を検査する。
             if(source.contains("sourceFiles")) {
@@ -114,6 +115,20 @@ Result<std::shared_ptr<const ManagedScriptMetadata>> ManagedScriptMetadata::Load
                     if(std::ranges::find(type->names,slot.scriptType)!=type->names.end()) result.push_back(slot.slotId);
                 });
                 return result;
+            };
+            descriptor.addUnavailableReason = [](Entity entity) -> std::string {
+                const auto* owner = entity.GetComponent<ScriptComponent>();
+                if(!owner) {
+                    return {};
+                }
+                bool active = false;
+                owner->ForEachScript([&](const auto& slot) {
+                    active |= slot.instance.value != 0;
+                });
+                if(active) {
+                    return "componentBrowser.running";
+                }
+                return owner->additional.size() >= 31 ? "componentBrowser.instanceLimit" : "";
             };
             descriptor.addInstance = [type](Entity entity) {
                 auto* component = entity.GetComponent<ScriptComponent>();

@@ -19,7 +19,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary><MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalIncludeDirectories>$(ProjectDir)..</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <Link><SubSystem>Console</SubSystem></Link>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="LiveCodingSmoke.cpp" />
@@ -28,6 +28,9 @@
     <ClCompile Include="..\Foundation\Reflection\ReinstancingService.cpp" />
     <ClCompile Include="..\Runtime\Reflection\ComponentReflection.cpp" />
     <ClCompile Include="..\Runtime\Reflection\EngineGenerated\GeneratedReflection.cpp" />
+    <ClCompile Include="..\Runtime\Reflection\TypeRegistryStorage.cpp" />
+    <ClCompile Include="..\Foundation\Error\Error.cpp" />
+    <ClCompile Include="..\Runtime\Scene\PersistentIdGenerator.cpp" />
     <ClCompile Include="..\Runtime\Scene\Scene.cpp" />
     <ClCompile Include="..\Runtime\Scene\Components\AnimationPlayerComponent.cpp" />
     <ClCompile Include="..\Foundation\Logging\Logger.cpp" />
@@ -45,4 +48,16 @@
     <ClCompile Include="..\Runtime\Scene\Components\AnimatorComponent.cpp" />
     <ClCompile Include="..\Runtime\Scene\Components\TimelinePlayerComponent.cpp" />
   </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Scene\Components\KeyframeAnimationComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\CurveBindingComponent.cpp" />
+    <ClCompile Include="..\Runtime\Scene\Components\SkeletalAnimationComponent.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationPlayback.cpp" />
+    <ClCompile Include="..\Runtime\Curves\FloatCurve.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\AnimationControllerPlayer.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\AnimationDocument.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Platform\FileSystem\AssetIdentity.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Scene\Components\CameraEffectComponent.cpp" /></ItemGroup>
 </Project>

@@ -4,6 +4,9 @@
 #include <map>
 #include <memory>
 #include <filesystem>
+#include <future>
+#include <set>
+#include "Platform/FileSystem/DirectoryChangeWatcher.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "Graphics/Resource/WicImageDecoder.h"
 
@@ -63,15 +66,24 @@ namespace NexusEngine {
 
 	private:
 		void LoadEditorIcons();
-		std::map<std::string, std::unique_ptr<ImTextureData>> icons_;
-		void DrawTitleBar();
-		void DrawTitleBarCaption();
-		void* nativeWindow_ = nullptr;
-		std::filesystem::path fontDirectory_; //< GameのAsset Rootとは独立したUI資源
-		std::filesystem::path iconDirectory_;
-		std::vector<std::vector<char>> fontData_; //< 動的Glyph生成が参照するためContext終了まで保持する
-		GraphicsSystem* graphicsSystem_ = nullptr; //< 画像解決先。資源を所有しない
-        std::map<std::string, std::unique_ptr<ImTextureData>> previews_; //< Backend停止まで安定した参照を保持
+                void PollEditorIcons();
+                void LoadIconTheme();
+                bool iconReloadPaused_ = false;
+                DirectoryChangeWatcher iconWatcher_;
+                std::set<std::filesystem::path> changedIcons_;
+                std::future<Result<DecodedImage>> iconTask_;
+                std::filesystem::path loadingIcon_;
+                std::chrono::steady_clock::time_point iconsChangedAt_{};
+                std::vector<std::unique_ptr<ImTextureData>> retiredIcons_;
+                std::map<std::string, std::unique_ptr<ImTextureData>> icons_;
+                void DrawTitleBar();
+                void DrawTitleBarCaption();
+                void *nativeWindow_ = nullptr;
+                std::filesystem::path fontDirectory_; //< GameのAsset Rootとは独立したUI資源
+                std::filesystem::path iconDirectory_;
+                std::vector<std::vector<char>> fontData_;  //< 動的Glyph生成が参照するためContext終了まで保持する
+                GraphicsSystem *graphicsSystem_ = nullptr; //< 画像解決先。資源を所有しない
+                std::map<std::string, std::unique_ptr<ImTextureData>> previews_; //< Backend停止まで安定した参照を保持
 		DescriptorAllocator*		  descriptors_ = nullptr; //< GraphicsSystem所有の共有Resource allocator
 		std::vector<DescriptorHandle> allocations_;			  //< Backendへ貸し出したDescriptor
 		bool						  initialized_ = false;	  //< Contextと両Backendの初期化完了状態

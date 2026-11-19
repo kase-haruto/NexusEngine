@@ -27,6 +27,7 @@ public:
     struct Range {
         uint32_t begin = 0, end = 0, materialBegin = 0, animationBegin = 0, animationCount = 0;
         std::map<std::string, uint32_t> animationAssets;
+        std::vector<std::string> nodePaths; //< maskを当該モデルのnode範囲へ安全に解決する
         void ResolveAnimation(PrimitiveRenderItem& item) const;
     };
     /** 時刻や重みを含めず、実際に準備が必要な資源だけを要求する。 */
@@ -48,6 +49,7 @@ public:
     /** .nxanimまたはmodel#animation/clip名を個別アセットとして取得する。Worker用。 */
     Result<std::shared_ptr<const AnimationAsset>> Animation(const std::string& reference);
     void InvalidateAnimations();
+    void InvalidateContent();
     Result<void> PreviewAnimation(const std::string& reference, const AnimationClipDocument& definition);
     /** モデルと必要なアニメーションアセットをまとめて準備する。 */
     Result<Range> Resolve(const Request& request);

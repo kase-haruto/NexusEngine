@@ -113,4 +113,19 @@
     <ClCompile Include="..\Runtime\Animation\AnimationDocument.cpp" />
     <ClCompile Include="..\Platform\FileSystem\AtomicFile.cpp" />
   </ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Curves\FloatCurve.cpp" />
+    <ClCompile Include="..\Runtime\Curves\CurveSerializer.cpp" />
+    <ClCompile Include="..\Runtime\Animation\AnimationPlayback.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Curves\CurveAssets.cpp" /></ItemGroup>
+<ItemGroup>
+    <ClCompile Include="..\Runtime\Animation\AnimationClipAssets.cpp" />
+  </ItemGroup>
+<ItemGroup><ClCompile Include="..\Graphics\Model\GltfData.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\RetargetProfile.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Graphics\Model\PoseMath.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Runtime\Animation\AnimationPoseAssets.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Platform\FileSystem\AssetIdentity.cpp" /></ItemGroup>
+<ItemGroup><ClCompile Include="..\Graphics\Resource\FrameDataBuffer.cpp" /></ItemGroup>
 </Project>

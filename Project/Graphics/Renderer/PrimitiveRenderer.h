@@ -1,4 +1,5 @@
 #pragma once
+#include "Graphics/Resource/FrameDataBuffer.h"
 
 // c++
 #include <filesystem>
@@ -107,6 +108,8 @@ namespace NexusEngine {
 		}
 
 	private:
+        Result<DeformationData> PrepareDeformation(size_t object, uint32_t node, const ModelInstance& pose, uint32_t frame);
+        std::vector<std::unique_ptr<FrameDataBuffer>> deformationBuffers_;
 #if defined(NEXUS_GRAPHICS_TESTS)
 		friend class GraphicsBackendTestAccess;
 #endif

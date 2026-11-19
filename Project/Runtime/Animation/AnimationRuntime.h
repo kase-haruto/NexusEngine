@@ -1,5 +1,10 @@
 #pragma once
 #include "AnimationDocument.h"
+#include "AnimationPropertyEvaluator.h"
+#include "AnimationClipAssets.h"
+#include "Runtime/Curves/CurveAssets.h"
+#include "AnimationLayers.h"
+#include "AnimationPoseAssets.h"
 #include "Runtime/Reflection/TypeRegistry.h"
 #include "Runtime/Reflection/ReflectionRegistration.h"
 #include <functional>
@@ -15,6 +20,7 @@ public:
     struct Event {
         Entity entity;
         std::string asset, name, payload;
+        bool reverse = false; //< 逆方向通知を明示許可したplayerのevent
     };
     void SetRoot(std::filesystem::path root);
     const std::filesystem::path& Root() const noexcept;
@@ -33,6 +39,9 @@ public:
     Result<const AnimatorDocument*> Controller(const std::string& reference);
     Result<const TimelineDocument*> Timeline(const std::string& reference);
     Entity Target(Entity root, const std::string& path) const;
+    CurveAssets& Curves() noexcept;
+    const std::vector<std::string>& Diagnostics() const noexcept;
+    Result<std::vector<std::string>> SkeletonJoints(const std::string& model);
 private:
     Result<void> EvaluateAnimator(Entity entity, AnimatorComponent& animator, float deltaTime);
     Result<void> EvaluateTimeline(Entity entity, TimelinePlayerComponent& timeline, float deltaTime);
@@ -42,19 +51,17 @@ private:
     void CollectEvents(Entity entity, const std::vector<AnimationPoseSample>& samples, float deltaTime);
     void RestoreProperties();
     void InitializeTypes(const ReflectionRegistration& reflection);
-    struct SavedProperty {
-        Entity entity;
-        std::string component, property;
-        PropertyValue value;
-    };
+    void ApplyRootMotion(Scene& scene);
     std::filesystem::path root_;
-    std::map<std::string, AnimationClipDocument> clips_;
+    AnimationClipAssets clips_; //< 共通の不変document cache
+    CurveAssets curves_; //< 不変Curveとpreview override。clockはEntity側
+    AnimationLayerAssets layers_; //< 順序付きlayerの共有定義
+    AnimationPoseAssets poses_; //< Root Motion用のgeometryを持たない不変CPU姿勢資源
     std::map<std::string, AnimatorDocument> controllers_;
     std::map<std::string, TimelineDocument> timelines_;
-    TypeRegistry types_;
-    bool typesReady_ = false, enabled_ = true;
+    AnimationPropertyEvaluator properties_; //< property bindingと復元を分離する
+    bool enabled_ = true;
     Scene* scene_ = nullptr;
-    std::vector<SavedProperty> saved_;
     std::vector<Event> events_;
     std::map<std::tuple<uint32_t, uint32_t, std::string>, float> previousTimes_;
     std::function<void(const Event&)> handler_;

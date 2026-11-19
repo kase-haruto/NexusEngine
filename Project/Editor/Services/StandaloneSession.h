@@ -3,6 +3,7 @@
 #include <memory>
 #include <future>
 #include <chrono>
+#include "Runtime/Curves/CurvePreviewBridge.h"
 
 namespace NexusEngine {
 struct StandaloneState {
@@ -35,7 +36,9 @@ public:
     [[nodiscard]] Result<void> Stop();
     /** \brief 実際のプロセス状態と終了codeを返す */
     [[nodiscard]] Result<StandaloneState> State() const;
+    std::shared_ptr<CurvePreviewSender> CurvePreview() const noexcept;
 private:
+    std::shared_ptr<CurvePreviewSender> curvePreview_;
     std::shared_ptr<const ProjectContext> project_; //< 開いたProjectの不変snapshot
     EngineInstallation engine_; //< 明示選択済みのEngine
     std::optional<Process> child_; //< handleだけを所有し、終了時にRuntimeをkillしない

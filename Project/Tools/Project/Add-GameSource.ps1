@@ -1,7 +1,9 @@
 ﻿param([Parameter(Mandatory=$true)][string]$ProjectFile,[Parameter(Mandatory=$true)][string]$EngineManifest,[Parameter(Mandatory=$true)][string]$ModuleId,[Parameter(Mandatory=$true)][string]$Name,
- [ValidateSet('Behaviour','System')][string]$Kind='Behaviour')
+ [ValidateSet('Behaviour','System','Class','Header','Source')][string]$Kind='Behaviour',
+ [string]$Namespace='', [string]$BaseClass='', [string]$BaseHeader='', [string]$RelativeDirectory='', [string]$CloneFrom='', [string]$CloneClass='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Project-ModuleOrder.ps1')
+. (Join-Path $PSScriptRoot 'Source-Identifiers.ps1')
 $root=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ProjectFile))
 # Module追加と同じlockを、Project読取からsource公開まで保持する。宣言と生成先の食い違いを防ぐ。
 $lock=[IO.File]::Open((Join-Path $root '.nexus.modules.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
@@ -18,18 +20,90 @@ if($Name -cin $keywords) { throw 'Source name cannot be a C++ / C# keyword.' }
 $module=@($project.modules | Where-Object { $_.id -ceq $ModuleId }); if($module.Count -ne 1) { throw 'Select an existing Module.' }; $module=$module[0]
 $directory=[IO.Path]::GetFullPath((Join-Path $root $module.path)); if(-not $directory.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase) -or -not [IO.Directory]::Exists($directory)) { throw 'Invalid Module Source directory.' }
 $cursor=$directory; while($cursor -and $cursor.Length -ge $root.Length) { if((Get-Item -Force -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Source cannot traverse a reparse point.' }; $cursor=[IO.Path]::GetDirectoryName($cursor) }
+# 入力をidentifier/pathとして検証し、コード文字列やModule外の書込先を受け付けない。
+foreach($qualified in @($Namespace,$BaseClass)) {
+ if($qualified -and $qualified -cnotmatch '\A[A-Za-z_][A-Za-z0-9_]*(?:(?:::|\.)[A-Za-z_][A-Za-z0-9_]*)*\z') { throw 'Invalid namespace or base type.' }
+}
+if($BaseHeader -and ($BaseHeader -match '["<>\r\n]' -or [IO.Path]::IsPathRooted($BaseHeader) -or $BaseHeader.Split('/','\') -contains '..')) { throw 'Invalid base header.' }
+$moduleDirectory=$directory
+if($RelativeDirectory) {
+ if([IO.Path]::IsPathRooted($RelativeDirectory)) { throw 'Choose a Module-relative source directory.' }
+ $directory=[IO.Path]::GetFullPath((Join-Path $directory $RelativeDirectory))
+ if(-not $directory.StartsWith($moduleDirectory+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Source directory must stay inside the Module.' }
+ $cursor=$directory
+ while($cursor -and $cursor.Length -ge $moduleDirectory.Length) {
+  if((Test-Path -LiteralPath $cursor) -and ((Get-Item -Force -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Source cannot traverse a reparse point.' }
+  $cursor=[IO.Path]::GetDirectoryName($cursor)
+ }
+ [IO.Directory]::CreateDirectory($directory) | Out-Null
+}
+$cloneFile=$null
+if($CloneFrom) {
+ $cloneFile=[IO.Path]::GetFullPath((Join-Path $moduleDirectory $CloneFrom))
+ if(-not $cloneFile.StartsWith($moduleDirectory+'\',[StringComparison]::OrdinalIgnoreCase) -or -not [IO.File]::Exists($cloneFile) -or $CloneClass -cnotmatch '\A[A-Za-z][A-Za-z0-9_]{0,63}\z') { throw 'Invalid clone source or class.' }
+ $cursor=$cloneFile
+ while($cursor -and $cursor.Length -ge $moduleDirectory.Length) {
+  if((Get-Item -Force -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Clone cannot traverse a reparse point.' }
+  $cursor=[IO.Path]::GetDirectoryName($cursor)
+ }
+}
+if($Kind -cin @('Class','Header','Source')) {
+ if($module.language -ceq 'CSharp' -and $Kind -cne 'Class') { throw 'C# supports Class or Behaviour.' }
+ $writes=@{}
+ if($module.language -ceq 'CSharp') {
+  $ns=if($Namespace) { 'namespace '+$Namespace.Replace('::','.')+";`n`n" } else { '' }
+  $base=if($BaseClass) { ' : '+$BaseClass.Replace('::','.') } else { '' }
+  $writes[(Join-Path $directory ($Name+'.cs'))]=$ns+"// 通常のクラスです。Component登録は行いません。`npublic class $Name$base`n{`n}`n"
+ } else {
+  $ns=if($Namespace) { 'namespace '+$Namespace.Replace('.','::')+" {`n" } else { '' }
+  $end=if($Namespace) { "}`n" } else { '' }
+  $include=if($BaseHeader) { '#include "'+$BaseHeader+'"'+"`n" } else { '' }
+  $base=if($BaseClass) { ' : public '+$BaseClass.Replace('.','::') } else { '' }
+  if($Kind -cne 'Source') {
+   $members=if($Kind -ceq 'Class') { "public:`n    $Name();`n" } else { '' }
+   $writes[(Join-Path $directory ($Name+'.h'))]="#pragma once`n"+$include+"`n"+$ns+"// ゲーム固有の状態と宣言を置きます。`nclass $Name$base {`n$members};`n"+$end
+  }
+  if($Kind -ceq 'Class') { $writes[(Join-Path $directory ($Name+'.cpp'))]='#include "'+$Name+'.h"'+"`n`n"+$ns+"$Name"+'::'+"$Name() {`n    // 初期状態の準備をここへ記述します。`n}`n"+$end }
+  if($Kind -ceq 'Source') { $writes[(Join-Path $directory ($Name+'.cpp'))]=$ns+"// 関数の定義をここへ記述します。`n"+$end }
+ }
+ if($cloneFile) {
+  foreach($path in @($writes.Keys)) {
+   $original=[IO.Path]::ChangeExtension($cloneFile,[IO.Path]::GetExtension($path))
+   if(-not [IO.File]::Exists($original)) { throw 'Clone source pair is missing.' }
+   $body=Rename-NexusSourceIdentifier ([IO.File]::ReadAllText($original)) $CloneClass $Name
+   $body=$body.Replace('"'+[IO.Path]::GetFileNameWithoutExtension($cloneFile)+'.h"','"'+$Name+'.h"')
+   $body=[regex]::Replace($body,'(ScriptType(?:Attribute)?\("[^"]*)'+[regex]::Escape($CloneClass)+'("\))','$1'+$Name+'$2')
+   $writes[$path]=$body
+  }
+ }
+ foreach($path in $writes.Keys) { if(Test-Path -LiteralPath $path) { throw 'Source already exists.' } }
+ $created=@()
+ try {
+  foreach($entry in $writes.GetEnumerator()) {
+   $temporary=$entry.Key+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
+   try { [IO.File]::WriteAllText($temporary,$entry.Value,[Text.UTF8Encoding]::new($false)); [IO.File]::Move($temporary,$entry.Key); $created+=,$entry.Key }
+   finally { if([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
+  }
+ } catch { foreach($file in $created) { if([IO.File]::ReadAllText($file) -ceq $writes[$file]) { [IO.File]::Delete($file) } }; throw }
+ Write-Output ('Source created: '+$Name); return
+}
 if($module.language -ceq 'CSharp') {
  if($Name -cin @('OnCreate','OnEnable','OnUpdate','OnDisable','OnDestroy')) { throw 'Behaviour name conflicts with a generated member.' }
- $namespace='NexusGameScripts.M'+(Get-NexusModuleCodeIdentifier $ModuleId)
+ $namespace=if($Namespace) { $Namespace.Replace('::','.') } else { 'NexusGameScripts.M'+(Get-NexusModuleCodeIdentifier $ModuleId) }
  # 旧生成のModule.Behaviour等と衝突しない系列を使う。保存済みScript IDは書き換えない。
  $text=[IO.File]::ReadAllText((Join-Path $templates 'Behaviour/CSharp.cs.in')).Replace('@NAMESPACE@',$namespace).Replace('@CLASS@',$Name).Replace('@TYPE_ID@',$ModuleId+'.behaviours.'+$Name)
+ if($cloneFile) {
+  $text=Rename-NexusSourceIdentifier ([IO.File]::ReadAllText($cloneFile)) $CloneClass $Name
+  $text=[regex]::Replace($text,'(ScriptType(?:Attribute)?\(")[^"]+("\))',('$1'+$ModuleId+'.behaviours.'+$Name+'$2'))
+ }
+ if($BaseClass) { $text=$text.Replace('global::Nexus.Managed.ScriptBehaviour',$BaseClass.Replace('::','.')) }
  $file=Join-Path $directory ($Name+'.cs'); if(Test-Path -LiteralPath $file) { throw 'Source already exists.' }
  $temporary=$file+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
  try { [IO.File]::WriteAllText($temporary,$text,[Text.UTF8Encoding]::new($false)); [IO.File]::Move($temporary,$file) }
  finally { if([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 } else {
  if($Kind -ceq 'Behaviour') {
-  & (Join-Path $PSScriptRoot 'Add-NativeBehaviour.ps1') -Directory $directory -Templates $templates -ModuleId $ModuleId -Name $Name
+  & (Join-Path $PSScriptRoot 'Add-NativeBehaviour.ps1') -Directory $moduleDirectory -Templates $templates -ModuleId $ModuleId -Name $Name -Namespace $Namespace -BaseClass $BaseClass -BaseHeader $BaseHeader -RelativeDirectory $RelativeDirectory -CloneFrom $CloneFrom -CloneClass $CloneClass
   Write-Output ('C++ Behaviour created: '+$Name+'. Build and restart the Host, then attach the Behaviour in Details.')
   return
  }

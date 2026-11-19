@@ -1,21 +1,21 @@
 {
   "engines/nexus-1.2.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/nexus-1.2.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.2.0-Release.zip",
     "bytes": 109079692,
     "sha256": "865cc5fb58199067518c61541447325cfa1bb64a831ec35ea1651e438ec46416"
   },
   "engines/nexus-1.1.1-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/nexus-1.1.1-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.1.1-Release.zip",
     "bytes": 107321912,
     "sha256": "0a67419a1fa772126d6f19884d4297a16ec68246160af8ade336f55e67427e77"
   },
   "engines/nexus-1.1.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/nexus-1.1.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.1.0-Release.zip",
     "bytes": 107137056,
     "sha256": "8979163e81f241fe49afb6bea37144e7c3616e171d109d9cb2ee015d1945c6d2"
   },
   "engines/nexus-1.0.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/nexus-1.0.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.0.0-Release.zip",
     "bytes": 76096459,
     "sha256": "12125680e59a7afc410d364634824502b8b63ecbd9c63f43f5494d2bfef478c8"
   },
@@ -25,12 +25,12 @@
     "bytes": 175081638
   },
   "engines/nexus-1.2.1-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/nexus-1.2.1-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.2.1-Release.zip",
     "bytes": 165928742,
     "sha256": "099e37f3a00a1c654a39f6bdead9588554021b298dd07fae9d6e34876476ad14"
   },
   "engines/nexus-1.3.0-Release.zip": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/nexus-1.3.0-Release.zip",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.3.0-Release.zip",
     "bytes": 168098050,
     "sha256": "eaf8123234fd44c0adfe308758f41cd49b14f9f19be4cc8c8749cf1e30bec916"
   },
@@ -48,10 +48,39 @@
     "changes": "# NexusEngine Launcher 1.2.0\n\n2026-11-16 / Windows x64\n\n## 新機能\n\n- 「プロジェクト」に「エンジンを変更…」を追加。既存プロジェクトから、インストール・登録済みの別バージョンのエンジンを選択できます。\n- 「互換性を確認」で、変更前後のエンジン、Level形式、移行の制約を確認できます。確認した計画と終了・再ビルドの了承がある場合だけ適用できます。移行先を選び直すと再確認が必要です。\n- 適用前に元のプロジェクト設定と復旧記録を保存します。「復旧ファイルから元に戻す…」から元のエンジン設定へ戻せます。レビュー後のファイル変更や、復旧後に上書きされる編集がある場合は適用・復旧を拒否します。\n- ウィンドウ幅が狭い場合、プロジェクトの操作ボタンを折り返して表示します。\n- ランチャー更新一覧に、このバージョンの変更点を表示します。\n\n## 更新方法と使い方\n\n1. 既存ランチャーの「ランチャーの管理」→「ランチャーのバージョン一覧を取得」から1.2.0を選び、「選択したランチャーをインストール」を押します。Webサイトから新しいlauncherSetup.exeを取得して実行することもできます。\n2. 移行先のエンジンをインストールします。\n3. 「プロジェクト」で対象を選び、「エンジンを変更…」→移行先を選択→「互換性を確認」を押します。\n4. 対象のEditor / Runtimeを終了し、確認欄にチェックして「確認した変更を適用」を押します。\n5. 一覧の「開く」から移行先のSDKで再ビルドし、動作を確認します。\n\n## 互換性と制約\n\n- ランチャーのみの更新です。公開済みエンジンSDKのバージョン・内容は変更しません。旧ランチャー・SDKの配布も保持します。\n- 移行処理はプロジェクト設定のエンジン要求を変更します。Level・Asset・Sourceの自動変換やゲーム固有APIの修正は行いません。\n- 形式の事前検査が通っても、API・インポーター・ゲーム固有データの互換性を保証しません。ビルドや動作に問題がある場合はコードの修正、または元の設定への復旧が必要です。\n- 復旧は元の設定ファイルだけが対象です。移行後のソースやアセットの編集は巻き戻しません。\n- 検証は1.2.0→1.3.0のSDK移行と復旧を含みます。すべてのユーザープロジェクト・DPIでの動作は未検証です。\n"
   },
   "launcher/da7245c5ef1adec87b606fd11624f43b04448dec2106f8ad4c7dfe64ff985c84/launcherSetup.exe": {
-    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-909698a15545/launcherSetup.exe",
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-3c1098d89213/launcherSetup.exe",
     "bytes": 177121446,
     "sha256": "da7245c5ef1adec87b606fd11624f43b04448dec2106f8ad4c7dfe64ff985c84",
     "version": "1.3.0",
     "changes": "# NexusEngine Launcher 1.3.0\n\n2026-11-16 / Windows x64\n\n## 新機能\n\n- 新規プロジェクト作成を、Engine Version → 画像付きTemplateカード → 選択内容の拡大Preview → 名前・保存先 → Create Projectの流れに変更しました。\n- EmptyはEntityなし、Basic LevelはCameraとDirectional Lightだけを生成します。Demo Script / Actor / Component、Cube、Floor、Sky、Sample Assetは追加しません。\n- Engine選択にVersion、Installed / Development、Build configuration、既定EngineのCurrent状態を表示します。\n- カード全体をクリックでき、Tab・Enter・Spaceでの選択にも対応します。選択状態は枠とチェック、Hoverは背景で区別します。\n- Template Metadataと初期Level、静的Preview画像を独立した資源として同梱しました。インストール済みSDKの内容を変更せずに利用できます。\n- Metadataや初期Levelが壊れたTemplateは作成不可とし、正常なTemplateの利用を維持します。画像欠落・破損・未対応Preview Sourceでは代替表示します。\n\n## 整理\n\n- 配布用WinForms Launcherへ統一し、旧C++版Launcherをソースと今後のSDK発行処理から削除しました。既に公開された旧SDKの内容は変更しません。\n- C++ / C# / Hybridのコード生成例はSamplesへ分離しました。新規作成画面には表示しません。\n- Gameplay以前の起動検証用だったManaged Bootstrap Templateと未使用資源を削除しました。\n- 旧Empty / BasicのHealthデモコードは配布対象から除外し、既存回帰テストのFixtureに限定しました。\n\n## 更新方法\n\n既存Launcherの「ランチャーの管理」→「ランチャーのバージョン一覧を取得」から1.3.0を選び、「選択したランチャーをインストール」を押してください。WebサイトのlauncherSetup.exeからも更新できます。\n\n## 互換性と制約\n\n- Launcherのみの更新です。エンジンSDKの版数・内容、既存プロジェクトのEngine関連付けは変更しません。旧LauncherとSDKを保持します。\n- Template ID `blank` / `basic-3d`を維持しています。表示名はEmpty / Basic Levelへ変更しました。\n- Empty / Basic LevelからGameコードや初期Moduleを生成しません。従来のDemoや型登録例が必要な場合はソース側のSamplesを使用してください。既存プロジェクトのSourceは削除しません。\n- EmptyはCameraもありません。単体Runtimeは既存のCamera必須条件を維持するため、実行前にユーザーがCameraを配置してください。\n- PreviewはHierarchyとViewportを示す静的な構成図です。リアルタイムRuntime PreviewやEditorによるthumbnail自動生成は今回含みません。\n- スクリーンショットによる画像確認は行っていません。生成ファイル、画像デコード、UIコントロール操作、ビルド、破損時の処理で検証しています。全DPI・任意のユーザープロジェクトは未検証です。\r\n"
+  },
+  "engines/nexus-1.4.0-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.4.0-Release.zip",
+    "bytes": 176833433,
+    "sha256": "e479fad124a50b15e82aa3af034ff41bd8bf6d2990d19afb91191206a93d3da4"
+  },
+  "engines/nexus-1.4.1-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.4.1-Release.zip",
+    "bytes": 186798652,
+    "sha256": "f416058a00697297b60e7896c9c9e5e111c1287e72baa68b7164753e27c53a6f"
+  },
+  "launcher/71f60db6842506cd3f532ddc342404a6f570869d3bf49fcbd93953f3992a33d5/launcherSetup.exe": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-3d7a4beef601/launcherSetup.exe",
+    "bytes": 175720614,
+    "sha256": "71f60db6842506cd3f532ddc342404a6f570869d3bf49fcbd93953f3992a33d5",
+    "version": "1.3.1",
+    "changes": "# Nexus Launcher 1.3.1\r\n\r\n1.4.1の別Runtime起動に合わせて、同梱NexusProjectToolを更新しました。Engineの選択・登録・導入検証と既存Projectの明示的な関連付け操作を維持します。\r\n\r\n公開catalogのURL、HTTPS限定転送、サイズ/SHA-256照合、旧SDKの保持方針に変更はありません。Launcher 1.3.0 setupと旧GitHub assetを上書きしません。\r\n\n\n変更履歴の形式不備はLauncher 1.3.2で修正しました。最新の1.3.2を使用してください。"
+  },
+  "launcher/0e13aa2cc5c5b8b29965d77db95361984baec588250551758710ec2711fe5a77/launcherSetup.exe": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/launcherSetup.exe",
+    "bytes": 177588390,
+    "sha256": "0e13aa2cc5c5b8b29965d77db95361984baec588250551758710ec2711fe5a77",
+    "version": "1.3.2",
+    "changes": "# NexusEngine Launcher 1.3.2\n\n1.4.1のCurve preview起動に対応したProjectToolを同梱します。Launcher 1.3.1の変更履歴JSON形式を修正し、既存Launcherから更新一覧を読み込めるようにしました。旧SDKと公開済みSetupは保持します。\n"
+  },
+  "engines/nexus-1.4.2-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-45f2b2eceb38/nexus-1.4.2-Release.zip",
+    "bytes": 189113177,
+    "sha256": "11124dbe67bc8f2bf2f9aff58d714496f64a4c5e9fa7b19ef36e7a449f62c0b5"
   }
 }

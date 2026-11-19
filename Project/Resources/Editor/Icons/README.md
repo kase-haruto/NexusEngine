@@ -140,3 +140,19 @@ Box/Circle/Lasso等の実際の派生操作は今回追加していません。
 Entity・Model・Camera・Light・Skyを作成できます。作成先はシーンのルートです。
 既存の作成Commandを使うためUndo/Redoに対応し、再生中など編集不可の状態では作成できません。
 ツールバーからはエンティティ作成ボタンを削除しました。
+
+## Component BrowserのアイコンとComponentの追加・解除
+
+Component Browserのカード画像は、Component登録情報のIcon IDで選びます。例として`component.Health.png`をこのディレクトリ直下へ置き、Icon IDに`component.Health`を指定してください。64〜128pxの正方形・透過PNGを推奨します。1辺1024px以下・4MiB以下、最大128画像です。PNGの追加・差し替えはOS通知で実行中にも反映します。通知の利用不可／飽和や退役上限時はEditorを再起動してください。
+
+Engineでは`NEXUS_COMPONENT_EDITOR`、C#では`ComponentEditor` Attribute、Nativeでは型Metadataのeditor.iconから指定します。ゲームAssetsのTexture pathを直接渡しません。未配置時は既定のアイコンへfallbackします。
+
+新規Componentの登録、翻訳、Build、表示先、アイコンの指定例は[Component Browser開発ガイド](../../../Docs/ComponentBrowser.md)を参照してください。追加済みComponentはDetailsの「Componentを解除」から外せます。必須型は保護され、Undo／Redoで復元できます。
+
+## Content Browserの共通アイコン
+
+Content Browserの56 IDに、Google Fonts Material Symbolsの32×32px・透過PNGを割り当てています。フォルダーは黄、Model／Textureは青〜シアン、Sourceは言語別、警告・エラーは黄・赤です。PNGに色を含むため、IconSources.jsonのmonochromeはfalseにしています。
+
+実ファイル名・Symbol名・色・配置場所・出典は[ContentBrowserIconList.md](../../../Docs/ContentBrowserIconList.md)を参照してください。登録済みのFolderやSave等は一覧の実ファイル名（例: asset.folder.png／file.save.png）を差し替えてください。PanelやDirectX12コードの編集は不要です。
+
+既存の実行中の再読み込みを使用します。必要ならIconTheme.jsonで実ファイル名の拡張子を除いたキーをtrueにしてテーマ色、falseにしてPNGの色を使用できます。

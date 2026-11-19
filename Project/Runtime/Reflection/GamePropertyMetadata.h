@@ -20,7 +20,9 @@ struct PropertyMetadata {
     std::vector<std::string> names; //< 正規IDを先頭とする互換名の探索順序
     PropertyKind valueKind; //< 共通Drawerが扱う値型
     PropertyValue initial; //< Exporterが取得した既定値のコピー
+    bool animatable = false; //< Native metadataの明示許可。保存stateの型やABIは変更しない
 };
+ComponentEditorMetadata EditorMetadata(const Json& source, bool managed);
 struct TypeMetadata {
     std::string id, label; //< Script IDとFullName表示
     int version; //< 保存契約の識別番号。自動migrationは実行しない

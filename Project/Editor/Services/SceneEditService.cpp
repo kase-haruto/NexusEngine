@@ -16,8 +16,40 @@ namespace NexusEngine {
 bool SceneEditService::AddComponent(const TypeDescriptor& type) {
     return AddComponent(type, session_.Selection().All());
 }
+bool SceneEditService::AddComponents(std::span<const TypeDescriptor *const> types,
+                                     std::span<const PersistentId> targets) {
+    if (types.empty() || types.size() > 256 || targets.empty()) {
+        return false;
+    }
+    const std::vector<PersistentId> ids(targets.begin(), targets.end());
+    // 複数型と複数Entityも一つのWorld交換へ通し、途中の失敗を全体rollbackする。
+    return Execute("edit.addComponent", [types, &ids](Level &level) {
+        bool changed = false;
+        for (const auto *type : types) {
+            if (!type || !type->add || !type->contains) {
+                return false;
+            }
+            for (const auto id : ids) {
+                auto entity = level.FindEntity(id);
+                if (!entity.IsAlive()) {
+                    return false;
+                }
+                if (type->contains(entity)) {
+                    continue;
+                }
+                if (!type->add(entity)) {
+                    return false;
+                }
+                changed = true;
+            }
+        }
+        return changed;
+    });
+}
 bool SceneEditService::AddScriptInstance(const TypeDescriptor& type) {
-    if(!type.addInstance || !type.id.starts_with("ManagedScript:")) return false;
+    if(!type.addInstance) {
+        return false;
+    }
     const std::vector<PersistentId> ids(session_.Selection().All().begin(),session_.Selection().All().end());
     if(ids.empty()) return false;
     return Execute("edit.addComponent",[&type,&ids](Level& level) {
@@ -26,16 +58,51 @@ bool SceneEditService::AddScriptInstance(const TypeDescriptor& type) {
     });
 }
 bool SceneEditService::RemoveValueComponent(const TypeDescriptor& type) {
-    if(!type.valueBacked || !type.remove || !type.contains) return false;
-    const std::vector<PersistentId> ids(session_.Selection().All().begin(), session_.Selection().All().end());
-    if(ids.empty()) return false;
-    // Scene複製・交換・履歴は既存処理へ集約し、DLL用の独立Undoを作らない。
-    return Execute("edit.removeComponent", [&type, &ids](Level& level) {
+    if(!type.valueBacked) {
+        return false;
+    }
+    return RemoveComponent(type);
+}
+bool SceneEditService::RemoveComponent(const TypeDescriptor& type, std::optional<size_t> occurrence) {
+    // 追加を公開しない必須型は解除しない。具体的なEngine型名には依存しない。
+    if(!type.contains || (!type.add && !type.addInstance) ||
+        (occurrence ? (!type.instances || !type.removeInstance) : !type.remove)) {
+        return false;
+    }
+    const std::vector<PersistentId> targets(session_.Selection().All().begin(), session_.Selection().All().end());
+    if(targets.empty()) {
+        return false;
+    }
+    // Scene複製・交換・Undoは追加と同じtransactionへ通し、失敗時は全対象を復元する。
+    return Execute("edit.removeComponent", [&type, &targets, occurrence](Level& level) {
         bool changed = false;
-        for(auto id : ids) {
-            auto entity = level.FindEntity(id); if(!entity.IsAlive()) return false;
-            if(!type.contains(entity)) continue;
-            if(!type.remove(entity)) return false;
+        for(const auto id : targets) {
+            auto entity = level.FindEntity(id);
+            if(!entity.IsAlive()) {
+                return false;
+            }
+            if(!type.contains(entity)) {
+                continue;
+            }
+            if(occurrence) {
+                const auto instances = type.instances(entity);
+                if(*occurrence >= instances.size()) {
+                    continue;
+                }
+                if(!type.removeInstance(entity, instances[*occurrence])) {
+                    return false;
+                }
+            } else if(type.instances && type.removeInstance) {
+                // 全解除も一つの履歴へまとめる。IDは値コピーし、削除後の参照を使わない。
+                const auto instances = type.instances(entity);
+                for(const auto instance : instances) {
+                    if(!type.removeInstance(entity, instance)) {
+                        return false;
+                    }
+                }
+            } else if(!type.remove(entity)) {
+                return false;
+            }
             changed = true;
         }
         return changed;
@@ -135,6 +202,33 @@ bool SceneEditService::DetachScript(const TypeDescriptor& type, PersistentId ins
             if(!type.remove(entity)) return false; changed = true;
         }
         return changed;
+    });
+}
+bool SceneEditService::CreateModels(std::span<const std::pair<std::string, std::string>> models) {
+    if (models.empty() || models.size() > 256) {
+        return false;
+    }
+    return Execute("cb.dropModels", [this, models](Level &level) {
+        std::vector<PersistentId> created;
+        size_t index = 0;
+        for (const auto &[name, reference] : models) {
+            auto entity = level.CreateEntity(name);
+            if (!entity.IsAlive()) {
+                return false;
+            }
+            auto *component = entity.AddComponent<PrimitiveRenderComponent>();
+            if (!component) {
+                return false;
+            }
+            component->meshAsset = reference;
+            // 重なった複数modelを後で選択できるよう、配置を一定間隔で並べる。
+            entity.GetComponent<TransformComponent>()->translation = {static_cast<float>(index % 8) * 2, 0,
+                                                                      static_cast<float>(index / 8) * 2};
+            created.push_back(entity.GetComponent<PersistentIdComponent>()->value);
+            ++index;
+        }
+        session_.Selection().Replace(created);
+        return true;
     });
 }
 bool SceneEditService::Create(std::string_view kind, std::string_view name) {

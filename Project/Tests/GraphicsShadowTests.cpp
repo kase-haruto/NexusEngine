@@ -1,4 +1,4 @@
-// Native integration tests live outside Runtime/Renderer. They exercise the real DX12
+﻿// Native integration tests live outside Runtime/Renderer. They exercise the real DX12
 // backend without a Window/ImGui session and fail on GPU validation errors.
 #include <d3d12.h>
 #include <d3d12sdklayers.h>
@@ -177,7 +177,7 @@ namespace {
 			Native(commands->Close());
 			CreateMesh();
 		}
-		void CreateMesh(bool negativeBaseVertex = false) {
+		void CreateMesh(bool negativeBaseVertex = false, bool receiverOnly = false) {
 			// Camera looks down +Z. Receiver at z=.7 and a smaller occluder at z=.4;
 			// oblique light separates visible receiver pixels from the camera silhouette.
 			std::array<ModelVertex, 8> vertices;
@@ -194,7 +194,7 @@ namespace {
 			Check(factory.CreateMeshResource(mesh,
 				{ reinterpret_cast<const uint8_t*>(vertices.data()), sizeof(vertices) }, sizeof(ModelVertex),
 				{ reinterpret_cast<const uint8_t*>(indices.data()), sizeof(indices) }, IndexFormat::UInt16,
-				{ {0,12,negativeBaseVertex ? -1 : 0,0} }));
+				{ {0,receiverOnly ? 6U : 12U,negativeBaseVertex ? -1 : 0,0} }));
 			asset = {};
 			MeshAssetData cpuMesh;
 			const auto* vertexBytes = reinterpret_cast<const uint8_t*>(vertices.data());
@@ -204,12 +204,13 @@ namespace {
 			cpuMesh.submeshes = { {0,12,0,0} }; asset.meshes.push_back(std::move(cpuMesh));
 			ModelNodeAssetData node; node.meshIndices = {0}; asset.nodes.push_back(node); asset.materials.emplace_back();
 		}
-		std::vector<float> Frame(ShadowSettings settings, uint32_t frame = 0, Matrix4x4 world = {}, uint32_t width = 64) {
+		std::vector<float> Frame(ShadowSettings settings, uint32_t frame = 0, Matrix4x4 world = {}, uint32_t width = 64,
+            std::array<float, 3> lightDirection = {0.7f, 0, -1}) {
 			Check(queue.WaitForIdle()); Native(allocator->Reset()); Native(commands->Reset(allocator.Get(), nullptr));
 			bindless.Bind(commands.Get());
 			auto context = GraphicsBackendTestAccess::Context(commands.Get(), bindless, frame, width, 64);
 			ShadowDrawItem draw; draw.mesh = &mesh; draw.world = world; draw.instanceId = 1;
-			DirectionalLightData light; light.direction = { 0.7f, 0, -1 };
+			DirectionalLightData light; light.direction = lightDirection;
 			Check(shadows.Render(context, commands.Get(), Matrix4x4::Identity(), light, { &draw, 1 }, settings));
 			if(!settings.enabled) {
 				Native(commands->Close()); queue.Execute(commands.Get()); ShadowBackend::CompleteRecording(&shadows, true, frame); Check(queue.WaitForIdle()); return {};
@@ -328,7 +329,7 @@ namespace {
 	#include "DDGITests.inl"
     #include "SelectionOutlineTests.inl"
     #include "TransientDescriptorTests.inl"
-	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false, PrimitiveShape primitiveShape = PrimitiveShape::Asset, uint32_t animationTest = 0) {
+	std::vector<uint8_t> ForwardIntegration(bool forceUnsupported, bool opticalDemo = false, bool sponza = false, uint32_t pbrVariant = 0, bool fogTest = false, bool iblTest = false, uint32_t giVariant = 0, uint32_t bakedVariant = 0, uint32_t bakedChartSize = 4,uint32_t ddgiVariant = 0, bool metalTest = false, bool shadeTest = false, bool overrideTest = false, PrimitiveShape primitiveShape = PrimitiveShape::Asset, uint32_t animationTest = 0, bool uvTest = false) {
 		Fixture test(false, forceUnsupported, sponza);
         const uint32_t width = performanceMeasurement ? 1280U : (sponza || metalTest ? 384U : (opticalDemo ? 256U : 64U));
         const uint32_t height = performanceMeasurement ? 720U : (sponza || metalTest ? 216U : (opticalDemo ? 192U : 64U));
@@ -384,18 +385,56 @@ namespace {
             test.asset = std::move(*generated);
             if(pbrVariant == 9 || pbrVariant == 10) test.asset.materials[0].roughnessFactor = pbrVariant == 9 ? 0.0f : 0.05f;
         }
+        if(uvTest) {
+            // 2色の繰り返しTextureで、UV変更が画素へ反映されることを検証する。
+            std::vector<uint8_t> bitmap(62, 0);
+            bitmap[0] = 'B';
+            bitmap[1] = 'M';
+            bitmap[2] = 62;
+            bitmap[10] = 54;
+            bitmap[14] = 40;
+            bitmap[18] = 2;
+            bitmap[22] = 1;
+            bitmap[26] = 1;
+            bitmap[28] = 24;
+            bitmap[56] = 255;
+            bitmap[57] = 255;
+            for(auto& material : test.asset.materials) {
+                material.baseColorImageData = bitmap;
+                material.sampler.filter = TextureFilter::Nearest;
+            }
+        }
         if(animationTest) {
             AnimationClip clip; clip.duration = 1;
             NodeAnimationChannel channel; channel.nodeIndex = 0;
             channel.translations = {{0, {0,0,0}, {}, {}}, {1, {.8f,0,0}, {}, {}}};
             clip.channels.push_back(channel); test.asset.animations.push_back(clip);
-            if(animationTest == 2) {
+            if(animationTest == 3 || animationTest == 5) {
+                auto& mesh = test.asset.meshes[0];
+                mesh.morphTargetCount = 1;
+                mesh.morphDeltas.resize(mesh.vertexData.size() / sizeof(ModelVertex));
+                for(auto& delta : mesh.morphDeltas) {
+                    delta.position[0] = .8f;
+                }
+                test.asset.nodes[0].morphWeights = {0};
+                auto& morphChannel = test.asset.animations.back().channels[0];
+                morphChannel.weights = {{0, {0}, {}, {}}, {1, {1}, {}, {}}};
+                test.asset.animations.back().hasMorphAnimation = true;
+                if(animationTest == 3) {
+                    morphChannel.translations.clear();
+                }
+            }
+            if(animationTest == 2 || animationTest == 4 || animationTest == 5) {
                 test.asset.skins.push_back({"test", {0}, {Matrix4x4::Identity()}});
+                if(animationTest >= 4) {
+                    test.asset.skins.back().joints.resize(65, 0);
+                    test.asset.skins.back().inverseBindMatrices.resize(65, Matrix4x4::Identity());
+                }
                 auto& mesh = test.asset.meshes[0]; mesh.skinIndex = 0;
                 for(size_t offset = 0; offset < mesh.vertexData.size(); offset += sizeof(ModelVertex)) {
                     ModelVertex vertex;
                     std::memcpy(&vertex, mesh.vertexData.data() + offset, sizeof(vertex));
-                    vertex.jointIndices[0] = 0; vertex.jointWeights[0] = 1;
+                    vertex.jointIndices[0] = animationTest >= 4 ? 64.0f : 0.0f; vertex.jointWeights[0] = 1;
                     std::memcpy(mesh.vertexData.data() + offset, &vertex, sizeof(vertex));
                 }
             }
@@ -564,7 +603,12 @@ namespace {
             const auto& draws = GraphicsBackendTestAccess::ShadowDraws(renderer);
             Require(draws.size() == 2, "Animated instances did not generate independent shadow draws.");
             for(size_t i = 0; i < draws.size(); ++i) {
-                const auto& transform = animationTest == 2 ? draws[i].jointPalette[0] : draws[i].world;
+                const auto& transform = (animationTest == 2 || animationTest >= 4) ? draws[i].jointPalette[0] : draws[i].world;
+                if(animationTest == 3 || animationTest == 5) {
+                    Require(draws[i].deformation.targetCount == 1 && draws[i].deformation.weightCount == 1 && draws[i].deformation.morphBuffer != 0,
+                        "Shadow did not receive the morph snapshot");
+                    continue;
+                }
                 Require(std::abs(transform.At(3,0) - (i == 0 ? .4f : .2f)) < .0001f,
                     "Shadow pose does not match the individual animation time.");
             }
@@ -575,20 +619,58 @@ namespace {
             render(ShadowMode::ShadowMap, true);
             const auto& blendDraws = GraphicsBackendTestAccess::ShadowDraws(renderer);
             Require(blendDraws.size() == 1, "Blended instance did not generate a shadow draw.");
-            const auto& blendTransform = animationTest == 2 ? blendDraws[0].jointPalette[0] : blendDraws[0].world;
-            Require(std::abs(blendTransform.At(3,0) - .3f) < .0001f, "Shadow did not use the blended pose.");
+            const auto& blendTransform = (animationTest == 2 || animationTest >= 4) ? blendDraws[0].jointPalette[0] : blendDraws[0].world;
+            Require(animationTest == 3 || animationTest == 5 || std::abs(blendTransform.At(3,0) - .3f) < .0001f, "Shadow did not use the blended pose.");
             scene.primitives[0].animation->layers = {{"",0,.5f,.25f,true},{"",0,.25f,.75f,true}};
             render(ShadowMode::ShadowMap,true);
             const auto& layerDraws = GraphicsBackendTestAccess::ShadowDraws(renderer);
             Require(layerDraws.size() == 1,"Layered animation did not generate a shadow draw.");
-            const auto& layerTransform = animationTest == 2 ? layerDraws[0].jointPalette[0] : layerDraws[0].world;
-            Require(std::abs(layerTransform.At(3,0)-.25f)<.0001f,"Shadow did not use the multi-layer mixer pose.");
+            const auto& layerTransform = (animationTest == 2 || animationTest >= 4) ? layerDraws[0].jointPalette[0] : layerDraws[0].world;
+            Require(animationTest == 3 || animationTest == 5 || std::abs(layerTransform.At(3,0)-.25f)<.0001f,"Shadow did not use the multi-layer mixer pose.");
             scene.primitives[0].animation.reset();
             Require(render(ShadowMode::ShadowMap, false) == bind, "Removing animation did not restore bind pose.");
             Check(test.queue.WaitForIdle()); renderer.Shutdown(); test.shadows.ReleaseTexture(depth);
             Check(test.descriptors.RenderTargets().Free(*rtv)); transient.Shutdown(); test.Validate();
-            std::cout << "PASS: per-instance animation GPU pixels, repeat rendering, shadow pose and removal; skin=" << (animationTest == 2) << '\n';
+            std::cout << "PASS: per-instance animation GPU pixels, repeat rendering, shadow pose and removal; skin=" << (animationTest == 2 || animationTest >= 4) << " case=" << animationTest << '\n';
             return moved;
+        }
+        if(uvTest) {
+            const auto original = render(ShadowMode::Auto, false);
+            const auto signature = LightBaker::Signature(test.asset, pose, scene);
+            for(auto& object : scene.primitives) {
+                object.uvTransform = {0, 0, .25f, .5f};
+            }
+            const auto first = render(ShadowMode::Auto, false);
+            for(auto& object : scene.primitives) {
+                object.uvTransform = {0, 0, .75f, .5f};
+            }
+            Require(render(ShadowMode::Auto, false) != first, "UV offset did not change texture pixels.");
+            Require(LightBaker::Signature(test.asset, pose, scene) != signature, "Bake signature ignored UV transform.");
+            for(auto& object : scene.primitives) {
+                object.uvTransform = {1, 1, 0, 0};
+            }
+            for(auto& object : scene.primitives) {
+                object.uvTransform = {2, 1, 0, 0};
+            }
+            const auto tiled = render(ShadowMode::Auto, false);
+            Require(tiled != original, "UV tiling did not change texture repetition.");
+            if(!opticalDemo && renderer.AreMeshShadersAvailable()) {
+                renderer.GetMeshletSettings().enabled = true;
+                Require(render(ShadowMode::Auto, false) == tiled, "Mesh shader UV differed from raster UV.");
+                renderer.GetMeshletSettings().enabled = false;
+            }
+            for(auto& object : scene.primitives) {
+                object.uvTransform = {1, 1, 0, 0};
+            }
+            Require(render(ShadowMode::Auto, false) == original, "Identity UV did not restore texture pixels.");
+            Check(test.queue.WaitForIdle());
+            renderer.Shutdown();
+            test.shadows.ReleaseTexture(depth);
+            Check(test.descriptors.RenderTargets().Free(*rtv));
+            transient.Shutdown();
+            test.Validate();
+            std::cout << "PASS: UV transform GPU pixels, identity restoration and bake signature; optical=" << opticalDemo << '\n';
+            return first;
         }
         if(overrideTest) {
             const auto before = render(ShadowMode::Auto,false);
@@ -1040,12 +1122,20 @@ namespace {
 #include "MeshAssignmentProfileTests.inl"
 #include "IncrementalAssetTests.inl"
 
+#include "ShadowGrazingTests.inl"
+
 namespace NexusEngine::Tests { void RunAnimationAssetTests(const char* externalModel); }
 
 int main(int argc, char** argv) {
 	Logger::Get().InitializeDefaultSinks();
 
 	try {
+        if(argc == 2 && std::strcmp(argv[1], "--shadow-grazing") == 0)
+        {
+            ShadowGrazingTests(false);
+            ShadowGrazingTests(true);
+            return 0;
+        }
         if(argc >= 2 && std::strcmp(argv[1], "--animation-assets") == 0) {
             NexusEngine::Tests::RunAnimationAssetTests(argc >= 3 ? argv[2] : nullptr);
             return 0;
@@ -1064,7 +1154,7 @@ int main(int argc, char** argv) {
             std::cout << "Polished material roughness/IBL/direct-light integration passed.\n"; return 0;
         }
         if(argc==2 && std::strcmp(argv[1],"--animation")==0) {
-            for(uint32_t kind : {1U, 2U}) ForwardIntegration(true,false,false,0,false,false,0,0,4,0,false,false,false,PrimitiveShape::Asset,kind);
+            for(uint32_t kind : {1U, 2U, 3U, 4U, 5U}) ForwardIntegration(true,false,false,0,false,false,0,0,4,0,false,false,false,PrimitiveShape::Asset,kind);
             return 0;
         }
         if(argc==2 && std::strcmp(argv[1],"--sky")==0) { SkyRenderingTests(); return 0; }
@@ -1098,6 +1188,11 @@ int main(int argc, char** argv) {
             return 0;
         }
         if(argc == 2 && std::strcmp(argv[1], "--baked-cpu") == 0) { BakedLightingCpuTests(); return 0; }
+        if(argc == 2 && std::strcmp(argv[1], "--uv-transform") == 0) {
+            ForwardIntegration(false, false, false, 0, false, false, 0, 0, 4, 0, false, false, false, PrimitiveShape::Asset, 0, true);
+            ForwardIntegration(false, true, false, 0, false, false, 0, 0, 4, 0, false, false, false, PrimitiveShape::Asset, 0, true);
+            return 0;
+        }
         if(argc == 2 && std::strcmp(argv[1], "--material-override") == 0) {
             ForwardIntegration(false,false,false,0,false,false,0,0,4,0,false,false,true);
             ForwardIntegration(false,true,false,0,false,false,0,0,4,0,false,false,true);

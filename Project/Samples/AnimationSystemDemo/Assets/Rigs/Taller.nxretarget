@@ -1,0 +1,54 @@
+{
+  "joints": [
+    {
+      "axis": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "source": "4:Mesh/",
+      "target": "4:Mesh/",
+      "translationScale": [
+        1.2999999523162842,
+        1.2999999523162842,
+        1.2999999523162842
+      ]
+    },
+    {
+      "axis": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "source": "4:Root/",
+      "target": "4:Root/",
+      "translationScale": [
+        1.2999999523162842,
+        1.2999999523162842,
+        1.2999999523162842
+      ]
+    },
+    {
+      "axis": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "source": "4:Root/4:Bone/",
+      "target": "4:Root/4:Bone/",
+      "translationScale": [
+        1.2999999523162842,
+        1.2999999523162842,
+        1.2999999523162842
+      ]
+    }
+  ],
+  "sourceModel": "asset://f2eef8e8-9c7d-4944-9185-c25ec30eb1f8",
+  "sourceSignature": "5fe0834e5c9cd759",
+  "targetModel": "asset://6d17e39c-b0a0-45d1-805e-4672b68159f5",
+  "targetSignature": "f1fa8822b2107e95",
+  "version": 1
+}

@@ -1,4 +1,6 @@
 #include "DetailsPanel.h"
+#include "Editor/Gui/ContentBrowser/ContentAssetInspector.h"
+#include "Editor/Gui/ComponentBrowser/RemoveComponentMenu.h"
 #include "Editor/Core/EditorSession.h"
 #include "Editor/Services/PropertyEditService.h"
 #include "Editor/Services/SceneEditService.h"
@@ -12,14 +14,24 @@
 #include <algorithm>
 
 namespace NexusEngine {
+DetailsPanel::DetailsPanel(const PropertyCategoryRegistry& registry, EditorSettingsStore* settings)
+    : componentBrowser_(settings), categories_(registry) {
+}
 ////////////////////////////////////////////////////////////////////////////////////////////
 // 名前とComponent追加を常時表示し、設定項目は登録済みカテゴリへ委譲する。
 ////////////////////////////////////////////////////////////////////////////////////////////
 void DetailsPanel::Draw(const EditorContext& context) {
+    if (UI::DrawContentAssetInspector(context)) {
+        return;
+    }
     auto* level = context.session.GetLevel();
     auto id = context.selection.Primary();
     auto entity = level ? level->FindEntity(id) : Entity{};
-    if(!entity.IsAlive()) { categories_.Draw(context); return; }
+    if(!entity.IsAlive()) {
+        componentBrowser_.Draw(context);
+        categories_.Draw(context);
+        return;
+    }
     if(context.selection.All().size() > 1) ImGui::TextUnformatted(context.text.Text("selection.multiple").c_str());
     // 別Entityの同じPropertyへ入力中のImGui状態を引き継がない。
     const auto entityId = std::to_string(id.high) + ":" + std::to_string(id.low);
@@ -27,6 +39,7 @@ void DetailsPanel::Draw(const EditorContext& context) {
     DrawReflectedProperty(context, "Name", "name");
     // 常設drop領域にして、Componentの内部Propertyへ誤ってソースを渡さない。
     ImGui::Selectable(context.text.Label("source.drop", "SourceAttachment").c_str(), false);
+    auto multipleAttachments = UI::AcceptMultipleSourceAttachments(context);
     auto attach = UI::AcceptSourceAttachment(context);
     bool detach = false;
     std::string detachType;
@@ -82,43 +95,37 @@ void DetailsPanel::Draw(const EditorContext& context) {
     if(ImGui::Button(context.text.Label("script.detachAll", "DetachScript").c_str())) detach = true;
     ImGui::EndDisabled();
     ImGui::BeginDisabled(context.session.IsPlaying());
-    if(ImGui::Button(context.text.Label("edit.addComponent", "AddComponentButton").c_str())) ImGui::OpenPopup("AddComponent");
-    if(ImGui::BeginPopup("AddComponent")) {
-        for(const auto& [typeId, type] : context.types.Types()) {
-            if(!type.add) continue;
-            bool missing = false;
-            for(auto selected : context.selection.All()) missing |= !type.contains(level->FindEntity(selected));
-            if(ImGui::MenuItem(context.text.Label(type.labelKey, typeId).c_str(), nullptr, false, missing)) {
-                context.sceneEdits.AddComponent(type);
-                // World交換後に古いEntityを参照しない。
-                ImGui::EndPopup(); ImGui::EndDisabled(); ImGui::PopID(); return;
-            }
-        }
-        ImGui::EndPopup();
+    if(ImGui::Button(context.text.Label("edit.addComponent", "AddComponentButton").c_str())) {
+        componentBrowser_.Open(context);
     }
     ImGui::EndDisabled();
+    if(componentBrowser_.Draw(context)) {
+        // 既存追加サービスはSceneを交換するため、このframeのEntity参照を使い終える。
+        ImGui::PopID();
+        return;
+    }
     ImGui::Separator();
-    // Runtime objectをUIが破棄せず、値Componentの解除を既存transactionへ委譲する。
-    ImGui::BeginDisabled(context.session.IsPlaying());
-    if(ImGui::Button(context.text.Label("edit.removeComponent", "RemoveValueComponentButton").c_str())) ImGui::OpenPopup("RemoveValueComponent");
-    if(ImGui::BeginPopup("RemoveValueComponent")) {
-        for(const auto& [typeId, type] : context.types.Types()) {
-            if(!type.valueBacked || !type.remove || !type.contains) continue;
-            const bool present = std::ranges::any_of(context.selection.All(), [&](PersistentId selected) { return type.contains(level->FindEntity(selected)); });
-            if(ImGui::MenuItem(context.text.Label(type.labelKey, typeId).c_str(), nullptr, false, present)) {
-                if(!context.sceneEdits.RemoveValueComponent(type)) NEXUS_LOG_WARNING("Details", context.text.Text("edit.rejected"));
-                ImGui::EndPopup(); ImGui::EndDisabled(); ImGui::PopID(); return;
-            }
-        }
-        ImGui::EndPopup();
+    if(DrawRemoveComponentMenu(context)) {
+        // 解除もWorldを交換するため、このframeでは古いEntityを参照しない。
+        ImGui::PopID();
+        return;
     }
-    ImGui::EndDisabled();
     categories_.Draw(context);
     ImGui::PopID();
     if(detach) { if(!context.sceneEdits.DetachScripts()) NEXUS_LOG_WARNING("Details", context.text.Text("edit.rejected")); return; }
     if(!detachType.empty()) {
         const auto* type = context.types.Find(detachType);
         if(!type || !context.sceneEdits.DetachScript(*type,detachInstance)) NEXUS_LOG_WARNING("Details", context.text.Text("edit.rejected"));
+        return;
+    }
+    if (!multipleAttachments.empty()) {
+        std::vector<const TypeDescriptor *> types;
+        for (const auto &typeId : multipleAttachments) {
+            types.push_back(context.types.Find(typeId));
+        }
+        if (!context.sceneEdits.AddComponents(types, context.selection.All())) {
+            NEXUS_LOG_WARNING("Details", context.text.Text("edit.rejected"));
+        }
         return;
     }
     if(attach) {

@@ -121,13 +121,41 @@ namespace NexusEngine {
     }
     Result<void> Level::SetResourceRoot(std::filesystem::path root) {
         if(!root.is_absolute() || audio_) return std::unexpected(Error(ErrorCategory::Resource,270,"Resource Root must be absolute and selected before Audio initialization."));
+        auto mapping = InputMap::Load(root / "Config/InputMap.settings");
+        if(!mapping) {
+            return std::unexpected(mapping.error());
+        }
         auto configured = SetCollisionConfiguration(root / "Config/PhysicsLayers.settings");
         if(!configured) {
             return configured;
         }
+        inputMap_.Configure(std::move(*mapping));
+        inputConfiguration_ = root / "Config/InputMap.settings";
         animationRuntime_.SetRoot(root / "Assets");
         resourceRoot_ = std::move(root);
         return {};
+    }
+    Result<void> Level::SetInputConfiguration(const std::filesystem::path& file) {
+        auto mapping = InputMap::Load(file);
+        if(!mapping) {
+            return std::unexpected(mapping.error());
+        }
+        inputMap_.Configure(std::move(*mapping));
+        inputConfiguration_ = file;
+        return {};
+    }
+    const std::filesystem::path& Level::InputConfiguration() const noexcept {
+        return inputConfiguration_;
+    }
+    void Level::SetFrameInput(const InputFrame& input) noexcept {
+        input_ = input;
+        inputMap_.Advance(input);
+    }
+    const NexusInputActionsFrameV1& Level::InputActions() const noexcept {
+        return inputMap_.Frame();
+    }
+    bool Level::RequestInputContext(std::string_view context) noexcept {
+        return inputMap_.RequestContext(context);
     }
     AnimationRuntime& Level::Animations() noexcept {
         return animationRuntime_;

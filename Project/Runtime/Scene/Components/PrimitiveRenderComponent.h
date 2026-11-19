@@ -1,6 +1,7 @@
 #pragma once
 #include "Foundation/Reflection/ReflectionMarkers.h"
-NEXUS_REFLECT_COMPONENT(PrimitiveRenderComponent, "PrimitiveRender", "component.primitive", tint, enabled, nodeIndex, staticLighting, meshAsset, baseColorTexture, material, shape)
+NEXUS_REFLECT_COMPONENT(PrimitiveRenderComponent, "PrimitiveRender", "component.primitive", tint, enabled, nodeIndex, staticLighting, meshAsset, baseColorTexture, material, shape, uvScale, uvOffset)
+NEXUS_COMPONENT_EDITOR(PrimitiveRenderComponent, "Rendering", "componentBrowser.description.renderer", "details.Rendering")
 
 // c++
 #include <array>
@@ -24,6 +25,8 @@ namespace NexusEngine {
 		bool staticLighting = true; //< 静的背景としてベイクに含める。動く物体はfalse
         std::string meshAsset; //< Assetルートからの相対パス。空ならメッシュ未設定で描画しない
         std::string baseColorTexture; //< 空ならモデル付属の材質を使用
+        std::array<float, 2> uvScale {1, 1}; //< UVの繰り返し倍率。Transformとは独立
+        std::array<float, 2> uvOffset {}; //< 拡大後のUVへ加える移動量
         MaterialOverride material; //< Entity固有の材質設定。共有Assetは変更しない
         PrimitiveShape shape = PrimitiveShape::Asset; //< 組み込み形状はmeshAssetなしで生成。大きさはTransformで指定
 	};

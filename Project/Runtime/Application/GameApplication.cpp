@@ -14,6 +14,10 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
     auto result = level->Load(path);
     if(!result) return result;
     if(paths_.project) {
+        auto mapping = level->SetInputConfiguration(paths_.project->Config() / "InputMap.settings");
+        if(!mapping) {
+            return mapping;
+        }
         auto configured = level->SetCollisionConfiguration(paths_.project->Config() / "PhysicsLayers.settings");
         if(!configured) {
             return configured;
@@ -77,8 +81,15 @@ Result<void> GameApplication::Load(const std::filesystem::path& path, const std:
 }
 
 Result<void> GameApplication::Update(float deltaTime) {
+    if(curvePreview_ && runtime_.GetLevel()) {
+        curvePreview_->Poll(*runtime_.GetLevel());
+    }
     auto result = runtime_.Update(deltaTime);
     return result;
+}
+
+void GameApplication::ConnectCurvePreview(const std::string& endpoint) {
+    curvePreview_ = endpoint.empty() ? nullptr : std::make_unique<CurvePreviewReceiver>(endpoint);
 }
 
 Result<void> GameApplication::PrepareRender(uint32_t width, uint32_t height) {

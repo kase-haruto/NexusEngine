@@ -12,6 +12,7 @@
 #include <string>
 
 namespace NexusEngine::UI {
+std::vector<std::string> AcceptMultipleSourceAttachments(const EditorContext &context);
 /**
  * \brief 最後のImGui itemへのSource dropを型IDへ変換する。実際の構造変更はPanel描画後に行う
  * \param context 所有Threadの値MetadataとSource Root。Entity / Managed objectは借用しない

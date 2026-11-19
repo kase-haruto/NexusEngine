@@ -12,6 +12,7 @@
 #include <span>
 #include <utility>
 #include <chrono>
+#include <cstring>
 
 // engine
 #include "Graphics/Model/ModelAssetData.h"
@@ -178,7 +179,7 @@ namespace NexusEngine {
 		for(uint32_t i = 0; i < model_.GetMeshCount(); ++i) {
 			if(cancellation.stop_requested()) return std::unexpected(Error(ErrorCategory::Resource, 132, "Asset preparation cancelled."));
 			const auto& mesh = modelAsset_->meshes[i];
-			if(mesh.skinIndex != MeshAssetData::kNoSkin || meshletAttempted_[i]) continue;
+            if(mesh.skinIndex != MeshAssetData::kNoSkin || mesh.morphTargetCount || meshletAttempted_[i]) continue;
 			meshletAttempted_[i] = true;
 			if(reuse) if(auto found = reuse->meshlets.find(mesh.resourceId); found != reuse->meshlets.end() &&
 				found->second->GetGeometryGeneration() == model_.GetMesh(i)->GetGeometryGeneration()) {
@@ -339,6 +340,7 @@ namespace NexusEngine {
 	}
 
 	void PrimitiveRenderer::Shutdown() noexcept {
+        deformationBuffers_.clear();
         animationPoses_.clear();
 		meshShadersSupported_ = false;
         selectionDraws_.clear();
@@ -368,6 +370,45 @@ namespace NexusEngine {
 		resources_ = nullptr;
 	}
 
+    Result<DeformationData> PrimitiveRenderer::PrepareDeformation(size_t object, uint32_t nodeIndex, const ModelInstance& pose, uint32_t frame) {
+        DeformationData data;
+        const auto& node = model_.GetNodes()[nodeIndex];
+        if(node.meshIndices.empty()) {
+            return data;
+        }
+        const auto skin = model_.GetMeshSkinIndex(node.meshIndices.front());
+        const auto* palette = skin == MeshAssetData::kNoSkin ? nullptr : pose.GetSkinPalette(skin);
+        const auto& weights = pose.GetMorphWeights(nodeIndex);
+        if((skin != MeshAssetData::kNoSkin && !palette) || (palette && palette->size() > kMaxSkinJoints) || weights.size() > kMaxMorphTargets) {
+            return std::unexpected(Error(ErrorCategory::Graphics, 144, "Invalid deformation pose dimensions"));
+        }
+        data.jointCount = palette ? static_cast<uint32_t>(palette->size()) : 0;
+        data.weightOffset = data.jointCount * sizeof(Matrix4x4);
+        data.weightCount = static_cast<uint32_t>(weights.size());
+        if(!data.jointCount && !data.weightCount) {
+            return data;
+        }
+        std::vector<uint8_t> bytes(data.weightOffset + weights.size() * sizeof(float));
+        if(palette) {
+            std::memcpy(bytes.data(), palette->data(), data.weightOffset);
+        }
+        if(!weights.empty()) {
+            std::memcpy(bytes.data() + data.weightOffset, weights.data(), weights.size() * sizeof(float));
+        }
+        const size_t index = object * model_.GetNodes().size() + nodeIndex;
+        if(deformationBuffers_.size() <= index) {
+            deformationBuffers_.resize(index + 1);
+        }
+        if(!deformationBuffers_[index]) {
+            deformationBuffers_[index] = std::make_unique<FrameDataBuffer>();
+        }
+        const auto written = deformationBuffers_[index]->Write(*resources_, frame, bytes);
+        if(!written) {
+            return std::unexpected(written.error());
+        }
+        data.poseBuffer = *written;
+        return data;
+    }
 	void PrimitiveRenderer::Render(GraphicsContext& context) {
 		if(meshletSettings_.enabled && AreMeshShadersAvailable()) {
 			auto meshlets = EnsureMeshlets(nullptr, {}, true);
@@ -403,6 +444,17 @@ namespace NexusEngine {
                 : pose.Sample(sample->index, sample->time, sample->loop);
             if(status) {
                 objectPoses[index] = &pose;
+            }
+        }
+        std::vector<DeformationData> deformation(objectCount * model_.GetNodes().size());
+        for(size_t object = 0; object < objectCount; ++object) {
+            for(uint32_t node = 0; node < model_.GetNodes().size(); ++node) {
+                const auto prepared = PrepareDeformation(object, node, *objectPoses[object], frameIndex);
+                if(!prepared) {
+                    NEXUS_LOG_ERROR("Deformation", prepared.error().GetMessageText());
+                    return;
+                }
+                deformation[object * model_.GetNodes().size() + node] = *prepared;
             }
         }
 		const Matrix4x4 projection	= renderScene_->camera->viewProjectionMatrix;
@@ -458,6 +510,12 @@ namespace NexusEngine {
 					const bool	   skinned = skin != MeshAssetData::kNoSkin;
 					ShadowDrawItem draw;
 					draw.mesh		= mesh;
+                    draw.deformation = mesh->GetDeformation();
+                    const auto& poseData = deformation[objectIndex * model_.GetNodes().size() + nodeIndex];
+                    draw.deformation.poseBuffer = poseData.poseBuffer;
+                    draw.deformation.jointCount = poseData.jointCount;
+                    draw.deformation.weightOffset = poseData.weightOffset;
+                    draw.deformation.weightCount = poseData.weightCount;
 					draw.instanceId = object.sourceObject.value;
 					draw.world		= skinned ? object.worldMatrix : Multiply(shadowNodeTransforms[nodeIndex], object.worldMatrix);
 					if(!TryInverse(draw.world)) continue; // Match Forward's non-invertible transform rejection.
@@ -468,7 +526,7 @@ namespace NexusEngine {
 					}
 					shadowDraws_.push_back(draw);
 					// VSだけで変形するSkinningはASへ投入できない。DDGIの受光自体はRasterで利用する。
-					if(!dynamicGI || !skinned) opticalDraws_.push_back({draw, object.tint, object.material, object.materialBegin});
+                    if(!draw.deformation.targetCount && (!dynamicGI || !skinned)) opticalDraws_.push_back({draw, object.tint, object.material, object.materialBegin, object.uvTransform});
 				}
 			}
 		}
@@ -521,20 +579,20 @@ namespace NexusEngine {
 				if(!inverseWorld) continue;
 				drawData_.worldInverseTranspose = Transpose(*inverseWorld);
 				drawData_.skinningEnabled		= hasSkin ? 1U : 0U;
-				drawData_.jointPalette.fill(Matrix4x4::Identity());
-				if(hasSkin) {
-					const auto* palette = objectPose->GetSkinPalette(skinIndex);
-					if(palette == nullptr || palette->size() > drawData_.jointPalette.size()) continue;
-					std::copy(palette->begin(), palette->end(), drawData_.jointPalette.begin());
-				}
 
 				for(const uint32_t meshIndex : node.meshIndices) {
 					const MeshResource* mesh = model_.GetMesh(meshIndex);
 					if(mesh == nullptr) continue;
+                    drawData_.deformation = mesh->GetDeformation();
+                    const auto& poseData = deformation[objectIndex * model_.GetNodes().size() + nodeIndex];
+                    drawData_.deformation.poseBuffer = poseData.poseBuffer;
+                    drawData_.deformation.jointCount = poseData.jointCount;
+                    drawData_.deformation.weightOffset = poseData.weightOffset;
+                    drawData_.deformation.weightCount = poseData.weightCount;
 					context.SetMesh(*mesh);
 					const auto& object = renderScene_->primitives[objectIndex];
 					drawData_.bakedLighting = bakedLighting_.GetDrawData(bakedSettings,
-						object.lightingId ? object.lightingId : object.sourceObject.value,static_cast<uint32_t>(nodeIndex),meshIndex,world,object.staticLighting && !hasSkin);
+                        object.lightingId ? object.lightingId : object.sourceObject.value,static_cast<uint32_t>(nodeIndex),meshIndex,world,object.staticLighting && !hasSkin && !drawData_.deformation.targetCount);
 					for(std::size_t submeshIndex = 0; submeshIndex < mesh->GetSubmeshes().size(); ++submeshIndex) {
 						const SubmeshRange& submesh = mesh->GetSubmeshes()[submeshIndex];
 						if(submesh.materialSlot >= materialResources_.size() ||
@@ -548,7 +606,8 @@ namespace NexusEngine {
 						drawData_.normalSamplerIndex = gpuMaterial.normalSamplerRef.index;
 						drawData_.metallicRoughnessTextureIndex = gpuMaterial.metallicRoughnessRef.index;
 						drawData_.metallicRoughnessSamplerIndex = gpuMaterial.metallicRoughnessSamplerRef.index;
-						drawData_.pbrParameters = {material.metallicFactor, material.roughnessFactor, material.normalScale, 0};
+						drawData_.uvTransform = object.uvTransform;
+                        drawData_.pbrParameters = {material.metallicFactor, material.roughnessFactor, material.normalScale, 0};
 						drawData_.emissiveOcclusion = {material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2], material.occlusionStrength};
 						drawData_.extraMaps = {gpuMaterial.emissiveRef.index, gpuMaterial.emissiveSamplerRef.index, gpuMaterial.occlusionRef.index, gpuMaterial.occlusionSamplerRef.index};
 						drawData_.tint						   = material.baseColorFactor;
@@ -578,7 +637,7 @@ namespace NexusEngine {
 						// 上位 Renderer は DispatchMesh API を知らず、描画意図だけを Context へ渡す。
 						// 同じ独立 Frame CB を Material/Camera 入力に使用し、追加の毎Frame Resource を作らない。
 						////////////////////////////////////////////////////////////////////////////////
-						if(!hasSkin && meshIndex < meshletResources_.size() && meshletResources_[meshIndex] &&
+                        if(!hasSkin && drawData_.deformation.targetCount == 0 && meshIndex < meshletResources_.size() && meshletResources_[meshIndex] &&
 						   context.DispatchMeshlets(meshPipeline_, *meshletResources_[meshIndex], *mesh, drawBuffer,
 						       MeshCullingView{drawData_.worldViewProjection}, static_cast<uint32_t>(submeshIndex), meshletSettings_)) {
 							meshPipelineBound = true;

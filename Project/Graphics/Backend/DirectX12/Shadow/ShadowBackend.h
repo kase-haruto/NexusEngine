@@ -10,6 +10,7 @@
 #include "Graphics/Device/GraphicsCapabilities.h"
 #include "Graphics/Descriptor/DescriptorAllocator.h"
 #include "Graphics/Resource/ConstantBuffer.h"
+#include "Graphics/Resource/FrameDataBuffer.h"
 #include "Graphics/Backend/DirectX12/RayTracing/RayTracingScene.h"
 
 namespace NexusEngine {
@@ -28,9 +29,9 @@ namespace NexusEngine {
 		std::array<float, 4> biases {}; //< origin/TMin/TMax/Map bias
 		std::array<uint32_t, 4> indices {}; //< Surface SRV/Map SRV/Mask UAV/sample count
 		std::array<uint32_t, 4> dimensions {}; //< width/height/skinning/padding
-		std::array<Matrix4x4, 64> jointPalette {};
+        DeformationData deformation;
 	};
-	static_assert(sizeof(ShadowGpuConstants) == 4352);
+    static_assert(sizeof(ShadowGpuConstants) == 288);
 
 	/*-----------------------------------------------------------------------------------------
 	 * ShadowTexture
@@ -164,7 +165,8 @@ namespace NexusEngine {
 		std::unique_ptr<RayTracedShadowTechnique> rayTracing_; //< RT資源所有者
 		IShadowTechnique* current_ = nullptr; //< 上記所有者の非所有選択参照
 		std::filesystem::path shaderDirectory_;
-		std::vector<std::unique_ptr<ConstantBuffer>> constants_; //< Draw数の高水位まで再利用
+        std::vector<std::unique_ptr<ConstantBuffer>> constants_; //< Draw数の高水位まで再利用
+        std::vector<std::unique_ptr<FrameDataBuffer>> paletteBuffers_;
 		size_t constantCursor_ = 0; //< 今回Frameだけの定数割当位置
 		bool rtFailed_ = false; //< RT初期化/AS失敗の反復を防ぐ
 		bool fallback_ = false; //< 最後の方式選択結果

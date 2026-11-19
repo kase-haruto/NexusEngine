@@ -1,0 +1,35 @@
+{
+  "layers": [
+    {
+      "clip": "asset://157559f6-33c3-4b84-85d3-332b3ab093b8",
+      "curveDuration": 0.0,
+      "enabled": true,
+      "loop": true,
+      "mask": [
+        "4:Root/4:Bone/"
+      ],
+      "mode": 2,
+      "name": "Upper Body / Additive",
+      "speed": 1.0,
+      "speedCurve": "",
+      "weight": 0.25,
+      "weightCurve": ""
+    },
+    {
+      "clip": "asset://5d28d0a8-56ea-4830-87c8-8855fdbe8032",
+      "curveDuration": 0.0,
+      "enabled": true,
+      "loop": true,
+      "mask": [
+        "4:Mesh/"
+      ],
+      "mode": 1,
+      "name": "Expression / Override",
+      "speed": 1.0,
+      "speedCurve": "",
+      "weight": 0.800000011920929,
+      "weightCurve": ""
+    }
+  ],
+  "version": 1
+}

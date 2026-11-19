@@ -1,0 +1,71 @@
+#include "Editor/Gui/Panels/InputMapPanel.h"
+void InputMapPanelIntegration() {
+    Fixture f;
+    const auto file = std::filesystem::absolute("Generated/InputMapPanelTests/ProjectConfig/InputMap.settings");
+    const auto defaults = InputMap::Defaults();
+    // 初回はファイルがない。既定値のまま保存できることを確認する。
+    std::filesystem::remove(file);
+    assert(f.session.SetInputConfiguration(file));
+    LocalizationService text;
+    assert(text.Load(std::filesystem::absolute("Project/Resources/Editor/Localization")));
+    PropertyDrawerRegistry drawers;
+    drawers.RegisterDefaults();
+    EditorCommandRegistry commands;
+    const EditorContext context{f.session, f.session.Selection(), f.properties, f.types, drawers, text, commands, f.edits};
+    InputMapPanel panel(file);
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO();
+    io.DisplaySize = {1200, 900};
+    io.DeltaTime = 1.f / 60;
+    io.IniFilename = nullptr;
+    unsigned char* pixels = nullptr;
+    int width = 0, height = 0;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+    io.Fonts->SetTexID(1);
+    const auto frame = [&] {
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos({0, 0});
+        ImGui::SetNextWindowSize({1100, 820});
+        ImGui::Begin("Input Map Test");
+        panel.Draw(context);
+        ImGui::End();
+        ImGui::Render();
+    };
+    const auto click = [&](const char* key) {
+        auto* window = ImGui::FindWindowByName("Input Map Test");
+        assert(window);
+        ImGui::FocusWindow(window);
+        ImGui::ActivateItemByID(ImHashStr(text.Text(key).c_str(), 0, window->ID));
+        frame();
+        frame();
+    };
+    frame();
+    frame();
+    click("file.save");
+    assert(std::filesystem::exists(file) && *InputMap::Load(file) == defaults);
+    click("inputMap.addAction");
+    click("file.save");
+    const auto added = InputMap::Load(file);
+    assert(added && added->actions.size() == defaults.actions.size() + 1);
+    assert(added->actions.back().name == "Action1");
+    assert(f.session.StartPlay());
+    assert(f.session.GetPlayLevel()->InputActions().count == added->actions.size());
+    assert(!f.session.SetInputConfiguration(file));
+    click("inputMap.addAction");
+    click("file.save");
+    assert(*InputMap::Load(file) == *added);
+    f.session.StopPlay();
+    auto external = defaults;
+    external.actions[0].name = "Leap";
+    assert(external.Save(file));
+    click("inputMap.addAction");
+    click("file.save");
+    assert(*InputMap::Load(file) == external);
+    click("inputMap.reload");
+    click("inputMap.addAction");
+    click("file.save");
+    const auto restored = InputMap::Load(file);
+    assert(restored && restored->actions[0].name == "Leap" && restored->actions.size() == 8);
+    ImGui::DestroyContext();
+    std::cout << "PASS: Input Map panel add/save/reload, external edit protection, Play gating and custom project configuration\n";
+}

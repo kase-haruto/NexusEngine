@@ -420,6 +420,46 @@ NexusGameStatus NEXUS_GAME_CALL Physics(void* state, NexusEntityHandle entity, N
 NexusGameStatus NEXUS_GAME_CALL Input(void* state, NexusEntityHandle entity, NexusGameBytes request,
     uint8_t* response, uint32_t capacity, uint32_t* length) noexcept {
     if(entity.world || entity.index || entity.generation) return NEXUS_GAME_INVALID_ARGUMENT;
+    if(request.length == sizeof(NexusInputActionRequestV1)) {
+        if(!request.data) {
+            return NEXUS_GAME_INVALID_ARGUMENT;
+        }
+        NexusInputActionRequestV1 query {};
+        std::memcpy(&query, request.data, sizeof(query));
+        auto& level = *static_cast<WorldEntry*>(state)->level;
+        if(query.operation == 2) {
+            for(char value : query.context) {
+                if(value != 0) {
+                    return NEXUS_GAME_INVALID_ARGUMENT;
+                }
+            }
+            *length = sizeof(NexusInputActionsFrameV1);
+            if(capacity < *length) {
+                return NEXUS_GAME_BUFFER_TOO_SMALL;
+            }
+            const auto& snapshot = level.InputActions();
+            std::memcpy(response, &snapshot, sizeof(snapshot));
+            return NEXUS_GAME_OK;
+        }
+        if(query.operation == 3) {
+            if(static_cast<WorldEntry*>(state)->managedServicesFrozen) {
+                return NEXUS_GAME_FAILED;
+            }
+            // Context変更は次frameで全Scriptへ同時公開する。ABI境界で終端も検証する。
+            const auto end = static_cast<const char*>(std::memchr(query.context, 0, sizeof(query.context)));
+            if(!end) {
+                return NEXUS_GAME_INVALID_ARGUMENT;
+            }
+            for(const char* cursor = end; cursor != query.context + sizeof(query.context); ++cursor) {
+                if(*cursor != 0) {
+                    return NEXUS_GAME_INVALID_ARGUMENT;
+                }
+            }
+            *length = 0;
+            return level.RequestInputContext(std::string_view(query.context, end - query.context)) ? NEXUS_GAME_OK : NEXUS_GAME_INVALID_ARGUMENT;
+        }
+        return NEXUS_GAME_INVALID_ARGUMENT;
+    }
     if(request.length) {
         if(request.length!=sizeof(NexusGamepadRequestV1) || !request.data) return NEXUS_GAME_INVALID_ARGUMENT;
         NexusGamepadRequestV1 query{}; std::memcpy(&query,request.data,sizeof(query));

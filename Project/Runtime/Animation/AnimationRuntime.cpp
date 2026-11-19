@@ -1,9 +1,18 @@
 #include "AnimationRuntime.h"
+#include "AnimationComponentEvaluator.h"
+#include "TimelineEvaluation.h"
 #include "Runtime/Scene/Components/AnimatorComponent.h"
 #include "Runtime/Scene/Components/TimelinePlayerComponent.h"
 #include "Runtime/Scene/Components/AnimationPlayerComponent.h"
 #include "Runtime/Scene/Components/HierarchyComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
+#include "Runtime/Scene/Components/KeyframeAnimationComponent.h"
+#include "Runtime/Scene/Components/CurveBindingComponent.h"
+#include "Runtime/Scene/Components/SkeletalAnimationComponent.h"
+#include "Graphics/Model/PoseMath.h"
+#include "RetargetProfile.h"
+#include "Runtime/Scene/Components/TransformComponent.h"
+#include "Platform/FileSystem/AssetIdentity.h"
 #include "ThirdParty/nlohmann/json.hpp"
 #include <algorithm>
 #include <cmath>
@@ -35,62 +44,25 @@ std::map<std::string, float> Parameters(const std::string& text) {
     }
     return result;
 }
-const PropertyDescriptor* Property(const TypeRegistry& types, const std::string& component, const std::string& property) {
-    const auto* type = types.Find(component);
-    if(!type) {
-        return nullptr;
-    }
-    const auto found = std::ranges::find(type->properties, property, &PropertyDescriptor::id);
-    return found == type->properties.end() ? nullptr : &*found;
-}
-std::vector<float> Numbers(const PropertyValue& value) {
-    return std::visit([](const auto& item) -> std::vector<float> {
-        using T = std::decay_t<decltype(item)>;
-        if constexpr(std::is_same_v<T, float> || std::is_same_v<T, int> || std::is_same_v<T, bool>) {
-            return {static_cast<float>(item)};
-        } else if constexpr(std::is_same_v<T, std::array<float, 2>> || std::is_same_v<T, std::array<float, 3>> || std::is_same_v<T, std::array<float, 4>>) {
-            return {item.begin(), item.end()};
-        } else {
-            return {};
-        }
-    }, value);
-}
-PropertyValue Converted(const PropertyValue& base, const std::vector<float>& values) {
-    return std::visit([&](const auto& item) -> PropertyValue {
-        using T = std::decay_t<decltype(item)>;
-        if constexpr(std::is_same_v<T, float>) {
-            return values[0];
-        } else if constexpr(std::is_same_v<T, int>) {
-            return static_cast<int>(std::clamp(static_cast<double>(values[0]),
-                static_cast<double>((std::numeric_limits<int>::min)()), static_cast<double>((std::numeric_limits<int>::max)())));
-        } else if constexpr(std::is_same_v<T, bool>) {
-            return values[0] >= .5f;
-        } else if constexpr(std::is_same_v<T, std::array<float, 2>> || std::is_same_v<T, std::array<float, 3>> || std::is_same_v<T, std::array<float, 4>>) {
-            T output{};
-            std::copy(values.begin(), values.end(), output.begin());
-            return output;
-        } else {
-            return item;
-        }
-    }, base);
-}
 }
 void AnimationRuntime::SetRoot(std::filesystem::path root) {
     if(root_ != root) {
         Invalidate();
         root_ = std::move(root);
+        clips_.SetRoot(root_);
+        curves_.SetRoot(root_);
+        layers_.SetRoot(root_);
+        poses_.SetRoot(root_);
     }
 }
 void AnimationRuntime::ResetScene() noexcept {
-    saved_.clear();
-    types_ = {};
-    typesReady_ = false;
+    properties_.Reset();
     previousTimes_.clear();
     scene_ = nullptr;
     events_.clear();
 }
 void AnimationRuntime::OverrideClip(const std::string& reference, const AnimationClipDocument& clip) {
-    clips_[reference] = clip;
+    clips_.Override(reference, clip);
 }
 void AnimationRuntime::OverrideController(const std::string& reference, const AnimatorDocument& controller) {
     controllers_[reference] = controller;
@@ -105,7 +77,10 @@ void AnimationRuntime::SetEnabled(bool enabled) {
     enabled_ = enabled;
 }
 void AnimationRuntime::Invalidate() {
-    clips_.clear();
+    clips_.Invalidate();
+    curves_.Invalidate();
+    layers_.Invalidate();
+    poses_.Invalidate();
     controllers_.clear();
     timelines_.clear();
 }
@@ -116,28 +91,31 @@ void AnimationRuntime::SetEventHandler(std::function<void(const Event&)> handler
     handler_ = std::move(handler);
 }
 Result<const AnimationClipDocument*> AnimationRuntime::Clip(const std::string& reference) {
-    if(const auto found = clips_.find(reference); found != clips_.end()) {
-        return &found->second;
-    }
     // glTFのsubassetには汎用Property trackはない。姿勢は描画アセット層で評価する。
     if(reference.find("#animation/") != std::string::npos) {
-        return &clips_.emplace(reference, AnimationClipDocument{}).first->second;
+        static const AnimationClipDocument empty;
+        return &empty;
     }
-    auto path = ResolveAnimationPath(root_, reference);
-    if(!path) {
-        return std::unexpected(path.error());
-    }
-    auto loaded = LoadAnimationClipDocument(*path);
+    auto loaded = clips_.Load(reference);
     if(!loaded) {
         return std::unexpected(loaded.error());
     }
-    return &clips_.emplace(reference, std::move(*loaded)).first->second;
+    return loaded->get();
+}
+CurveAssets& AnimationRuntime::Curves() noexcept {
+    return curves_;
+}
+const std::vector<std::string>& AnimationRuntime::Diagnostics() const noexcept {
+    return properties_.Diagnostics();
+}
+Result<std::vector<std::string>> AnimationRuntime::SkeletonJoints(const std::string& model) {
+    return poses_.ModelJoints(model);
 }
 Result<const AnimatorDocument*> AnimationRuntime::Controller(const std::string& reference) {
     if(const auto found = controllers_.find(reference); found != controllers_.end()) {
         return &found->second;
     }
-    auto path = ResolveAnimationPath(root_, reference);
+    auto path = ResolveAssetReference(root_, reference);
     if(!path) {
         return std::unexpected(path.error());
     }
@@ -151,7 +129,7 @@ Result<const TimelineDocument*> AnimationRuntime::Timeline(const std::string& re
     if(const auto found = timelines_.find(reference); found != timelines_.end()) {
         return &found->second;
     }
-    auto path = ResolveAnimationPath(root_, reference);
+    auto path = ResolveAssetReference(root_, reference);
     if(!path) {
         return std::unexpected(path.error());
     }
@@ -162,133 +140,21 @@ Result<const TimelineDocument*> AnimationRuntime::Timeline(const std::string& re
     return &timelines_.emplace(reference, std::move(*loaded)).first->second;
 }
 Entity AnimationRuntime::Target(Entity root, const std::string& path) const {
-    if(path.empty()) {
-        return root;
-    }
-    auto current = root;
-    size_t begin = 0;
-    while(begin < path.size()) {
-        const auto end = path.find('/', begin);
-        const auto name = path.substr(begin, end == std::string::npos ? end : end - begin);
-        Entity next;
-        bool duplicate = false;
-        root.GetScene()->ForEach<NameComponent, HierarchyComponent>([&](Entity candidate, const auto& label, const auto& hierarchy) {
-            if(hierarchy.parent == current.GetId() && label.name == name) {
-                duplicate |= next.IsAlive();
-                next = candidate;
-            }
-        });
-        if(duplicate || !next.IsAlive()) {
-            return {};
-        }
-        current = next;
-        if(end == std::string::npos) {
-            break;
-        }
-        begin = end + 1;
-    }
-    return current;
+    return properties_.Target(root, path);
 }
 void AnimationRuntime::InitializeTypes(const ReflectionRegistration& reflection) {
-    if(!typesReady_) {
-        RegisterSceneTypes(types_);
-        reflection.RegisterInspector(types_);
-        typesReady_ = true;
-    }
+    properties_.Initialize(reflection);
 }
 void AnimationRuntime::RestoreProperties() {
-    // 毎回未アニメーション値へ戻してから評価し、区間外や欠けたtrackで前の姿勢を残さない。
-    for(const auto& saved : saved_) {
-        if(saved.entity.IsAlive()) {
-            const auto* property = Property(types_, saved.component, saved.property);
-            if(property) {
-                property->set(saved.entity, saved.value);
-            }
-        }
-    }
-    saved_.clear();
+    properties_.Restore();
 }
 Result<void> AnimationRuntime::Apply(Entity entity, const std::vector<AnimationPoseSample>& samples) {
-    struct Contribution {
-        Entity entity;
-        std::string component, property;
-        std::vector<float> sum;
-        float weight = 0;
-    };
-    std::vector<Contribution> contributions;
-    for(const auto& sample : samples) {
-        if(sample.asset.empty() || sample.weight <= 0) {
-            continue;
-        }
-        auto document = Clip(sample.asset);
-        if(!document) {
-            return std::unexpected(document.error());
-        }
-        const float time = AnimationClipTime(sample.time, (*document)->duration, sample.loop);
-        for(const auto& track : (*document)->tracks) {
-            if(track.component == "$node") {
-                continue;
-            }
-            auto target = Target(entity, track.target);
-            const auto* property = Property(types_, track.component, track.property);
-            if(!target.IsAlive() || !property) {
-                return std::unexpected(RuntimeError("unresolved property binding: " + track.component + "." + track.property));
-            }
-            auto base = property->get(target);
-            auto value = SampleAnimationTrack(track, time);
-            if(base && property->kind == PropertyKind::Rotation && value.size() == 4) {
-                const auto rotation = Numbers(*base);
-                float dot = 0;
-                for(size_t axis = 0; axis < 4; ++axis) {
-                    dot += value[axis]*rotation[axis];
-                }
-                if(dot < 0) {
-                    for(float& axis : value) {
-                        axis = -axis;
-                    }
-                }
-            }
-            if(!base || Numbers(*base).size() != value.size()) {
-                return std::unexpected(RuntimeError("property dimensions do not match track"));
-            }
-            auto found = std::find_if(contributions.begin(), contributions.end(), [&](const auto& item) {
-                return item.entity == target && item.component == track.component && item.property == track.property;
-            });
-            if(found == contributions.end()) {
-                contributions.push_back({target, track.component, track.property, std::vector<float>(value.size()), 0});
-                found = contributions.end() - 1;
-            }
-            for(size_t index = 0; index < value.size(); ++index) {
-                found->sum[index] += value[index] * sample.weight;
-            }
-            found->weight += sample.weight;
-        }
-    }
-    for(auto& item : contributions) {
-        const auto* property = Property(types_, item.component, item.property);
-        const auto base = property->get(item.entity);
-        auto original = Numbers(*base);
-        const float total = (std::max)(1.0f, item.weight);
-        for(size_t index = 0; index < original.size(); ++index) {
-            item.sum[index] = (item.sum[index] + original[index] * (std::max)(0.0f, 1 - item.weight)) / total;
-        }
-        // 保存値は一度だけ記録する。TimelineがAnimatorを上書きしても復元先は元の値。
-        const bool saved = std::ranges::any_of(saved_, [&](const auto& value) {
-            return value.entity == item.entity && value.component == item.component && value.property == item.property;
-        });
-        if(!saved) {
-            saved_.push_back({item.entity, item.component, item.property, *base});
-        }
-        if(!property->set(item.entity, Converted(*base, item.sum))) {
-            return std::unexpected(RuntimeError("property rejected an animated value: " + item.property));
-        }
-    }
-    return {};
+    return properties_.Apply(entity, samples, [this](const auto& reference) { return Clip(reference); });
 }
 Result<void> AnimationRuntime::Sample(Scene& scene, Entity entity, const std::vector<AnimationPoseSample>& samples,
     const ReflectionRegistration& reflection) {
     if(scene_ != &scene) {
-        saved_.clear();
+        properties_.Reset();
         scene_ = &scene;
     }
     InitializeTypes(reflection);
@@ -467,11 +333,14 @@ Result<void> AnimationRuntime::EvaluateTimeline(Entity entity, TimelinePlayerCom
         return std::unexpected(loaded.error());
     }
     const auto& document = **loaded;
+    const auto traversal = TraverseTimeline(timeline.time, timeline.playing ? static_cast<double>(deltaTime) * timeline.speed : 0,
+        document.duration, timeline.loop || document.loop);
     if(timeline.playing) {
         timeline.time += deltaTime * timeline.speed;
     }
     timeline.time = AnimationClipTime(timeline.time, document.duration, timeline.loop || document.loop);
     std::map<std::pair<uint32_t, uint32_t>, std::pair<Entity, std::vector<AnimationPoseSample>>> targets;
+    std::map<std::pair<uint32_t, uint32_t>, std::vector<ControllerEventRange>> ranges;
     for(const auto& track : document.tracks) {
         if(track.muted) {
             continue;
@@ -481,9 +350,17 @@ Result<void> AnimationRuntime::EvaluateTimeline(Entity entity, TimelinePlayerCom
             return std::unexpected(RuntimeError("Timeline target not found: " + track.target));
         }
         bool active = false;
+        const auto targetId = std::pair{target.GetId().index, target.GetId().generation};
+        if(track.type == "Animation") {
+            targets[targetId].first = target;
+            for(const auto& clip : track.clips) {
+                const auto traversed = TimelineClipRanges(clip, traversal);
+                ranges[targetId].insert(ranges[targetId].end(), traversed.begin(), traversed.end());
+            }
+        }
         std::vector<AnimationPoseSample> samples;
         for(const auto& clip : track.clips) {
-            if(timeline.time < clip.start || timeline.time >= clip.start + clip.duration) {
+            if(timeline.time < clip.start || (timeline.time >= clip.start + clip.duration && timeline.time != document.duration)) {
                 continue;
             }
             active = true;
@@ -501,7 +378,7 @@ Result<void> AnimationRuntime::EvaluateTimeline(Entity entity, TimelinePlayerCom
             AnimationClipDocument activation;
             activation.tracks.push_back({"", "PrimitiveRender", "enabled", AnimationInterpolation::Step, {{0, {active ? 1.0f : 0.0f}, {}, {}}}});
             const auto key = ":activation/" + std::to_string(target.GetId().index);
-            clips_[key] = std::move(activation);
+            clips_.Override(key, activation);
             auto applied = Apply(target, {{key, 0, 0, 1, false}});
             if(!applied) {
                 return applied;
@@ -513,7 +390,52 @@ Result<void> AnimationRuntime::EvaluateTimeline(Entity entity, TimelinePlayerCom
         }
     }
     for(auto& [id, item] : targets) {
-        (void)id;
+        auto* keyframe = item.first.GetComponent<KeyframeAnimationComponent>();
+        auto* skeletal = item.first.GetComponent<SkeletalAnimationComponent>();
+        if(keyframe || skeletal) {
+            // 新componentをTimelineが借用し、controllerの時計を止めて同じimmutable clipを評価する。
+            if(keyframe) {
+                keyframe->timelineDriven = true;
+                keyframe->samples.clear();
+                keyframe->timelineRanges.clear();
+            }
+            if(skeletal) {
+                skeletal->timelineDriven = true;
+                skeletal->samples.clear();
+                skeletal->timelineRanges.clear();
+            }
+            for(const auto& sample : item.second) {
+                auto clip = Clip(sample.asset);
+                if(!clip) {
+                    return std::unexpected(clip.error());
+                }
+                const auto kind = EffectiveAnimationClipKind(**clip);
+                if(kind == AnimationClipKind::Keyframe && keyframe) {
+                    keyframe->samples.push_back(sample);
+                } else if(kind == AnimationClipKind::Skeletal && skeletal) {
+                    skeletal->samples.push_back(sample);
+                } else {
+                    return std::unexpected(RuntimeError("Timeline clip requires the matching Keyframe/Skeletal component: " + sample.asset));
+                }
+            }
+            std::ranges::stable_sort(ranges[id], [](const auto& first, const auto& second) {
+                return std::tie(first.segment, first.timelineBegin) < std::tie(second.segment, second.timelineBegin);
+            });
+            for(const auto& range : ranges[id]) {
+                const auto clip = Clip(range.asset);
+                if(clip && EffectiveAnimationClipKind(**clip) == AnimationClipKind::Keyframe && keyframe) {
+                    keyframe->timelineRanges.push_back(range);
+                } else if(clip && EffectiveAnimationClipKind(**clip) == AnimationClipKind::Skeletal && skeletal) {
+                    skeletal->timelineRanges.push_back(range);
+                }
+            }
+            continue;
+        }
+        if(item.second.empty()) {
+            // 旧Animator/AnimationPlayerでは空白区間に制御を返す既存契約を維持する。
+            // typed playerは上の分岐で明示的に借用し、bind/originalへ戻している。
+            continue;
+        }
         auto* player = item.first.GetComponent<AnimationPlayerComponent>();
         if(!player) {
             player = item.first.AddComponent<AnimationPlayerComponent>();
@@ -556,7 +478,7 @@ void AnimationRuntime::CollectEvents(Entity entity, const std::vector<AnimationP
 }
 Result<void> AnimationRuntime::Update(Scene& scene, float deltaTime, const ReflectionRegistration& reflection) {
     if(scene_ != &scene) {
-        saved_.clear();
+        properties_.Reset();
         scene_ = &scene;
     }
     if(root_.empty() || !enabled_) {
@@ -570,6 +492,12 @@ Result<void> AnimationRuntime::Update(Scene& scene, float deltaTime, const Refle
     RestoreProperties();
     events_.clear();
     std::vector<Entity> animators, timelines, players;
+    scene.ForEach<KeyframeAnimationComponent>([](Entity, auto& component) {
+        component.timelineDriven = false;
+    });
+    scene.ForEach<SkeletalAnimationComponent>([](Entity, auto& component) {
+        component.timelineDriven = false;
+    });
     scene.ForEach<AnimationPlayerComponent>([](Entity, auto& player) { player.samples.clear(); });
     scene.ForEach<AnimatorComponent>([&](Entity entity, const auto&) { animators.push_back(entity); });
     scene.ForEach<TimelinePlayerComponent>([&](Entity entity, const auto&) { timelines.push_back(entity); });
@@ -606,6 +534,132 @@ Result<void> AnimationRuntime::Update(Scene& scene, float deltaTime, const Refle
         }
         CollectEvents(entity, player.samples, eventDelta);
     }
+    // 新componentはlegacyより後に評価する。競合はbinding側の診断に残す。
+    const auto control = [&](auto& component, AnimationClipKind expected) {
+        if(component.timelineDriven) {
+            component.runtimeDriven = true;
+            return;
+        }
+        component.runtimeDriven = !component.controllerAsset.empty();
+        if(!component.runtimeDriven) {
+            component.activeController.clear();
+            return;
+        }
+        auto document = Controller(component.controllerAsset);
+        if(!document || !component.IsValid()) {
+            properties_.Warn("Invalid animation controller or component settings: " + component.controllerAsset);
+            component.samples = component.controller.Samples();
+            return;
+        }
+        if(component.activeController != component.controllerAsset) {
+            if(!component.activeController.empty()) {
+                component.elapsed = 0;
+            }
+            component.controller.Stop();
+            if(component.elapsed > 0) {
+                component.controller.Seek(component.elapsed);
+            }
+            component.activeController = component.controllerAsset;
+        } else if(component.elapsed != static_cast<float>(component.controller.Elapsed())) {
+            component.controller.Seek(component.elapsed);
+        }
+        const auto parameters = component.controller.SetParameters(component.controllerParameters);
+        if(!parameters) {
+            properties_.Warn(parameters.error().GetMessageText());
+            component.samples = component.controller.Samples();
+            return;
+        }
+        std::shared_ptr<const FloatCurve> curve;
+        if(!component.speedCurveAsset.empty()) {
+            const auto loaded = curves_.Load(component.speedCurveAsset);
+            if(loaded) {
+                curve = *loaded;
+            } else {
+                properties_.Warn(loaded.error().GetMessageText());
+            }
+        }
+        const auto evaluated = component.controller.Update(**document, deltaTime, component.playing, component.playbackSpeed,
+            curve.get(), component.speedCurveDuration, [&](const auto& asset) {
+                return clips_.Load(asset);
+            });
+        if(!evaluated) {
+            properties_.Warn(evaluated.error().GetMessageText());
+        }
+        component.samples = component.controller.Samples();
+        component.elapsed = static_cast<float>(component.controller.Elapsed());
+        component.controllerParameters = component.controller.Parameters();
+        for(const auto& sample : component.samples) {
+            auto clip = clips_.Load(sample.asset);
+            if(!clip || EffectiveAnimationClipKind(**clip) != expected) {
+                properties_.Warn("Controller motion does not match the animation component kind: " + sample.asset);
+                component.samples.clear();
+                break;
+            }
+        }
+    };
+    scene.ForEach<KeyframeAnimationComponent>([&](Entity, auto& component) {
+        control(component, AnimationClipKind::Keyframe);
+    });
+    scene.ForEach<SkeletalAnimationComponent>([&](Entity, auto& component) {
+        component.controlledBeginElapsed = component.controller.Elapsed();
+        control(component, AnimationClipKind::Skeletal);
+    });
+    std::set<std::tuple<uint32_t, uint32_t, std::string, size_t>> dispatched;
+    EvaluateAnimationComponents(scene, deltaTime, clips_, curves_, layers_, properties_,
+        [&](Entity entity, const std::string& asset, const AnimationClipDocument& clip, double begin, double end, bool loop) {
+            // 既定は前進だけ。逆方向はplayerの明示設定で[end,begin)を通知する。
+            const auto* keyframe = entity.GetComponent<KeyframeAnimationComponent>();
+            const auto* skeletal = entity.GetComponent<SkeletalAnimationComponent>();
+            const bool reverse = end < begin;
+            const bool allowReverse = (keyframe && keyframe->reverseEvents) || (skeletal && skeletal->reverseEvents);
+            if(end == begin || clip.duration <= 0 || (reverse && !allowReverse)) {
+                return;
+            }
+            for(size_t index = 0; index < clip.events.size(); ++index) {
+                const auto& event = clip.events[index];
+                const double cycle = loop ? (reverse ? std::ceil((end - event.time) / clip.duration) : std::floor((end - event.time) / clip.duration)) : 0;
+                const double occurrence = event.time + cycle * clip.duration;
+                const bool crossed = reverse ? occurrence < begin && occurrence >= end : occurrence > begin && occurrence <= end;
+                if(crossed &&
+                    dispatched.emplace(entity.GetId().index, entity.GetId().generation, asset, index).second) {
+                    // 複数loopを飛び越した同一eventは最新1回へまとめ、無制限のcallbackを避ける。
+                    events_.push_back({entity, asset, event.name, event.payload, reverse});
+                }
+            }
+        });
+    scene.ForEach<CurveBindingComponent>([&](Entity entity, auto& binding) {
+        if(binding.curveAsset.empty()) {
+            return;
+        }
+        if(!binding.IsValid()) {
+            properties_.Warn("Invalid Curve binding settings: " + binding.curveAsset);
+            return;
+        }
+        const auto curve = curves_.Load(binding.curveAsset);
+        if(!curve) {
+            properties_.Warn(curve.error().GetMessageText());
+            return;
+        }
+        if(binding.playing && !binding.manual) {
+            // Curve出力の意味はbinding側に置く。負速度で先頭を越えたloopも終端へ戻す。
+            double next = binding.elapsed + static_cast<double>(deltaTime) * binding.playbackSpeed;
+            if(binding.loop && next < 0) {
+                next = std::fmod(next, binding.duration) + binding.duration;
+            }
+            binding.elapsed = static_cast<float>(std::clamp(next, 0.0, 1e12));
+        }
+        double input = binding.manual ? binding.input : static_cast<double>(binding.elapsed) / binding.duration;
+        if(!binding.manual && binding.loop) {
+            input -= std::floor(input);
+        }
+        const double value = (*curve)->Evaluate(input) * binding.outputScale + binding.outputBias;
+        const auto applied = properties_.ApplyValue(entity, binding.target, binding.targetComponent,
+            binding.targetProperty, binding.channel, static_cast<float>(value));
+        if(!applied) {
+            properties_.Warn(applied.error().GetMessageText());
+        }
+    });
+    ApplyRootMotion(scene);
     // callbackからSceneへ変更する場合も、storage反復と姿勢評価が終了してから通知する。
     if(handler_) {
         const auto events = events_;
@@ -614,5 +668,96 @@ Result<void> AnimationRuntime::Update(Scene& scene, float deltaTime, const Refle
         }
     }
     return {};
+}
+void AnimationRuntime::ApplyRootMotion(Scene& scene) {
+    scene.ForEach<SkeletalAnimationComponent>([&](Entity entity, auto& component) {
+        component.extractedRootMotion = {};
+        if(!component.rootMotion || !component.IsValid() || (component.samples.empty() && component.rootRanges.empty())) {
+            return;
+        }
+        auto* transform = entity.GetComponent<TransformComponent>();
+        const auto* model = entity.GetComponent<PrimitiveRenderComponent>();
+        if(!transform || !model || model->meshAsset.empty() || component.rootMotionJoint.empty()) {
+            properties_.Warn("Root Motion requires a Transform, model and explicit root joint");
+            return;
+        }
+        auto target = poses_.Load(component.samples.empty() ? component.rootRanges.front().asset : component.samples.front().asset, model->meshAsset, clips_);
+        if(!target) {
+            properties_.Warn(target.error().GetMessageText());
+            return;
+        }
+        const auto paths = SkeletonNodePaths(**target);
+        const auto root = std::ranges::find(paths, component.rootMotionJoint);
+        if(root == paths.end() || std::ranges::count(paths, component.rootMotionJoint) != 1) {
+            properties_.Warn("Root Motion joint is missing or ambiguous");
+            return;
+        }
+        const auto rootIndex = static_cast<uint32_t>(root - paths.begin());
+        for(auto& sample : component.samples) {
+            sample.rootMotionJoint = component.rootMotionJoint;
+            sample.rootMotionAxes = component.rootMotionAxes;
+            sample.removeRootRotation = component.rootMotionRotation;
+        }
+        RootMotionDelta result;
+        float accumulated = 0;
+        for(const auto& range : component.rootRanges) {
+            if(range.mode == PoseBlendMode::Normalized) {
+                accumulated += range.weight;
+            }
+        }
+        const float normalizedTotal = (std::max)(1.0f, accumulated);
+        accumulated = (std::max)(0.0f, 1 - accumulated);
+        for(const auto& range : component.rootRanges) {
+            if(range.weight <= 0 || (!range.mask.empty() && !std::ranges::any_of(range.mask, [&](const auto& mask) {
+                return component.rootMotionJoint.starts_with(mask);
+            }))) {
+                continue;
+            }
+            auto asset = poses_.Load(range.asset, model->meshAsset, clips_);
+            if(!asset) {
+                properties_.Warn(asset.error().GetMessageText());
+                continue;
+            }
+            auto motion = ExtractRootMotion(**asset, rootIndex, range.begin, range.end, range.loop);
+            if(!motion) {
+                properties_.Warn(motion.error().GetMessageText());
+                continue;
+            }
+            *motion = RepeatRootMotion(*motion, range.repeats);
+            if(range.sequential) {
+                motion->translation = motion->translation * range.weight;
+                motion->rotation = BlendPoseRotation(Quaternion::Identity(), motion->rotation, range.weight);
+                result = ComposeRootMotion(result, *motion);
+                continue;
+            }
+            if(range.mode == PoseBlendMode::Normalized) {
+                result.translation = result.translation + motion->translation * (range.weight / normalizedTotal);
+                const float weight = range.weight / (accumulated + range.weight);
+                result.rotation = BlendPoseRotation(result.rotation, motion->rotation, weight);
+                accumulated += range.weight;
+            } else if(range.mode == PoseBlendMode::Override) {
+                result.translation = result.translation + (motion->translation - result.translation) * range.weight;
+                result.rotation = BlendPoseRotation(result.rotation, motion->rotation, range.weight);
+            } else {
+                result.translation = result.translation + motion->translation * range.weight;
+                result.rotation = Quaternion::Multiply(BlendPoseRotation(Quaternion::Identity(), motion->rotation, range.weight), result.rotation).Normalized();
+            }
+        }
+        result.translation = {result.translation.x * component.rootMotionAxes.x, result.translation.y * component.rootMotionAxes.y,
+            result.translation.z * component.rootMotionAxes.z};
+        if(!component.rootMotionRotation) {
+            result.rotation = Quaternion::Identity();
+        }
+        component.extractedRootMotion = result;
+        if(component.applyRootMotion) {
+            const Vector3 local{result.translation.x * transform->scale.x, result.translation.y * transform->scale.y, result.translation.z * transform->scale.z};
+            const Quaternion vector{local.x, local.y, local.z, 0};
+            const auto rotation = transform->rotation.Normalized();
+            const Quaternion inverse{-rotation.x, -rotation.y, -rotation.z, rotation.w};
+            const auto moved = Quaternion::Multiply(Quaternion::Multiply(rotation, vector), inverse);
+            transform->translation = transform->translation + Vector3{moved.x, moved.y, moved.z};
+            transform->rotation = Quaternion::Multiply(rotation, result.rotation).Normalized();
+        }
+    });
 }
 }

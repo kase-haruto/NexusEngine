@@ -1,5 +1,6 @@
 #pragma once
 #include "IEditorPanel.h"
+#include "Editor/Gui/ComponentBrowser/AddComponentWindow.h"
 #include "Editor/Gui/Properties/PropertyCategoryView.h"
 
 namespace NexusEngine {
@@ -15,7 +16,7 @@ namespace NexusEngine {
 		//===================================================================*/
 		//                    public methods
 		//===================================================================*/
-		explicit DetailsPanel(const PropertyCategoryRegistry& registry) : categories_(registry) {}
+		explicit DetailsPanel(const PropertyCategoryRegistry& registry, EditorSettingsStore* settings = nullptr);
 		~DetailsPanel()								 = default;
 		DetailsPanel(const DetailsPanel&)			 = delete;
 		DetailsPanel& operator=(const DetailsPanel&) = delete;
@@ -25,6 +26,7 @@ namespace NexusEngine {
 		void Draw(const EditorContext& context) override;
 		std::string_view ActiveCategory() const { return categories_.ActiveCategory(); }
 	private:
+        AddComponentWindow componentBrowser_; //< 追加UIだけを委譲し、Detailsへ検索描画を詰め込まない
 		PropertyCategoryView categories_; //< ページ別の表示状態。編集履歴は共通サービスが所有する
         std::string scriptSearch_; //< Script pickerの表示検索。型やManaged objectは保持しない
 	};

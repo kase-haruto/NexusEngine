@@ -15,6 +15,7 @@ void DockingLayout::Initialize(const std::filesystem::path& directory, std::stri
 }
 void DockingLayout::SwitchProfile(std::string_view profile, bool saveCurrent) {
     if(profile != "General" && profile != "Lighting" && profile != "Animation") return;
+    profile_ = profile;
     if(saveCurrent && !path_.empty()) Save(true);
     path_ = directory_ / (std::string(profile) + ".ini");
     std::ifstream file(path_, std::ios::binary);
@@ -34,13 +35,16 @@ void DockingLayout::Draw() {
     ImGuiID center = dock, left, right, bottom;
     ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.2f, &left, &center);
     ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, &right, &center);
-    ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.3f, &bottom, &center);
+    ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, profile_ == "Animation" ? 0.46f : 0.3f, &bottom, &center);
     ImGui::DockBuilderDockWindow("###Outliner", left);
     ImGui::DockBuilderDockWindow("###Details", right);
     ImGui::DockBuilderDockWindow("###Viewport", center);
     ImGui::DockBuilderDockWindow("###ContentBrowser", bottom);
     ImGui::DockBuilderDockWindow("###OutputLog", bottom);
     ImGui::DockBuilderDockWindow("###Terminal", bottom);
+    // 初期配置・明示Resetだけに適用する。保存済みの個人配置は毎frame書き換えない。
+    ImGui::DockBuilderDockWindow("###AnimationStudio", bottom);
+    ImGui::DockBuilderDockWindow("###CurveEditor", bottom);
     ImGui::DockBuilderFinish(dock);
 }
 void DockingLayout::Save(bool enabled) {

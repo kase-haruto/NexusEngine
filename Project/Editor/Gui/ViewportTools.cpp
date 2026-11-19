@@ -219,7 +219,11 @@ void ViewportTools::SetModel(const ModelAssetData& model, const ModelInstance& p
 }
 void ViewportTools::Prepare(RenderScene& frame, float aspect) {
     frame_ = &frame;
-    if(session_.IsPlaying() || session_.HasAnimationPreview()) return;
+    if(session_.IsPlaying() || (session_.HasAnimationPreview() && frame.camera)) {
+        return;
+    }
+    // CameraのないSceneのanimation previewでもEditor Cameraを供給する。
+    // scene Cameraがある場合は上で保持し、アニメーションしたFOVを上書きしない。
     PrepareCameraGuides(aspect);
     if(generation_ != session_.Generation()) {
         generation_ = session_.Generation(); position_ = {0,2,-10}; yaw_ = pitch_ = 0;

@@ -539,10 +539,21 @@ void CollisionLayerOperations() {
     assert(restored.CollisionLayers() == matrix);
     std::ifstream savedFile(path, std::ios::binary);
     std::string savedText{std::istreambuf_iterator<char>(savedFile), std::istreambuf_iterator<char>()};
-    assert(savedText.starts_with("NEXUS_LEVEL 14\n"));
+    assert(savedText.starts_with("NEXUS_LEVEL 15\n"));
     assert(savedText.find("COLLISION_MATRIX") == std::string::npos);
     auto legacyText = savedText;
-    legacyText.replace(0, std::string("NEXUS_LEVEL 14").size(), "NEXUS_LEVEL 13");
+    legacyText.replace(0, std::string("NEXUS_LEVEL 15").size(), "NEXUS_LEVEL 13");
+    // v15の末尾UVを除き、実際の旧形式レコードへ戻して移行を検証する。
+    for(size_t position = legacyText.find("PRIMITIVE 1 "); position != std::string::npos;
+        position = legacyText.find("PRIMITIVE 1 ", position + 1)) {
+        const auto end = legacyText.find('\n', position);
+        auto begin = end;
+        for(int field = 0; field < 4; ++field) {
+            begin = legacyText.rfind(' ', begin - 1);
+        }
+        legacyText.erase(begin, end - begin);
+    }
+
     std::string legacyMatrix = "COLLISION_MATRIX";
     for(uint32_t row : DefaultCollisionMatrix()) {
         legacyMatrix += " " + std::to_string(row);
@@ -701,7 +712,9 @@ void ColliderWireframeOperations() {
 }
 }
 
+#include "InputMapTests.inl"
 void RunGameServicesTests() {
+    InputMapOperations();
     ColliderWireframeOperations();
     TimeAndReferenceOperations();
     CollisionLayerOperations();

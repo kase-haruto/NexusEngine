@@ -21,7 +21,7 @@ Result<Json> ReadAnimation(const std::filesystem::path& file) {
         if(std::filesystem::file_size(file) > 32 * 1024 * 1024) {
             return std::unexpected(InvalidAnimation("file exceeds 32 MiB"));
         }
-        std::ifstream input(file);
+        std::ifstream input(NativeFilePath(file));
         auto json = Json::parse(input);
         if(!json.is_object()) {
             return std::unexpected(InvalidAnimation("expected an object"));
@@ -48,19 +48,25 @@ float AnimationClipTime(float time, float duration, bool loop) {
     return loop ? std::fmod((std::max)(time, 0.0f), duration) : std::clamp(time, 0.0f, duration);
 }
 Result<std::filesystem::path> ResolveAnimationPath(const std::filesystem::path& root, const std::string& reference) {
-    if(reference.empty() || root.empty()) {
-        return std::unexpected(InvalidAnimation("asset root or reference is empty"));
-    }
-    std::error_code error;
-    const auto base = std::filesystem::weakly_canonical(root, error);
-    const auto path = std::filesystem::weakly_canonical(base / std::filesystem::path(reinterpret_cast<const char8_t*>(reference.c_str())), error);
-    const auto relative = path.lexically_relative(base);
-    if(error || relative.empty() || relative.is_absolute() || *relative.begin() == "..") {
-        return std::unexpected(InvalidAnimation("asset must be inside Assets"));
-    }
-    return path;
+    return ResolveFileWithinRoot(root, reference);
 }
 Result<void> ValidateAnimationDocument(const AnimationClipDocument& document) {
+    if((!document.retargetProfile.empty() || !document.skeletonSource.empty()) && (document.kind == AnimationClipKind::Keyframe ||
+        std::ranges::any_of(document.tracks, [](const auto& track) { return track.component != "$node"; }))) {
+        return std::unexpected(InvalidAnimation("retargeting requires a skeletal clip"));
+    }
+    if(static_cast<int>(document.kind) < 0 || static_cast<int>(document.kind) > 2) {
+        return std::unexpected(InvalidAnimation("unknown clip kind"));
+    }
+    if(document.kind != AnimationClipKind::Legacy) {
+        const bool skeletal = document.kind == AnimationClipKind::Skeletal;
+        if((!skeletal && !document.source.empty()) ||
+            std::ranges::any_of(document.tracks, [skeletal](const auto& track) {
+                return (track.component == "$node") != skeletal;
+            })) {
+            return std::unexpected(InvalidAnimation("clip kind does not match tracks/source"));
+        }
+    }
     if(!Positive(document.duration) || document.tracks.size() > 4096 || document.events.size() > 10000) {
         return std::unexpected(InvalidAnimation("invalid duration or too many tracks/events"));
     }
@@ -71,7 +77,8 @@ Result<void> ValidateAnimationDocument(const AnimationClipDocument& document) {
             return std::unexpected(InvalidAnimation("empty or duplicate track"));
         }
         const auto dimensions = track.keys.front().value.size();
-        if(dimensions < 1 || dimensions > 4 || static_cast<int>(track.interpolation) < 0 || static_cast<int>(track.interpolation) > 2) {
+        const size_t maximumDimensions = track.component == "$node" && track.property == "weights" ? kMaxMorphTargets : 4;
+        if(dimensions < 1 || dimensions > maximumDimensions || static_cast<int>(track.interpolation) < 0 || static_cast<int>(track.interpolation) > 2) {
             return std::unexpected(InvalidAnimation("invalid track dimension/interpolation"));
         }
         float previous = -1;
@@ -176,13 +183,25 @@ Result<AnimationClipDocument> LoadAnimationClipDocument(const std::filesystem::p
     try {
         const auto& json = *read;
         const int version = json.at("version");
-        if(version != 1 && version != 2) {
+        if(version < 1 || version > 4) {
             return std::unexpected(InvalidAnimation("unsupported clip version"));
         }
         AnimationClipDocument document;
+        if(version >= 3) {
+            const auto kind = json.at("kind").get<std::string>();
+            if(kind != "Keyframe" && kind != "Skeletal") {
+                return std::unexpected(InvalidAnimation("unknown clip kind"));
+            }
+            document.kind = kind == "Keyframe" ? AnimationClipKind::Keyframe : AnimationClipKind::Skeletal;
+        }
         document.source = json.value("source", "");
         document.clip = json.value("clip", "");
         document.duration = json.value("duration", 1.0f);
+        document.durationExplicit = json.contains("duration");
+        if(version >= 4) {
+            document.retargetProfile = json.value("retargetProfile", "");
+            document.skeletonSource = json.value("skeletonSource", "");
+        }
         document.loop = json.value("loop", true);
         for(const auto& trackJson : json.value("tracks", Json::array())) {
             AnimationTrack track;
@@ -301,6 +320,20 @@ Result<void> SaveAnimationDocument(const std::filesystem::path& file, const Anim
     }
     Json json{{"version", 2}, {"source", document.source}, {"clip", document.clip}, {"duration", document.duration},
         {"loop", document.loop}, {"tracks", Json::array()}, {"events", Json::array()}};
+    if(!document.durationExplicit && !document.source.empty()) {
+        // source metadata未解決の編集文書を保存しても、仮の1秒を確定しない。
+        json.erase("duration");
+    }
+    if(document.kind != AnimationClipKind::Legacy) {
+        json["version"] = 3;
+        json["kind"] = document.kind == AnimationClipKind::Keyframe ? "Keyframe" : "Skeletal";
+    }
+    if(!document.retargetProfile.empty() || !document.skeletonSource.empty()) {
+        json["version"] = 4;
+        json["kind"] = "Skeletal";
+        json["retargetProfile"] = document.retargetProfile;
+        json["skeletonSource"] = document.skeletonSource;
+    }
     for(const auto& track : document.tracks) {
         json["tracks"].push_back(TrackJson(track));
     }

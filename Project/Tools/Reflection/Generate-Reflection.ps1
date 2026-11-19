@@ -66,8 +66,19 @@ foreach($sourceRoot in $(if($Module -eq 'Game') { @('Game') } else { @('Foundati
                 $memberIds[$memberId] = $true
                 $members += [pscustomobject]@{ Name = $member; Id = $memberId }
             }
+            # 描画・翻訳には依存せず、宣言元の値ヒントを共通TypeDescriptorへ渡す。
+            $editor = $null
+            foreach($editorMatch in [regex]::Matches($source, 'NEXUS_COMPONENT_EDITOR\s*\(([^)]*)\)')) {
+                $editorArgs = @($editorMatch.Groups[1].Value.Split(',') | ForEach-Object { $_.Trim() })
+                if($editorArgs[0] -cne $type) { continue }
+                if($editor -or $kind -ne 'COMPONENT' -or $editorArgs.Count -ne 4) { throw "Invalid Editor metadata: $type" }
+                foreach($argument in $editorArgs[1..3]) {
+                    if($argument -notmatch '^"[A-Za-z0-9_.-]+"$') { throw "Invalid Editor metadata string: $type" }
+                }
+                $editor = $editorArgs[1..3]
+            }
             $relative = $header.FullName.Substring($scanRoot.Length).TrimStart('\', '/').Replace('\', '/')
-            $schemas += [pscustomobject]@{ Kind = $kind; Type = $type; Id = $id; Label = $label; Header = $relative; Members = $members }
+            $schemas += [pscustomobject]@{ Kind = $kind; Type = $type; Id = $id; Label = $label; Header = $relative; Members = $members; Editor = $editor }
         }
     }
 }
@@ -109,7 +120,9 @@ foreach($schema in $schemas | Where-Object Kind -eq 'COMPONENT') {
         if([IO.File]::Exists($implementation)) { $sourceFiles += $implementation }
     }
     $sourceArguments = ($sourceFiles | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ', '
-    $lines.Add("    RegisterReflectedInspector<$($schema.Type)>(registry, {$sourceArguments});")
+    $origin = if($Module -eq 'Game') { 'Game' } else { 'Engine' }
+    $editorArguments = if($schema.Editor) { '"", ' + ($schema.Editor -join ', ') + ', "' + $origin + '", {"' + $schema.Type + '"}' } else { '"", "Other", "componentBrowser.description.default", "component.Default", "' + $origin + '", {"' + $schema.Type + '"}' }
+    $lines.Add("    RegisterReflectedInspector<$($schema.Type)>(registry, {$sourceArguments}, {$editorArguments});")
 }
 $lines.Add('}'); $lines.Add('}')
 $sourceText = ($lines -join "`n") + "`n"

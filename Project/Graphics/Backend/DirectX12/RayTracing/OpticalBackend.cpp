@@ -307,6 +307,7 @@ namespace NexusEngine {
 				for(size_t i = 0; i < 4; ++i) geometry.color[i] = m.color[i] * draw.tint[i];
 				geometry.optical = {m.optics.reflectivity, m.optics.transmission, m.optics.indexOfRefraction, 0};
 				geometry.pbr = m.pbr;
+                geometry.uvTransform = draw.uvTransform;
 				geometry.emissiveOcclusion = m.emissiveOcclusion;
 				geometry.extraMaps = {m.emissiveTexture.index, m.emissiveSampler.index, m.occlusionTexture.index, m.occlusionSampler.index};
 				geometry.maps = {m.normalTexture.index, m.normalSampler.index, m.metallicRoughnessTexture.index, m.metallicRoughnessSampler.index};

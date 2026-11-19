@@ -7,6 +7,7 @@
 // engine
 #include "Foundation/Math/Matrix4x4.h"
 #include "Graphics/Model/ModelAnimation.h"
+#include "Graphics/Model/DeformationData.h"
 #include "Graphics/Environment/EnvironmentLightingData.h"
 #include "Graphics/Lighting/BakedLightingData.h"
 #include "Graphics/Lighting/DDGISettings.h"
@@ -25,7 +26,7 @@ namespace NexusEngine {
 		uint32_t skinningEnabled = 0; //< Joint Paletteを適用するDrawでは1
         float padding = 0.0f; //< HLSL 16byte境界
 		std::array<float, 4> tint = { 1.0f, 1.0f, 1.0f, 1.0f }; //< Vertex colorとTextureへ乗算するRGBA
-		std::array<Matrix4x4, kMaxSkinJoints> jointPalette = {}; //< 現在姿勢のSkin Matrix
+        DeformationData deformation;
 		uint32_t shadowMaskIndex = 0; //< 共通Visibility Mask、0は全可視
         std::array<uint32_t, 3> shadowPadding {}; //< HLSL 16byte境界
 		std::array<float, 4> lightDirectionIntensity { 0.0f, 1.0f, 0.0f, 1.0f }; //< Surface->Light方向/強度
@@ -48,7 +49,8 @@ namespace NexusEngine {
 		EnvironmentDrawData environment;
 		BakedLightingDrawData bakedLighting;
 		DDGIDrawData ddgi;
+        std::array<float, 4> uvTransform {1, 1, 0, 0}; //< Raster/DXR共通のUV変換
 	};
 
-	static_assert(sizeof(PrimitiveDrawData) == 4800);
+    static_assert(sizeof(PrimitiveDrawData) == 752);
 } // namespace NexusEngine

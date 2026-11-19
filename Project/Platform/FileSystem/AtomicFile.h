@@ -5,6 +5,10 @@
 #include <string_view>
 
 namespace NexusEngine {
+/** \brief Win32/stream I/O用の拡張絶対path。範囲検証は呼出側のroot resolverで行う。 */
+std::filesystem::path NativeFilePath(const std::filesystem::path& file);
+/** \brief UTF-8相対参照をroot配下へ解決する。外部symlink、絶対パス、空参照を拒否する。 */
+[[nodiscard]] Result<std::filesystem::path> ResolveFileWithinRoot(const std::filesystem::path& root, const std::string& reference);
 /** \brief UUIDを発行する。失敗時はOSエラーを返す */
 [[nodiscard]] Result<std::string> CreateUuid();
 /** \brief 同一Directoryの一時ファイルをflushしてから置換する。失敗時は旧ファイルを保持する */
@@ -16,5 +20,6 @@ namespace NexusEngine {
 /** \brief 区切りと大小文字差を吸収して比較する。symlinkの同一性は呼び出し側で解決する */
 [[nodiscard]] bool SameFilePath(const std::filesystem::path& first, const std::filesystem::path& second);
 /** \brief 配布済みEngineやビルド成果物の内容をSHA-256で識別する */
+[[nodiscard]] Result<std::string> Sha256Bytes(std::string_view bytes);
 [[nodiscard]] Result<std::string> Sha256File(const std::filesystem::path& file);
 }

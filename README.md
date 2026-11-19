@@ -228,3 +228,9 @@ Metallic/Roughness PBR、HDR、Compute IBL（Diffuse Irradiance / GGX Prefilter 
 ## ゲームパッド入力（1.1.1）
 
 XInput対応機器を4台まで共通Inputへ接続します。C++/C#の取得方法、対応範囲、focusと切断の契約は[Gamepad Input](Project/Docs/GamepadInputREADME.md)を参照してください。
+
+## Componentの追加・アイコン・解除
+
+新しいComponentの登録、カテゴリと説明、PNGアイコンの配置・変更、Buildと型情報の更新、Detailsからの解除・Undoは[Component Browser開発ガイド](Project/Docs/ComponentBrowser.md)にまとめています。今後Componentを追加するときはこちらを参照してください。
+
+Content Browserの構成・操作・更新タイミング・拡張方法は[Content Browserガイド](Project/Docs/ContentBrowser.md)、PNG対応と配置先は[ContentBrowserIconList.md](Project/Docs/ContentBrowserIconList.md)を参照してください。

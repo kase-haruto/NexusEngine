@@ -50,9 +50,19 @@ internal sealed class ScriptMetadata
                         ["kind"] = property.Kind, ["default"] = property.Read(instance) });
             }
             finally { try { instance.BeginStop(); } finally { instance.Unbind(); } }
-            types.Add(new JsonObject { ["id"] = type.Id, ["fullName"] = type.Type.FullName, ["version"] = type.Version,
+            var metadata = new JsonObject { ["id"] = type.Id, ["fullName"] = type.Type.FullName, ["version"] = type.Version,
                 ["aliases"] = Names(type.Names.Where(n => n != type.Id)), ["properties"] = properties,
-                ["sourceFiles"] = Names(SourceFiles(type.Type)) });
+                ["sourceFiles"] = Names(SourceFiles(type.Type)) };
+            var editor = type.Type.GetCustomAttribute<ComponentEditorAttribute>();
+            if(editor != null)
+            {
+                metadata["editor"] = new JsonObject {
+                    ["displayName"] = editor.DisplayName, ["category"] = editor.Category,
+                    ["description"] = editor.Description, ["icon"] = editor.Icon,
+                    ["keywords"] = Names(editor.Keywords)
+                };
+            }
+            types.Add(metadata);
         }
         var text = new JsonObject { ["schemaVersion"] = 1, ["types"] = types }.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         if (Encoding.UTF8.GetByteCount(text) > 1024 * 1024) throw new InvalidOperationException("Metadata exceeds 1 MiB.");

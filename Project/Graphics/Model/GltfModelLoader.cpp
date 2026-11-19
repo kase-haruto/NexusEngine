@@ -1,4 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS
+﻿#define _CRT_SECURE_NO_WARNINGS
 #include "ModelLoader.h"
 #include "Foundation/Logging/Logger.h"
 
@@ -19,9 +19,9 @@
 
 // third party
 #pragma warning(push, 0)
-#define CGLTF_IMPLEMENTATION
 #include "ThirdParty/cgltf/cgltf.h"
 #pragma warning(pop)
+#include "GltfFileAccess.h"
 
 namespace NexusEngine {
 	namespace {
@@ -345,6 +345,32 @@ namespace NexusEngine {
 				? static_cast<uint32_t>(primitive.material - data.materials)
 				: static_cast<uint32_t>(data.materials_count);
 			mesh.submeshes.push_back({ 0, static_cast<uint32_t>(indices.size()), 0, materialSlot });
+            if(primitive.targets_count > kMaxMorphTargets || positions->count > (256 * 1024 * 1024) / sizeof(MorphVertexDelta) / (std::max)(cgltf_size{1}, primitive.targets_count)) {
+                return std::unexpected(MakeGltfError(path, kGltfUnsupported, "morph payload exceeds the supported buffer size"));
+            }
+            mesh.morphTargetCount = static_cast<uint32_t>(primitive.targets_count);
+            mesh.morphDeltas.resize(primitive.targets_count * positions->count);
+            for(cgltf_size target = 0; target < primitive.targets_count; ++target) {
+                const auto& morph = primitive.targets[target];
+                for(cgltf_size attribute = 0; attribute < morph.attributes_count; ++attribute) {
+                    const auto& source = morph.attributes[attribute];
+                    if(source.type != cgltf_attribute_type_position && source.type != cgltf_attribute_type_normal && source.type != cgltf_attribute_type_tangent) {
+                        continue;
+                    }
+                    if(!source.data || source.data->count != positions->count || source.data->type != cgltf_type_vec3) {
+                        return std::unexpected(MakeGltfError(path, kGltfInvalidData, "invalid morph delta accessor"));
+                    }
+                    for(cgltf_size vertex = 0; vertex < positions->count; ++vertex) {
+                        auto& delta = mesh.morphDeltas[target * positions->count + vertex];
+                        float* output = source.type == cgltf_attribute_type_position ? delta.position : source.type == cgltf_attribute_type_normal ? delta.normal : delta.tangent;
+                        if(!cgltf_accessor_read_float(source.data, vertex, output, 3) ||
+                            !std::isfinite(output[0]) || !std::isfinite(output[1]) || !std::isfinite(output[2])) {
+                            return std::unexpected(MakeGltfError(path, kGltfInvalidData, "non-finite morph delta"));
+                        }
+                        output[2] = -output[2];
+                    }
+                }
+            }
 			mesh.skinIndex = skinIndex;
 			return mesh;
 		}
@@ -353,9 +379,10 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// glTF 2.0をModelAssetDataへ変換する
 	/////////////////////////////////////////////////////////////////////////////////////////
-	Result<ModelAssetData> ModelLoader::LoadGltf(const std::filesystem::path& filePath, bool requireDrawableMesh) const {
-		const std::string nativePath = filePath.string();
-		cgltf_options options = {};
+	Result<ModelAssetData> ModelLoader::LoadGltf(const std::filesystem::path& filePath, bool requireDrawableMesh, bool loadGeometry) const {
+        const auto encodedPath = filePath.generic_u8string();
+		const std::string nativePath(reinterpret_cast<const char*>(encodedPath.data()), encodedPath.size());
+		auto options = GltfFileOptions();
 		cgltf_data* parsedData = nullptr;
 		if(cgltf_parse_file(&options, nativePath.c_str(), &parsedData) != cgltf_result_success) {
 			return std::unexpected(MakeGltfError(filePath, kGltfParseFailed, "failed to parse document"));
@@ -370,7 +397,7 @@ namespace NexusEngine {
 
 		ModelAssetData model;
 		model.materials.reserve(data->materials_count + 1);
-		for(cgltf_size materialIndex = 0; materialIndex < data->materials_count; ++materialIndex) {
+		for(cgltf_size materialIndex = 0; loadGeometry && materialIndex < data->materials_count; ++materialIndex) {
 			const cgltf_material& source = data->materials[materialIndex];
 			ModelMaterialAssetData material;
 			material.name = source.name != nullptr ? source.name : "Material";
@@ -478,7 +505,25 @@ namespace NexusEngine {
 			node.parentIndex = source->parent != nullptr
 				? nodeRemap[PointerIndex(source->parent, data->nodes)] : ModelNodeAssetData::kNoParent;
 			node.localTransform = *transform;
-			if(source->mesh != nullptr) {
+            if(source->mesh && source->mesh->primitives_count) {
+                const size_t count = source->mesh->primitives[0].targets_count;
+                if(count > kMaxMorphTargets) {
+                    return std::unexpected(MakeGltfError(filePath, kGltfUnsupported, "too many morph targets"));
+                }
+                node.morphWeights.resize(count);
+                const float* values = source->weights_count ? source->weights : source->mesh->weights;
+                const size_t supplied = source->weights_count ? source->weights_count : source->mesh->weights_count;
+                if(supplied && supplied != count) {
+                    return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "default morph weight count mismatch"));
+                }
+                for(size_t index = 0; index < supplied; ++index) {
+                    if(!std::isfinite(values[index])) {
+                        return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "non-finite default morph weight"));
+                    }
+                    node.morphWeights[index] = values[index];
+                }
+            }
+			if(loadGeometry && source->mesh != nullptr) {
 				const uint32_t skinIndex = source->skin != nullptr
 					? static_cast<uint32_t>(source->skin - data->skins) : MeshAssetData::kNoSkin;
 				for(cgltf_size primitiveIndex = 0; primitiveIndex < source->mesh->primitives_count; ++primitiveIndex) {
@@ -500,23 +545,6 @@ namespace NexusEngine {
 			for(cgltf_size channelIndex = 0; channelIndex < sourceAnimation.channels_count; ++channelIndex) {
 				const cgltf_animation_channel& sourceChannel = sourceAnimation.channels[channelIndex];
 				if(sourceChannel.target_node == nullptr || sourceChannel.sampler == nullptr) continue;
-				if(sourceChannel.target_path == cgltf_animation_path_type_weights) {
-					// 表情trackを持つだけで骨格や全クリップの読み込みを失敗させない。
-					// モーフ専用クリップも元の番号と時間を保ち、bind poseとして評価する。
-					clip.hasMorphAnimation = true;
-					const cgltf_accessor* times = sourceChannel.sampler->input;
-					if(times == nullptr || times->type != cgltf_type_scalar) {
-						return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid morph animation times"));
-					}
-					for(cgltf_size key = 0; key < times->count; ++key) {
-						float time = 0.0f;
-						if(!cgltf_accessor_read_float(times, key, &time, 1) || !std::isfinite(time) || time < 0.0f) {
-							return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid morph animation time"));
-						}
-						clip.duration = (std::max)(clip.duration, time);
-					}
-					continue;
-				}
 				NodeAnimationChannel* channel = nullptr;
 				const uint32_t targetNode = nodeRemap[PointerIndex(sourceChannel.target_node, data->nodes)];
 				for(NodeAnimationChannel& candidate : clip.channels) {
@@ -527,6 +555,43 @@ namespace NexusEngine {
 					channel = &clip.channels.back();
 				}
 
+                if(sourceChannel.target_path == cgltf_animation_path_type_weights) {
+                    clip.hasMorphAnimation = true;
+                    const auto* times = sourceChannel.sampler->input;
+                    const auto* values = sourceChannel.sampler->output;
+                    const size_t count = model.nodes[targetNode].morphWeights.size();
+                    const bool cubic = sourceChannel.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
+                    if(!count || !times || !values || !times->count || times->type != cgltf_type_scalar || values->type != cgltf_type_scalar ||
+                        times->count > 100000 || values->count > 64 * 1024 * 1024 || values->count != times->count * count * (cubic ? 3 : 1) || !channel->weights.empty()) {
+                        return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid or duplicate morph sampler"));
+                    }
+                    channel->weightsInterpolation = cubic ? AnimationInterpolation::CubicSpline :
+                        sourceChannel.sampler->interpolation == cgltf_interpolation_type_step ? AnimationInterpolation::Step : AnimationInterpolation::Linear;
+                    float previous = -1;
+                    for(cgltf_size index = 0; index < times->count; ++index) {
+                        MorphKeyframe key;
+                        if(!cgltf_accessor_read_float(times, index, &key.time, 1) || !std::isfinite(key.time) || key.time < 0 || key.time <= previous) {
+                            return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid morph key time"));
+                        }
+                        previous = key.time;
+                        const auto read = [&](size_t slot, std::vector<float>& output) {
+                            output.resize(count);
+                            for(size_t target = 0; target < count; ++target) {
+                                if(!cgltf_accessor_read_float(values, slot * count + target, &output[target], 1) || !std::isfinite(output[target])) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        };
+                        const size_t valueIndex = index * (cubic ? 3 : 1) + (cubic ? 1 : 0);
+                        if(!read(valueIndex, key.value) || (cubic && (!read(valueIndex - 1, key.inTangent) || !read(valueIndex + 1, key.outTangent)))) {
+                            return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "invalid morph key value"));
+                        }
+                        clip.duration = (std::max)(clip.duration, key.time);
+                        channel->weights.push_back(std::move(key));
+                    }
+                    continue;
+                }
 				const cgltf_accessor* times = sourceChannel.sampler->input;
 				const cgltf_accessor* values = sourceChannel.sampler->output;
 				const bool isCubic = sourceChannel.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
@@ -598,9 +663,7 @@ namespace NexusEngine {
 			model.animations.push_back(std::move(clip));
 		}
 
-		if(std::ranges::any_of(model.animations, [](const AnimationClip& clip) { return clip.hasMorphAnimation; })) {
-			NEXUS_LOG_WARNING("Assets", "Morph animation is not rendered; skeletal/TRS clips were imported: " + nativePath);
-		}
+
 		if(requireDrawableMesh && model.meshes.empty()) {
 			return std::unexpected(MakeGltfError(filePath, kGltfInvalidData, "document has no drawable meshes"));
 		}

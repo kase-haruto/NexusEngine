@@ -4,12 +4,13 @@
 
 namespace NexusEngine {
 // 専用 Inspector の検証・表示を優先し、生成情報は未登録の型とプロパティを補う。
-template<class T> void RegisterReflectedInspector(TypeRegistry& registry, std::vector<std::string> sourceFiles = {}) {
+template<class T> void RegisterReflectedInspector(TypeRegistry& registry, std::vector<std::string> sourceFiles = {}, ComponentEditorMetadata editor = {}) {
     if(std::string_view(ReflectionTraits<T>::Label).empty()) return;
     TypeDescriptor descriptor{ReflectionTraits<T>::Id, ReflectionTraits<T>::Label,
         [](Entity entity) { return entity.HasComponent<T>(); }, {},
         [](Entity entity) { return entity.AddComponent<T>() != nullptr; }};
     descriptor.sourceFiles = std::move(sourceFiles);
+    descriptor.editor = std::move(editor);
     // 破棄関数をEngine側へコピーせず、同じ既存Storageの型付き削除だけを登録する。
     descriptor.remove = [](Entity entity) { return entity.RemoveComponent<T>(); };
     ReflectionTraits<T>::Visit([&]<class Member, class Owner>([[maybe_unused]] const char* id, [[maybe_unused]] Member Owner::* member) {
@@ -52,6 +53,10 @@ template<class T> void RegisterReflectedInspector(TypeRegistry& registry, std::v
                     }
                     return true;
                 }, {}});
+            if constexpr(requires { T::IsPropertyAnimatable(std::string_view{}); }) {
+                // 用途側が許可した安定IDだけをCurve/Animationへ公開する。数値型でも自動許可しない。
+                descriptor.properties.back().animatable = T::IsPropertyAnimatable(id);
+            }
         }
     });
     registry.MergeGenerated(std::move(descriptor));

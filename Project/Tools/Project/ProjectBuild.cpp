@@ -3,6 +3,7 @@
 #include "Runtime/Project/ProjectSerializer.h"
 #include "Runtime/Application/ApplicationPaths.h"
 #include "Platform/FileSystem/AtomicFile.h"
+#include "Foundation/Utility/String/ConvertString.h"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -326,6 +327,10 @@ Result<Process> ProjectBuild::Launch(const ProjectContext& project, const Engine
     if(kind == ProjectHostKind::Runtime) arguments.push_back(L"--game");
     if(options.checkOnly) { arguments.push_back(L"--game"); arguments.push_back(L"--check-game"); }
     if(options.hidden) arguments.push_back(L"--hidden");
+    if(!options.curvePreviewPipe.empty()) {
+        arguments.push_back(L"--curve-preview-pipe");
+        arguments.push_back(ConvertString(options.curvePreviewPipe));
+    }
     if(options.frames) { arguments.push_back(L"--frames"); arguments.push_back(std::to_wstring(options.frames)); }
     return Process::Start(executable, arguments, project.Root(), options.checkOnly || options.hidden, options.log);
 }

@@ -1,0 +1,1 @@
+{"version":3,"kind":"Keyframe","duration":4,"loop":true,"source":"","clip":"","tracks":[{"target":"","component":"Transform","property":"translation","interpolation":1,"keys":[{"time":0,"value":[-2,1,0]},{"time":2,"value":[2,1,0]},{"time":4,"value":[-2,1,0]}]}],"events":[]}

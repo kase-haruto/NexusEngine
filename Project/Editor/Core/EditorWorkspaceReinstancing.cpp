@@ -1,4 +1,5 @@
 #include "EditorWorkspace.h"
+#include "Editor/Services/ContentBrowserServices.h"
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/imgui_internal.h"
 
@@ -39,6 +40,10 @@ void EditorWorkspace::ReleaseForReinstancing() noexcept {
     // Toolbarのコールバックは旧コードの関数を参照するため、再登録できるよう破棄する。
     reloadPoller_ = {}; framePollers_.clear(); toolbar_.Clear(); commands_.Clear();
     panels_.Clear();
+    // Source作成のcallbackも旧Project job/codeを借用するため、Panel破棄後に切断する。
+    sourceCreation_.reset();
+    // Workerが旧コードを実行し終わってからmoduleを解放する。
+    contentBrowser_.reset();
     viewport_.Detach();
     properties_.Reset(nullptr);
     if(ImGui::GetCurrentContext()) ImGui::ClearActiveID();

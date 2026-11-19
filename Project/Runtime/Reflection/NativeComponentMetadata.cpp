@@ -100,7 +100,7 @@ Result<std::shared_ptr<const NativeComponentMetadata>> NativeComponentMetadata::
         if(!json->at("schemaVersion").is_number_integer() || json->at("schemaVersion") != 1 || !json->at("types").is_array() || json->at("types").size() > 256) throw std::runtime_error("Invalid Native Component metadata schema.");
         auto result = std::make_shared<NativeComponentMetadata>(); std::set<std::string> names;
         for(const auto& source : json->at("types")) {
-            ProjectJson::Keys(source, {"id", "fullName", "version", "aliases", "properties", "sourceFiles"});
+            ProjectJson::Keys(source, {"id", "fullName", "version", "aliases", "properties", "sourceFiles", "editor"});
             auto type = std::make_shared<TypeMetadata>(); type->id = Id(ProjectJson::Text(source, "id")); type->label = Id(ProjectJson::Text(source, "fullName"));
             if(type->id.starts_with("ManagedScript:") || type->id == "GameComponents") throw std::runtime_error("Reserved Native Component ID.");
             if(!source.at("version").is_number_integer() || source.at("version") <= 0 || source.at("version") > INT32_MAX) throw std::runtime_error("Invalid Native Component version.");
@@ -112,15 +112,26 @@ Result<std::shared_ptr<const NativeComponentMetadata>> NativeComponentMetadata::
             const auto& properties = source.at("properties"); if(!properties.is_array() || properties.size() > 256) throw std::runtime_error("Invalid Native properties.");
             std::set<std::string> propertyNames;
             for(const auto& field : properties) {
-                ProjectJson::Keys(field, {"id", "label", "aliases", "kind", "default"});
+                ProjectJson::Keys(field, {"id", "label", "aliases", "kind", "default", "animatable"});
                 PropertyMetadata property; property.id = Id(ProjectJson::Text(field, "id")); property.label = Id(ProjectJson::Text(field, "label"));
                 property.names = Names(field.at("aliases"), property.id);
                 for(const auto& name : property.names) if(!propertyNames.insert(name).second) throw std::runtime_error("Duplicate Native Property ID / alias.");
                 property.kind = ProjectJson::Text(field, "kind"); property.valueKind = Kind(property.kind); property.initial = Value(property.kind, field.at("default"));
+                if(field.contains("animatable")) {
+                    if(!field["animatable"].is_boolean()) {
+                        throw std::runtime_error("Native Property animatable flag must be boolean");
+                    }
+                    property.animatable = field["animatable"].get<bool>();
+                    if(property.animatable && (property.kind == "String" || property.kind == "EntityReference" || property.kind == "ComponentReference")) {
+                        throw std::runtime_error("Only numeric Native Properties can be animated");
+                    }
+                }
                 if(const auto* initialText = std::get_if<std::string>(&property.initial); initialText && initialText->size() > 3072) throw std::runtime_error("Native Property String exceeds 3072 bytes.");
                 type->properties.push_back(std::move(property));
             }
-            TypeDescriptor descriptor; descriptor.id = type->id; descriptor.labelKey = type->label; descriptor.valueBacked = true;
+            TypeDescriptor descriptor;
+            descriptor.editor = EditorMetadata(source, false);
+            descriptor.id = type->id; descriptor.labelKey = type->label; descriptor.valueBacked = true;
             if(source.contains("sourceFiles")) {
                 const auto& files = source.at("sourceFiles"); if(!files.is_array() || files.size() > 64) throw std::runtime_error("Invalid Native source files.");
                 for(const auto& file : files) {
@@ -144,6 +155,9 @@ Result<std::shared_ptr<const NativeComponentMetadata>> NativeComponentMetadata::
                     [type, property](Entity entity) { return Get(entity, *type, property); },
                     [type, property](Entity entity, const PropertyValue& value) { return Set(entity, *type, property, value); }, {},
                     [type, property](Entity entity) -> std::string { try { static_cast<void>(Current(entity, *type)); return Get(entity, *type, property) ? "" : "Saved Native Property is incompatible with its metadata."; } catch(const std::exception& error) { return error.what(); } }});
+            }
+            for(size_t index = 0; index < type->properties.size(); ++index) {
+                descriptor.properties[index].animatable = type->properties[index].animatable;
             }
             result->types_.push_back(std::move(descriptor));
         }

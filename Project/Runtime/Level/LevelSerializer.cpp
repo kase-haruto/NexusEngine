@@ -31,7 +31,7 @@ namespace NexusEngine {
 		constexpr int32_t kOpenFailed = 40;
 		constexpr int32_t kInvalidFormat = 41;
 		constexpr int32_t kDuplicatePersistentId = 42;
-		constexpr uint32_t kFormatVersion = 14;
+		constexpr uint32_t kFormatVersion = 15;
 
         // 既存の専用レコードは互換性と永続IDによる参照解決を維持する。
         const std::set<std::type_index>& BuiltinComponents() {
@@ -66,6 +66,12 @@ namespace NexusEngine {
             const auto valid = [](const std::string& path) {
                 return path.size() <= 4096 && path.find('\0') == path.npos && path.find('\n') == path.npos && path.find('\r') == path.npos;
             };
+            // 旧LevelはComponentの恒等UVを保ち、新規保存では非有限値を拒否する。
+            for(size_t axis = 0; axis < 2; ++axis) {
+                if(!std::isfinite(primitive.uvScale[axis]) || !std::isfinite(primitive.uvOffset[axis])) {
+                    return false;
+                }
+            }
             return valid(primitive.meshAsset) && valid(primitive.baseColorTexture) && primitive.material.IsValid() && IsValidPrimitiveShape(primitive.shape);
 		}
 
@@ -217,7 +223,9 @@ namespace NexusEngine {
                     for(float value : material.baseColor) output << ' ' << value;
                     output << ' ' << material.metallic << ' ' << material.roughness << ' ' << material.normalScale;
                     for(float value : material.emissive) output << ' ' << value;
-                    output << ' ' << material.occlusionStrength << ' ' << static_cast<uint32_t>(primitive->shape) << '\n';
+                    output << ' ' << material.occlusionStrength << ' ' << static_cast<uint32_t>(primitive->shape)
+                        << ' ' << primitive->uvScale[0] << ' ' << primitive->uvScale[1]
+                        << ' ' << primitive->uvOffset[0] << ' ' << primitive->uvOffset[1] << '\n';
 				} else {
 					output << "PRIMITIVE 0\n";
 				}
@@ -375,6 +383,7 @@ namespace NexusEngine {
                    (version >= 7 && !(input >> std::quoted(primitive.meshAsset) >> std::quoted(primitive.baseColorTexture))) ||
                    (version >= 8 && !ReadMaterial(input, primitive.material)) ||
                    (version >= 9 && !ReadShape(input, primitive.shape)) ||
+                   (version >= 15 && !(input >> primitive.uvScale[0] >> primitive.uvScale[1] >> primitive.uvOffset[0] >> primitive.uvOffset[1])) ||
                    primitive.meshAsset.size() > 4096 || primitive.baseColorTexture.size() > 4096 ||
 				   !IsValid(primitive)) {
 					return std::unexpected(Error(ErrorCategory::Scene, kInvalidFormat, "Primitive component is invalid."));
