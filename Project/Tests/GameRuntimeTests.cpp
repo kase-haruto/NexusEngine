@@ -2,6 +2,7 @@
 #include "Runtime/Application/ProjectSettings.h"
 #include "Editor/Core/EditorSession.h"
 #include "Runtime/Scene/Components/TransformComponent.h"
+#include "Runtime/Scene/Components/RigidBodyComponent.h"
 #include "Runtime/Scene/Components/CameraComponent.h"
 #include "Runtime/Scene/Components/PrimitiveRenderComponent.h"
 #include "Runtime/Scene/Components/PersistentIdComponent.h"
@@ -88,6 +89,28 @@ void RuntimeThreadOwnership() {
     assert(setupDenied && nativeDenied && modulesDenied && managedDenied && restartDenied && !runtime.IsRunning() && counts.setups == 1);
     assert(runtime.Start(EmptyLevel()) && counts.setups == 2); runtime.Stop(); assert(counts.alive == 0);
 }
+/** 描画frameの分割が変わっても、同じ固定step列なら自由落下の結果は一致する。 */
+void PhysicsIsIndependentOfFrameRate() {
+    const auto fall = [](int frameCount) {
+        auto level = EmptyLevel();
+        auto entity = level->CreateEntity("Free Falling Body");
+        assert(entity.AddComponent<RigidBodyComponent>());
+        entity.GetComponent<TransformComponent>()->translation.y = 10;
+        GameRuntime runtime;
+        assert(runtime.Start(std::move(level)));
+        for(int frame = 0; frame < frameCount; ++frame) {
+            assert(runtime.Update(1.0f / static_cast<float>(frameCount)));
+        }
+        assert(runtime.GetLevel()->GetScene()->Time().fixedTick == 60);
+        const float height = entity.GetComponent<TransformComponent>()->translation.y;
+        assert(height > 4.9f && height < 5.4f);
+        return height;
+    };
+    const float at60Hz = fall(60);
+    assert(std::abs(fall(30) - at60Hz) < 0.0001f);
+    assert(std::abs(fall(120) - at60Hz) < 0.0001f);
+}
+
 void LifecycleAndIsolation() {
     Counts counts;
     const GameLevelSetup setup = [&](Level& level) -> Result<void> {
@@ -273,6 +296,7 @@ void WorldTransitionRequests() {
 
 void RunGameRuntimeTests() {
     WorldTransitionRequests();
+    PhysicsIsIndependentOfFrameRate();
     LifecycleAndIsolation(); RuntimeThreadOwnership(); FailedSetupRollsBack(); CancellationAndUpdateFailure(); SampleParityAndGameAssets();
     ManagedConfigurationFailureRollsBack();
     RunNativeGameModuleTests();

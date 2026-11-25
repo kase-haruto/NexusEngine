@@ -274,6 +274,9 @@ template<> struct ReflectionTraits<RigidBodyComponent> {
         visitor("continuous", &RigidBodyComponent::continuous);
         visitor("collisionLayer", &RigidBodyComponent::collisionLayer);
         visitor("collisionMask", &RigidBodyComponent::collisionMask);
+        visitor("linearDamping", &RigidBodyComponent::linearDamping);
+        visitor("angularDamping", &RigidBodyComponent::angularDamping);
+        visitor("allowSleeping", &RigidBodyComponent::allowSleeping);
     }
 };
 template<> struct ReflectionTraits<ScriptComponent> {

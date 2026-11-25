@@ -11,6 +11,7 @@
 #include "Runtime/Scene/Components/ScriptComponent.h"
 #include "Runtime/Level/Level.h"
 #include "Runtime/Physics/CollisionLayerSettings.h"
+#include "Runtime/Reflection/ComponentReflection.h"
 #include "Runtime/Scene/Components/FogComponent.h"
 #include "Runtime/Scene/Components/RigidBodyComponent.h"
 #include "Runtime/Scene/Components/ColliderComponent.h"
@@ -186,6 +187,21 @@ void PhysicsOperations() {
     assert(hit.entity.world==bridge.World() && hit.entity.index==handle.index && std::abs(hit.distance-1.5f)<0.05f);
     assert(physics.Raycast({20,5,0},{0,-1,0},10,hit)==NEXUS_GAME_OK && hit.entity.world==0);
     assert(physics.Raycast({0,5,0},{0,0,0},10,hit)==NEXUS_GAME_INVALID_ARGUMENT);
+    // Triggerと自身を最近傍hitの確定前に除外し、その奥にある床を取得できることを確認する。
+    auto trigger = level.CreateEntity("Physics Trigger");
+    auto* triggerCollider = trigger.AddComponent<ColliderComponent>();
+    assert(triggerCollider);
+    triggerCollider->sensor = true;
+    trigger.GetComponent<TransformComponent>()->translation.y = 4;
+    assert(physics.Raycast({0,5,0},{0,-1,0},10,hit)==NEXUS_GAME_OK && hit.entity.index==trigger.GetId().index);
+    assert(physics.Raycast({0,5,0},{0,-1,0},10,hit,UINT32_MAX,false)==NEXUS_GAME_OK && hit.entity.index==handle.index);
+    assert(physics.Raycast({0,5,0},{0,-1,0},10,hit,UINT32_MAX,false,handle)==NEXUS_GAME_OK);
+    assert(hit.entity.world==bridge.World() && hit.entity.index==floor.GetId().index && hit.normal[1]>0.99f);
+    assert(physics.Raycast({0,5,0},{0,-1,0},10,hit,0,false,handle)==NEXUS_GAME_OK && hit.entity.world==0);
+    auto invalidExclude = handle;
+    ++invalidExclude.generation;
+    assert(physics.Raycast({0,5,0},{0,-1,0},10,hit,UINT32_MAX,false,invalidExclude)==NEXUS_GAME_INVALID_HANDLE);
+    assert(level.DestroyEntity(trigger));
     // 値境界の全件検証。無効Handle・非有限値・誤threadで力を混入させない。
     auto stale=handle; ++stale.generation;
     assert(physics.AddForce(stale,{1,0,0})==NEXUS_GAME_INVALID_HANDLE);
@@ -203,12 +219,50 @@ void PhysicsOperations() {
     const float height=ball.GetComponent<TransformComponent>()->translation.y;
     assert(height>0.4f && height<0.65f);
     assert(std::abs(body->velocity[1])<0.1f);
+    // 同じBodyの減衰をPlay中に変更し、直線・角速度をJoltが一度だけ減衰させる。
+    body->gravityScale = 0;
+    ball.GetComponent<TransformComponent>()->translation = {0, 10, 0};
+    body->velocity = {10, 0, 0};
+    body->angularVelocity = {0, 10, 0};
+    assert(level.Update(1.0f/60));
+    NexusGame::Components components(context);
+    NexusComponentValueV1 damping{};
+    damping.kind = NEXUS_COMPONENT_FLOAT;
+    damping.number[0] = -1;
+    assert(components.Write(handle, {"RigidBody",9}, {"linearDamping",13}, damping)==NEXUS_GAME_INVALID_ARGUMENT);
+    assert(body->linearDamping==0.05f);
+    damping.number[0] = 6;
+    assert(components.Write(handle, {"RigidBody",9}, {"linearDamping",13}, damping)==NEXUS_GAME_OK);
+    damping.number[0] = 12;
+    assert(components.Write(handle, {"RigidBody",9}, {"angularDamping",14}, damping)==NEXUS_GAME_OK);
+    NexusComponentValueV1 sleep{};
+    sleep.kind = NEXUS_COMPONENT_BOOL;
+    assert(components.Write(handle, {"RigidBody",9}, {"allowSleeping",13}, sleep)==NEXUS_GAME_OK);
+    assert(level.Update(1.0f/60));
+    assert(body->velocity[0]>8.9f && body->velocity[0]<9.1f);
+    assert(body->angularVelocity[1]>7.9f && body->angularVelocity[1]<8.1f);
     const auto path=std::filesystem::path("Generated/GameServicesTests/Physics.level");
     std::filesystem::create_directories(path.parent_path()); assert(level.Save(path));
     Level restored; assert(restored.Load(path));
     auto restoredBall=restored.FindEntity(persistent);
     assert(restoredBall.GetComponent<RigidBodyComponent>()->shape==1);
     assert(restoredBall.GetComponent<RigidBodyComponent>()->radius==0.5f);
+    const auto* restoredBody = restoredBall.GetComponent<RigidBodyComponent>();
+    assert(restoredBody->linearDamping==6 && restoredBody->angularDamping==12 && !restoredBody->allowSleeping);
+    // LevelSerializerと同じ復元経路に旧フィールド集合を渡し、追加設定が従来の既定値になることを確認する。
+    ComponentReflection schemas;
+    RegisterGeneratedComponents(schemas);
+    const auto& schema = schemas.Types().at("RigidBody");
+    auto legacyFields = schema.captureEntity(restoredBall);
+    auto& envelope = std::get<ReflectionValue::Object>(legacyFields.data);
+    auto& fields = std::get<ReflectionValue::Object>(envelope.at("fields").data);
+    assert(fields.erase("linearDamping") == 1);
+    assert(fields.erase("angularDamping") == 1);
+    assert(fields.erase("allowSleeping") == 1);
+    auto legacyEntity = restored.CreateEntity("Legacy Physics Body");
+    schema.restoreEntity(legacyEntity, legacyFields);
+    const auto* legacyBody = legacyEntity.GetComponent<RigidBodyComponent>();
+    assert(legacyBody && legacyBody->linearDamping==0.05f && legacyBody->angularDamping==0.05f && legacyBody->allowSleeping);
     // Scene交換では同じEntityIdでも旧solverを破棄する。旧BridgeのHandleも失効する。
     auto candidate=level.GetScene()->Clone(); assert(candidate);
     candidate->GetComponent<TransformComponent>(ball.GetId())->translation={0,8,0};

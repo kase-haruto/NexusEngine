@@ -92,7 +92,7 @@ namespace NexusEngine {
 	}
 
 	Result<PhysicsWorld::Hit> Level::Raycast(const std::array<float,3>& origin,
-		const std::array<float,3>& direction, float distance, uint32_t layerMask) {
+		const std::array<float,3>& direction, float distance, uint32_t layerMask, bool includeTriggers, EntityId exclude) {
 		if(!scene_) return std::unexpected(Error(ErrorCategory::Scene, kLevelNotLoaded, "Cannot query an unloaded level."));
 		if(!physics_) physics_ = std::make_unique<PhysicsWorld>(physicsModels_, collisionLayers_);
         if(collisionConfigurationValues_) {
@@ -106,7 +106,7 @@ namespace NexusEngine {
             }
             layerMask = expanded;
         }
-		return physics_->Raycast(*scene_, origin, direction, distance, layerMask);
+		return physics_->Raycast(*scene_, origin, direction, distance, layerMask, includeTriggers, exclude);
 	}
 
     PhysicsWorld::WireframeStats Level::CollectColliderWireframe(const PhysicsWorld::WireframeOptions& options, std::vector<DebugDrawLine>& output) {

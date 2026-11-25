@@ -66,6 +66,22 @@ internal struct NativePhysicsContact
 }
 [StructLayout(LayoutKind.Sequential, Pack=8)]
 internal struct PhysicsContactsHeader { public uint Count, Next, Dropped, Reserved; }
+
+/// <summary>下向きの地面照会結果。斜面の上限を超えた場合も接触面の値を保持する。</summary>
+public readonly struct PhysicsGroundHit
+{
+    public PhysicsHit Hit { get; }
+    public float SlopeDegrees { get; }
+    public bool IsWalkable { get; }
+
+    internal PhysicsGroundHit(PhysicsHit hit, float slopeDegrees, bool isWalkable)
+    {
+        Hit = hit;
+        SlopeDegrees = slopeDegrees;
+        IsWalkable = isWalkable;
+    }
+}
+
 public sealed unsafe partial class GameWorld
 {
     /// <summary>最後のPhysics stepの非消費snapshot。最大4096件。容量超過はdroppedで通知する。</summary>
@@ -107,7 +123,24 @@ public sealed unsafe partial class GameWorld
     /// <summary>所属layerがmaskに含まれるColliderだけを照会する。mask=0は常に無衝突。</summary>
     public bool Raycast(Vector3 origin, Vector3 direction, float distance, uint layerMask, out PhysicsHit hit)
     {
-        var bytes=PhysicsCall(default,new PhysicsRequest { Operation=layerMask==uint.MaxValue ? 1u : 6u, Vector=origin, Direction=direction, Distance=distance, Reserved2=layerMask==uint.MaxValue ? 0u : layerMask },false);
+        return Raycast(origin, direction, distance, layerMask, true, null, out hit);
+    }
+
+    /// <summary>判定前にTriggerおよび指定した同WorldのEntityを除外し、残りから最近傍を返す。</summary>
+    public bool Raycast(Vector3 origin, Vector3 direction, float distance, uint layerMask,
+        bool includeTriggers, Entity? exclude, out PhysicsHit hit)
+    {
+        var target = exclude?.Handle ?? default;
+        if (exclude != null)
+            Access(target);
+        // 従来の引数だけを使う場合は旧Engineと同じ操作番号を維持する。
+        bool filtered = !includeTriggers || exclude != null;
+        uint operation = filtered ? 7u : layerMask == uint.MaxValue ? 1u : 6u;
+        var bytes = PhysicsCall(target, new PhysicsRequest {
+            Operation = operation, Reserved = filtered && includeTriggers ? 1u : 0u,
+            Vector = origin, Direction = direction, Distance = distance,
+            Reserved2 = operation == 1 ? 0u : layerMask
+        }, false);
         if(bytes.Length!=48 || sizeof(NativePhysicsHit)!=48) throw new InvalidOperationException("Physics hit ABI mismatch.");
         NativePhysicsHit value;
         fixed(byte* pointer=bytes) value=*(NativePhysicsHit*)pointer;
@@ -117,6 +150,29 @@ public sealed unsafe partial class GameWorld
         hit=new PhysicsHit(Wrap(value.Entity),value.Point,value.Normal,value.Distance);
         return true;
     }
+    /// <summary>足元のプローブ原点からY下方へ地面を探し、面の傾斜を返す。</summary>
+    /// <returns>上向きの面を検出した場合true。歩行可能かはIsWalkableで判定する。</returns>
+    public bool ProbeGround(Vector3 origin, float distance, float maxSlopeDegrees, out PhysicsGroundHit ground,
+        Entity? exclude = null, uint layerMask = uint.MaxValue)
+    {
+        if (!(maxSlopeDegrees >= 0 && maxSlopeDegrees <= 90))
+            throw new ArgumentOutOfRangeException(nameof(maxSlopeDegrees));
+
+        ground = default;
+        // Triggerと自身は探索前に外す。面が上を向く条件を使い、壁・天井を接地候補から外す。
+        // 形状内部からの距離0のhitは面に到達した結果ではない。原点は足元より少し上に置く。
+        if (!Raycast(origin, -Vector3.UnitY, distance, layerMask, false, exclude, out var hit) ||
+            !(hit.Distance > 0) || !(hit.Normal.Y > 0))
+        {
+            return false;
+        }
+
+        // Yは面法線と上方向の内積。丸め誤差でacosの定義域を超えないよう上限を設ける。
+        float slopeDegrees = (float)(Math.Acos(Math.Min(hit.Normal.Y, 1f)) * (180.0 / Math.PI));
+        ground = new PhysicsGroundHit(hit, slopeDegrees, slopeDegrees <= maxSlopeDegrees);
+        return true;
+    }
+
     /// <summary>Dynamic RigidBodyへ次stepの力（World座標、N）を追加する。</summary>
     public void AddForce(Entity entity, Vector3 force) => PushPhysics(2,entity,force);
     /// <summary>Dynamic RigidBodyへ次stepの力積（World座標、N s）を追加する。</summary>

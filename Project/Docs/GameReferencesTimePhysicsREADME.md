@@ -130,3 +130,28 @@ Box・Sphere・Capsuleに加え、MeshとConvex Meshを表示します。プリ�
 Play中も表示でき、実行World内の移動・回転・scaleや動的生成に追従します。表示設定はPlay中も変更できます。表示だけでシミュレーションを進めたり、力・速度・接触通知・Level保存値を変更したりすることはありません。単体ゲームの画面には表示しません。
 
 全体表示では選択対象を優先し、最大32,768本まで描画します。上限に達した場合や、衝突meshの取得失敗・不正な寸法・未対応の親付き物理Entityなどは、ビューポート下部へ表示します。対応していない形状を別の外枠で代用しません。表示モードはエディタのreinstancing時にも保持します。
+
+## 足元の調査と剛体の減衰
+
+C# の FixedUpdate などで、キャラクターの足元より少し上の World 座標を指定します。距離はレイ原点からの距離です。原点での距離0のhitは、形状内部からの誤接地を避けるため接地候補から外します。
+
+```csharp
+bool grounded = World.ProbeGround(feet + Vector3.UnitY * 0.08f, 0.16f, 45,
+    out var ground, exclude: Entity) && ground.IsWalkable;
+```
+
+`ground.Hit` から Entity、接触位置、面法線、距離を、`ground.SlopeDegrees` から傾きを取得できます。上向きの急斜面を検出した場合は `ProbeGround` が true、`IsWalkable` が false になります。接地のための許容距離や角度はゲーム側で調整してください。1本のレイで調べるため、足元の一点が崖の外に出れば接地候補を失います。
+
+C++ では同じフィルタ付きレイを使えます。歩行可能条件は面法線のY成分と傾斜上限の余弦を比較します。
+
+```cpp
+NexusPhysicsHitV1 ground{};
+const auto status = physics.Raycast(feetProbeOrigin, {0, -1, 0}, 0.16f, ground,
+    UINT32_MAX, false, selfHandle);
+// cos(45 degrees)
+const bool grounded = status == NEXUS_GAME_OK && ground.entity.world != 0 && ground.distance > 0 && ground.normal[1] >= 0.70710678f;
+```
+
+既存の Raycast 呼び出しは引き続き Trigger を含みます。追加引数を指定する場合は新しい Engine と SDK をそろえてください。除外 Entity は同じ World の生存ハンドルを渡します。Query のレイヤーマスクは Project の衝突マトリクスから独立しています。
+
+Dynamic RigidBody の Details では `linearDamping`、`angularDamping`、`allowSleeping` を編集できます。減衰率の単位は 1/s、設定範囲は 0～100 です。C++／C# の共通 Component API でも同じプロパティを使います。旧 Level でこれらのフィールドが省略されている場合、減衰率はともに 0.05、自動休止は有効です。

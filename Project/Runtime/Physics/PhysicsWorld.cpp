@@ -78,14 +78,26 @@ bool CollisionMaskFilter::CanCollide(const JPH::CollisionGroup& first, const JPH
 }
 class RayLayerFilter final : public JPH::BodyFilter {
 public:
-    explicit RayLayerFilter(uint32_t mask);
+    RayLayerFilter(uint32_t mask, bool includeTriggers, EntityId exclude);
     bool ShouldCollideLocked(const JPH::Body& body) const override;
 private:
     uint32_t mask_;
+    bool includeTriggers_;
+    EntityId exclude_;
 };
-RayLayerFilter::RayLayerFilter(uint32_t mask) : mask_(mask) {
+RayLayerFilter::RayLayerFilter(uint32_t mask, bool includeTriggers, EntityId exclude)
+    : mask_(mask), includeTriggers_(includeTriggers), exclude_(exclude) {
 }
 bool RayLayerFilter::ShouldCollideLocked(const JPH::Body& body) const {
+    // 最近傍hitを確定する前に除外する。Triggerや自身の背後にある床も探索できる。
+    if(!includeTriggers_ && body.IsSensor()) {
+        return false;
+    }
+    const auto key = body.GetUserData();
+    const EntityId entity{static_cast<uint32_t>(key), static_cast<uint32_t>(key >> 32)};
+    if(entity == exclude_) {
+        return false;
+    }
     const auto layer = body.GetCollisionGroup().GetSubGroupID();
     return layer < 32 && (mask_ & (uint32_t{1} << layer)) != 0;
 }
@@ -236,6 +248,10 @@ struct PhysicsWorld::Impl {
                 JPH::BodyCreationSettings settings(shape,position,rotation,motion,static_cast<JPH::ObjectLayer>(component.motion==0?0:1));
                 settings.mCollisionGroup = JPH::CollisionGroup(collisionMasks, UINT32_MAX, static_cast<uint32_t>(component.collisionLayer));
                 settings.mFriction=component.friction; settings.mRestitution=component.restitution; settings.mGravityFactor=component.gravityScale; settings.mIsSensor=component.sensor;
+                // 減衰と休止はJoltの積分・island管理に委ね、ECS側で二重に減衰させない。
+                settings.mLinearDamping = component.linearDamping;
+                settings.mAngularDamping = component.angularDamping;
+                settings.mAllowSleeping = component.allowSleeping;
                 settings.mMotionQuality=component.continuous && component.motion==1 ? JPH::EMotionQuality::LinearCast : JPH::EMotionQuality::Discrete;
                 settings.mCollideKinematicVsNonDynamic=component.motion==2;
                 settings.mLinearVelocity=Vector(component.velocity); settings.mAngularVelocity=Vector(component.angularVelocity); settings.mUserData=key;
@@ -250,6 +266,27 @@ struct PhysicsWorld::Impl {
                 // solver結果を毎frame再設定すると静止bodyまで起床するため、外部変更だけ適用する。
                 if(component.motion!=0 && component.velocity!=found->second.settings.velocity) api.SetLinearVelocity(found->second.id,Vector(component.velocity));
                 if(component.motion!=0 && component.angularVelocity!=found->second.settings.angularVelocity) api.SetAngularVelocity(found->second.id,Vector(component.angularVelocity));
+                const auto& previous = found->second.settings;
+                if(component.motion == 1 && (component.linearDamping != previous.linearDamping ||
+                    component.angularDamping != previous.angularDamping || component.allowSleeping != previous.allowSleeping)) {
+                    {
+                        // 設定だけを書き換え、Body IDと接触キャッシュは維持する。
+                        JPH::BodyLockWrite lock(physics.GetBodyLockInterface(), found->second.id);
+                        if(lock.Succeeded()) {
+                            auto& body = lock.GetBody();
+                            body.GetMotionProperties()->SetLinearDamping(component.linearDamping);
+                            body.GetMotionProperties()->SetAngularDamping(component.angularDamping);
+                            if(component.allowSleeping != previous.allowSleeping) {
+                                body.SetAllowSleeping(component.allowSleeping);
+                            }
+                        }
+                    }
+                    // 既に休止しているBodyは休止禁止へ切り替えた時だけ起床させる。
+                    // ActivateBodyは自身でlockを取得するため、上のwrite lock解放後に呼ぶ。
+                    if(previous.allowSleeping && !component.allowSleeping) {
+                        api.ActivateBody(found->second.id);
+                    }
+                }
                 found->second.settings=component;
                 found->second.position=position; found->second.rotation=rotation;
             }
@@ -488,12 +525,12 @@ Result<void> PhysicsWorld::Step(Scene& scene,float deltaTime) {
     }
     return {};
 }
-Result<PhysicsWorld::Hit> PhysicsWorld::Raycast(Scene& scene,const std::array<float,3>& origin,const std::array<float,3>& direction,float distance,uint32_t layerMask) {
+Result<PhysicsWorld::Hit> PhysicsWorld::Raycast(Scene& scene,const std::array<float,3>& origin,const std::array<float,3>& direction,float distance,uint32_t layerMask,bool includeTriggers,EntityId exclude) {
     for(const auto* vector:{&origin,&direction}) for(float value:*vector) if(!std::isfinite(value)) return std::unexpected(Failure("Ray contains nonfinite values."));
     const auto vector=Vector(direction); const float length=vector.Length(); if(!std::isfinite(length)||length<1e-6f||!std::isfinite(distance)||distance<=0||distance>1000000) return std::unexpected(Failure("Invalid ray direction or distance."));
     auto synced=impl_->Sync(scene); if(!synced) return std::unexpected(synced.error());
     JPH::RRayCast ray(JPH::RVec3(origin[0],origin[1],origin[2]),vector*(distance/length)); JPH::RayCastResult result;
-    const RayLayerFilter filter(layerMask);
+    const RayLayerFilter filter(layerMask, includeTriggers, exclude);
     if(!impl_->physics.GetNarrowPhaseQuery().CastRay(ray,result,{}, {},filter)) return Hit{};
     const auto key=impl_->physics.GetBodyInterface().GetUserData(result.mBodyID); Hit hit; hit.entity={static_cast<uint32_t>(key),static_cast<uint32_t>(key>>32)};
     const auto point=ray.GetPointOnRay(result.mFraction); hit.point={point.GetX(),point.GetY(),point.GetZ()}; hit.distance=distance*result.mFraction;

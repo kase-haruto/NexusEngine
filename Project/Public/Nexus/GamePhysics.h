@@ -9,8 +9,10 @@
  * NexusPhysicsRequestV1
  * - operationは1=Raycast、2=Force、3=Impulse、4=接触snapshot、5=既存Eventへの通知購読、6=layer mask付きRaycast
  * - operation=6ではreserved2が32bit layer mask。既存のoperation=1は全layerを照会する
- * - Raycastは空target、他は生存Entityを要求する。vectorは原点または力、directionはRaycastだけ
- * - reservedは4でoffset、5で購読0/1、他は0。pointer/STL/solver固有型を含めない
+ * - operation=7はフィルタ付きRaycast。reserved2はlayer mask、reservedはTriggerを含める場合1
+ * - 7のtargetは除外する同Worldの生存Entityまたは空。1と6は空targetを要求する
+ * - vectorは原点または力、directionはRaycastだけ
+ * - reservedは4でoffset、5で購読0/1、7でTrigger 0/1、他は0。pointer/STL/solver固有型を含めない
  *---------------------------------------------------------------------------------------*/
 typedef struct NexusPhysicsRequestV1 {
     uint32_t operation, reserved;

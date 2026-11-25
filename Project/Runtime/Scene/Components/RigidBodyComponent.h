@@ -2,7 +2,7 @@
 #include "Foundation/Reflection/ReflectionMarkers.h"
 #include <array>
 #include <cmath>
-NEXUS_REFLECT_COMPONENT(RigidBodyComponent, "RigidBody", "component.rigidBody", enabled, motion, shape, halfExtent, radius, halfHeight, mass, friction, restitution, gravityScale, velocity, angularVelocity, sensor, continuous, collisionLayer, collisionMask)
+NEXUS_REFLECT_COMPONENT(RigidBodyComponent, "RigidBody", "component.rigidBody", enabled, motion, shape, halfExtent, radius, halfHeight, mass, friction, restitution, gravityScale, velocity, angularVelocity, sensor, continuous, collisionLayer, collisionMask, linearDamping, angularDamping, allowSleeping)
 NEXUS_COMPONENT_EDITOR(RigidBodyComponent, "Physics", "componentBrowser.description.rigidBody", "component.Physics")
 
 namespace NexusEngine {
@@ -20,6 +20,9 @@ struct RigidBodyComponent {
     float mass = 1, friction = 0.5f, restitution = 0, gravityScale = 1; //< SI単位。Staticでは質量を適用しない
     std::array<float, 3> velocity{}, angularVelocity{}; //< World座標のm/s、rad/s
     bool sensor = false; //< 接触応答のないtrigger body
+    // 旧Levelで省略された場合も、従来のJolt既定値と同じ運動になる。
+    float linearDamping = 0.05f, angularDamping = 0.05f; //< Dynamicの速度減衰率（1/s）
+    bool allowSleeping = true; //< Dynamicが静止時に自動休止へ移行できるか
     bool continuous = false; //< DynamicでLinearCast CCDを使い、高速移動時のすり抜けを抑制する
     int collisionLayer = 0, collisionMask = -1; //< 所属layer。maskは保存互換用。接触可否はProject共通マトリクスで決める
     std::array<float, 3> force{}, impulse{}; //< 次Physics stepで消費する値。保存対象外
@@ -29,6 +32,11 @@ struct RigidBodyComponent {
         for(float value : halfExtent) if(!std::isfinite(value) || value <= 0 || value > 100000) return false;
         for(const auto* vector : {&velocity,&angularVelocity}) for(float value : *vector) if(!std::isfinite(value) || std::abs(value)>1000000) return false;
         for(const auto* vector : {&force,&impulse}) for(float value : *vector) if(!std::isfinite(value) || std::abs(value)>1000000000) return false;
+        // 反射経由の編集・保存・ロードでも、solverと同じ減衰率の範囲を検証する。
+        if(!std::isfinite(linearDamping) || linearDamping < 0 || linearDamping > 100 ||
+            !std::isfinite(angularDamping) || angularDamping < 0 || angularDamping > 100) {
+            return false;
+        }
         return std::isfinite(radius) && radius > 0 && radius <= 100000 && std::isfinite(halfHeight) && halfHeight >= 0 && halfHeight <= 100000 &&
             std::isfinite(mass) && mass >= 0.0001f && mass <= 1000000 && std::isfinite(friction) && friction >= 0 && friction <= 1 &&
             std::isfinite(restitution) && restitution >= 0 && restitution <= 1 && std::isfinite(gravityScale) && gravityScale >= 0 && gravityScale <= 100;

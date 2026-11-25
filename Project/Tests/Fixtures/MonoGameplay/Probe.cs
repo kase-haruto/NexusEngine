@@ -76,6 +76,17 @@ public sealed class RepeatedProbe : ScriptBehaviour
         var collider=Entity.AddComponent("Collider"); collider.Set("shape",1); collider.Set("radius",0.5f);
         var origin=Entity.Transform.Translation+new System.Numerics.Vector3(0,5,0);
         if(!World.Raycast(origin,new(0,-1,0),10,out var hit) || !Entity.Equals(hit.Entity)) throw new InvalidOperationException("Managed Physics did not query the shared collider.");
+        // SDKの除外Handleが同じJolt Worldへ伝わり、自身のColliderを拾わないことを確認する。
+        if (World.Raycast(origin, -System.Numerics.Vector3.UnitY, 10, uint.MaxValue, false, Entity, out _))
+            throw new InvalidOperationException("Managed Physics selected the excluded collider.");
+        if (!World.ProbeGround(origin, 10, 45, out var ground) || !ground.IsWalkable || ground.SlopeDegrees > 0.1f)
+            throw new InvalidOperationException("Managed ground probe did not classify the upper surface.");
+        // 球の縁を下向きに狙うと接触は得られるが、法線は歩行可能角を超える。
+        if (!World.ProbeGround(origin + System.Numerics.Vector3.UnitX * 0.4f, 10, 45, out var steep) ||
+            steep.IsWalkable || steep.SlopeDegrees <= 45)
+        {
+            throw new InvalidOperationException("Managed ground probe accepted a steep surface.");
+        }
     }
     protected override void OnUpdate(float deltaTime) {
         voice ??= World.PlayAudio("silence.wav",0,true);
