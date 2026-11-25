@@ -14,22 +14,10 @@ $engine = Get-Content -LiteralPath $EngineManifest -Raw -Encoding UTF8 | Convert
 if($project.schemaVersion -ne 1 -or $engine.schemaVersion -ne 1 -or $engine.configuration -ne $Configuration) { throw 'Build identity/configuration mismatch.' }
 if($project.engine.id -cne $engine.id -or $project.engine.association -cne $engine.association -or ($project.engine.version -and $project.engine.version -cne $engine.version)) { throw 'Project requires a different Engine. No fallback was used.' }
 # Windows PowerShell側のモジュール自動読込設定に依存せず成果物を識別する。
-function Get-StagedFileDigest([string]$Path) {
-    $inputFile = [IO.File]::OpenRead($Path)
-    try {
-        $hasher = [Security.Cryptography.SHA256]::Create()
-        try {
-            return [BitConverter]::ToString($hasher.ComputeHash($inputFile)).Replace('-','').ToLowerInvariant()
-        } finally {
-            $hasher.Dispose()
-        }
-    } finally {
-        $inputFile.Dispose()
-    }
-}
-$digest = Get-StagedFileDigest $Executable
+. (Join-Path $PSScriptRoot 'File-Digest.ps1')
+$digest = (Get-NexusFileSha256 $Executable).ToLowerInvariant()
 $stamp = [ordered]@{ schemaVersion=1;projectId=$project.projectId;engineId=$engine.id;engineVersion=$engine.version;association=$engine.association;buildId=$engine.buildId;configuration=$Configuration;hostKind=$HostKind;engineManifest=[IO.Path]::GetFullPath($EngineManifest);sha256=$digest }
-$stamp.projectHash=(Get-StagedFileDigest $ProjectFile)
+$stamp.projectHash=(Get-NexusFileSha256 $ProjectFile).ToLowerInvariant()
 # 通常stampは旧形式を維持する。開発専用の成果物を通常版と誤認しないためにだけ明示する。
 if($NativeModuleLivePP -eq 'true') { $stamp.buildProfile = 'NativeLivePatch' }
 . (Join-Path $PSScriptRoot 'Project-ModuleOrder.ps1')
@@ -51,7 +39,7 @@ function Resolve-BuildReference([string]$Reference) {
 }
 if([IO.File]::Exists($targetsFile)) {
     # Module mapping / 配布依存だけの変更も、古い成果物へ結び付けない。
-    $stamp.targetsHash=(Get-StagedFileDigest $targetsFile)
+    $stamp.targetsHash=(Get-NexusFileSha256 $targetsFile).ToLowerInvariant()
     $targets = Get-Content -LiteralPath $targetsFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if($targets.runtimeDependencies) {
         $stamp.runtimeFiles=@()
@@ -59,7 +47,7 @@ if([IO.File]::Exists($targetsFile)) {
             $reference=$reference.Replace('{configuration}',$Configuration)
             $file=[IO.Path]::GetFullPath((Join-Path $projectRoot $reference))
             if([IO.Path]::IsPathRooted($reference) -or -not $file.StartsWith($projectRoot+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime dependency escapes Project.' }
-            $stamp.runtimeFiles+=@{path=$reference;sha256=(Get-StagedFileDigest $file)}
+            $stamp.runtimeFiles+=@{path=$reference;sha256=(Get-NexusFileSha256 $file).ToLowerInvariant()}
         }
     }
     if($targets.moduleProjects) {
@@ -69,17 +57,17 @@ if([IO.File]::Exists($targetsFile)) {
             if([IO.Path]::IsPathRooted($reference)) { throw 'Module output must be relative.' }
             $file=[IO.Path]::GetFullPath((Join-Path $projectRoot $reference))
             if(-not $file.StartsWith($projectRoot.TrimEnd('\','/')+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Module output escapes Project.' }
-            $stamp.moduleFiles+=@{id=$module.id;path=$reference;sha256=(Get-StagedFileDigest $file)}
+            $stamp.moduleFiles+=@{id=$module.id;path=$reference;sha256=(Get-NexusFileSha256 $file).ToLowerInvariant()}
         }
     }
     $deployment=Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Executable))) 'Nexus.modules.json'
-    if([IO.File]::Exists($deployment)) { $stamp.deploymentHash=(Get-StagedFileDigest $deployment) }
+    if([IO.File]::Exists($deployment)) { $stamp.deploymentHash=(Get-NexusFileSha256 $deployment).ToLowerInvariant() }
     if($targets.managedBootstrap) {
         $directory=[IO.Path]::GetDirectoryName((Join-Path $projectRoot (Resolve-BuildReference $targets.managedBootstrap)))
         $stamp.managedFiles=@()
         foreach($file in Get-ChildItem -LiteralPath $directory -File -Recurse) {
             $reference=$file.FullName.Substring($projectRoot.Length+1).Replace('\','/')
-            $stamp.managedFiles+=@{path=$reference;sha256=(Get-StagedFileDigest $file.FullName)}
+            $stamp.managedFiles+=@{path=$reference;sha256=(Get-NexusFileSha256 $file.FullName).ToLowerInvariant()}
         }
     }
     if($NativeModuleLivePP -eq 'true') {
@@ -94,7 +82,7 @@ if([IO.File]::Exists($targetsFile)) {
         $moduleFile = [IO.Path]::GetFullPath((Join-Path $projectRoot $reference))
         if(-not $moduleFile.StartsWith($projectRoot.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Native Module path escapes the Project.' }
         if($moduleFile -ine (Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Executable))) 'Game.dll')) { throw 'Native Module must be Game.dll beside its host.' }
-        $moduleDigest = Get-StagedFileDigest $moduleFile
+        $moduleDigest = (Get-NexusFileSha256 $moduleFile).ToLowerInvariant()
         $stamp.nativeModule = @{ path=$reference; sha256=$moduleDigest }
     }
     if($targets.managedBootstrap) {
@@ -112,7 +100,7 @@ if([IO.File]::Exists($targetsFile)) {
             # 同じmanagedFiles群でBCL・native runtime・configも固定し、Packageへ検証済み内容を渡す。
             foreach($file in Get-ChildItem -LiteralPath (Join-Path $projectRoot $monoReference) -File -Recurse) {
                 $relativeMono=$file.FullName.Substring($projectRoot.Length+1).Replace('\','/')
-                $stamp.managedFiles+=@{path=$relativeMono;sha256=(Get-StagedFileDigest $file.FullName)}
+                $stamp.managedFiles+=@{path=$relativeMono;sha256=(Get-NexusFileSha256 $file.FullName).ToLowerInvariant()}
             }
         }
         $apiReference = $hostDirectory + '/Nexus.Managed.dll'
@@ -121,7 +109,7 @@ if([IO.File]::Exists($targetsFile)) {
         foreach($relative in $bootstrapFiles) {
             $managedFile = [IO.Path]::GetFullPath((Join-Path $projectRoot $relative))
             if(-not $managedFile.StartsWith($projectRoot.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Managed Bootstrap path escapes the Project.' }
-            $managedDigest = Get-StagedFileDigest $managedFile
+            $managedDigest = (Get-NexusFileSha256 $managedFile).ToLowerInvariant()
             $records += @{ path=$relative; sha256=$managedDigest }
         }
         $stamp.managedBootstrap = $records
@@ -131,7 +119,7 @@ if([IO.File]::Exists($targetsFile)) {
             if([IO.Path]::IsPathRooted($gameReference) -or $gameFile -ine (Join-Path ([IO.Path]::GetDirectoryName($assemblyFile)) 'GameScripts.dll')) { throw 'GameScripts must be beside the Managed API.' }
             $gameRecords = @()
             foreach($relativeScript in @($gameReference, [IO.Path]::ChangeExtension($gameReference, '.deps.json'), [IO.Path]::ChangeExtension($gameReference, '.metadata.json'))) {
-                $scriptDigest = Get-StagedFileDigest (Join-Path $projectRoot $relativeScript)
+                $scriptDigest = (Get-NexusFileSha256 (Join-Path $projectRoot $relativeScript)).ToLowerInvariant()
                 $gameRecords += @{ path=$relativeScript; sha256=$scriptDigest }
             }
             $stamp.gameScripts = $gameRecords

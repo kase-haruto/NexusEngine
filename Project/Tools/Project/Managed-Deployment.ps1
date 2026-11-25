@@ -1,4 +1,5 @@
-﻿# 同一AssemblyLoadContextに配置するファイルの衝突だけを検査する。Assemblyはロードしない。
+﻿. (Join-Path $PSScriptRoot 'File-Digest.ps1')
+# 同一AssemblyLoadContextに配置するファイルの衝突だけを検査する。Assemblyはロードしない。
 function Initialize-NexusManagedStage([string]$Source,[string]$Stage,[Collections.Generic.Dictionary[string,string]]$Files,[string]$OwnedAssembly) {
  if($OwnedAssembly -ieq 'GameScripts.dll' -or $OwnedAssembly -imatch '\ANexus\.Managed' -or [IO.Path]::GetFileName($OwnedAssembly) -cne $OwnedAssembly) { throw 'Additional Module cannot replace a primary / stable Assembly.' }
  [IO.Directory]::CreateDirectory($Stage) | Out-Null
@@ -30,7 +31,7 @@ function New-NexusManagedFileMap([string]$Directory,[string]$Primary='GameScript
   } }
  }
  }
- foreach($name in $names) { $file=Resolve-NexusProjectReference $Directory $name; if([IO.File]::Exists($file)) { $map[$file.Substring([IO.Path]::GetFullPath($Directory).TrimEnd('\','/').Length+1)]=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash } }
+ foreach($name in $names) { $file=Resolve-NexusProjectReference $Directory $name; if([IO.File]::Exists($file)) { $map[$file.Substring([IO.Path]::GetFullPath($Directory).TrimEnd('\','/').Length+1)]=(Get-NexusFileSha256 $file) } }
  # 空のDictionaryもPowerShellのpipelineで消失させない。
  return ,$map
 }
@@ -41,7 +42,7 @@ function Merge-NexusManagedDeployment([string]$Source,[string]$Destination,[Coll
  foreach($entry in $entries) {
   if($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Managed deployment cannot traverse reparse points.' }
   if($entry.PSIsContainer) { continue }
-  $relative=$entry.FullName.Substring($sourceRoot.Length+1); $hash=(Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash
+  $relative=$entry.FullName.Substring($sourceRoot.Length+1); $hash=(Get-NexusFileSha256 $entry.FullName)
   if($Files.ContainsKey($relative) -and $Files[$relative] -cne $hash) { throw "Managed dependency collision: $relative. Align package / ProjectReference versions before rebuilding." }
   $incoming.Add($relative,$hash)
  }
@@ -51,12 +52,12 @@ function Merge-NexusManagedDeployment([string]$Source,[string]$Destination,[Coll
   $sourceFile=Resolve-NexusProjectReference $sourceRoot $relative; $target=Resolve-NexusProjectReference $Destination $relative
   [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
   $hash=$incoming[$relative]
-  if(-not [IO.File]::Exists($target) -or (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -cne $hash) {
+  if(-not [IO.File]::Exists($target) -or (Get-NexusFileSha256 $target) -cne $hash) {
    # 検査後に入力が変わっても既存DLLを上書きしない。同一Directoryの検証済みcopyだけを公開する。
    $temporary=$target+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
    try {
     [IO.File]::Copy($sourceFile,$temporary,$false)
-    if((Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -cne $hash) { throw 'Managed deployment input changed after validation.' }
+    if((Get-NexusFileSha256 $temporary) -cne $hash) { throw 'Managed deployment input changed after validation.' }
     # Windows PowerShellによる$nullの空文字化を避け、検証済みの既存配置を原子的に更新する。
     if([IO.File]::Exists($target)) { [IO.File]::Replace($temporary,$target,[System.Management.Automation.Language.NullString]::Value) } else { [IO.File]::Move($temporary,$target) }
    } finally { if([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }

@@ -127,7 +127,7 @@ try {
         }
     }
     Copy-File (Join-Path $sdkSource 'Public/Nexus/GameInputActions.cpp') (Join-Path $sdk 'Public/Nexus/GameInputActions.cpp')
-    foreach($file in @('Build/Nexus.Common.props','Build/Nexus.Game.props','Build/Nexus.GameModule.props','Build/Nexus.Compatibility.json','Tools/Reflection/Generate-Reflection.ps1','Tools/Project/Build-Game.ps1','Tools/Project/Write-GameBuildStamp.ps1','Tools/Project/Create-LauncherShortcut.ps1','Runtime/Reflection/EngineGenerated/ReflectionSchema.json')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
+    foreach($file in @('Build/Nexus.Common.props','Build/Nexus.Game.props','Build/Nexus.GameModule.props','Build/Nexus.Compatibility.json','Tools/Reflection/Generate-Reflection.ps1','Tools/Project/Build-Game.ps1','Tools/Project/Write-GameBuildStamp.ps1','Tools/Project/File-Digest.ps1','Tools/Project/Create-LauncherShortcut.ps1','Runtime/Reflection/EngineGenerated/ReflectionSchema.json')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     foreach($file in @('Build/Nexus.ManagedBootstrap.targets', 'Managed/Nexus.Managed.Bootstrap/Nexus.Managed.Bootstrap.csproj', 'Managed/Nexus.Managed.Bootstrap/EntryPoints.cs')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     # 通常SDKでもpropsのimportを解決する。Live++本体・有効profileの配布は行わない。
     Copy-File (Join-Path $sdkSource 'Build/Nexus.NativeModuleLivePP.props') (Join-Path $sdk 'Build/Nexus.NativeModuleLivePP.props')

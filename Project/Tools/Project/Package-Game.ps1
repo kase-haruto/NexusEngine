@@ -5,12 +5,13 @@
  [string]$DotNetRoot=''
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'File-Digest.ps1')
 . (Join-Path $PSScriptRoot 'Project-ModuleOrder.ps1')
 . (Join-Path $PSScriptRoot 'Managed-Runtime.ps1')
 # 読み取った定義とコピー対象を同じhashへ固定する。検証後のBuildで別世代へ入れ替わった入力は公開しない。
 $pinned=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
 # ファイル内容だけを識別し、DLLロードや実行による検証を行わない。
-function Hash([string]$File) { return (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Hash([string]$File) { return (Get-NexusFileSha256 $File).ToLowerInvariant() }
 # 同じ実体へ別の検証結果を後から上書きしない。Buildの世代混在を明示的な失敗にする。
 function Pin-Hash([string]$File,[string]$Digest) {
  $file=[IO.Path]::GetFullPath($File)

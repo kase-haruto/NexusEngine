@@ -40,7 +40,7 @@ function Within([string]$Reference) {
     $cursor=$path; while($cursor -and $cursor.Length -ge $root.Length) { if((Test-Path -LiteralPath $cursor) -and ((Get-Item -Force -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Deployment cannot traverse reparse points.' }; $cursor=[IO.Path]::GetDirectoryName($cursor) }
     return $path
 }
-function Hash([string]$Path) { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash }
+function Hash([string]$Path) { return (Get-NexusFileSha256 $Path) }
 function Escape([string]$Value) { $value=$Value.Replace('%','%25'); foreach($pair in @(@(';','%3B'),@('$','%24'),@('@','%40'),@("'",'%27'),@('(','%28'),@(')','%29'))) { $value=$value.Replace($pair[0],$pair[1]) }; return $value }
 function Output-Path([string]$Reference) {
     $value=$Reference.Replace('{configuration}',$Configuration).Replace('\','/')
