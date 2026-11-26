@@ -135,6 +135,8 @@ try {
     foreach($file in @('Build/Nexus.GameDeployment.targets','Tools/Project/Complete-GameDeployment.ps1','Tools/Project/Managed-Deployment.ps1','Tools/Project/Add-GameModule.ps1','Tools/Project/Add-GameSource.ps1','Tools/Project/Package-Game.ps1')) { Copy-File (Join-Path $sdkSource $file) (Join-Path $sdk $file) }
     Copy-File (Join-Path $sdkSource 'Tools/Project/Build-Scripts.ps1') (Join-Path $sdk 'Tools/Project/Build-Scripts.ps1')
     Copy-File (Join-Path $sdkSource 'Tools/Project/Add-NativeBehaviour.ps1') (Join-Path $sdk 'Tools/Project/Add-NativeBehaviour.ps1')
+    # C#とNativeの両方のgeneratorがこの識別子検証を読み込む。
+    Copy-File (Join-Path $sdkSource 'Tools/Project/Source-Identifiers.ps1') (Join-Path $sdk 'Tools/Project/Source-Identifiers.ps1')
     # MonoでもInstalled SDKからBuild / Reloadできるよう、Backend固有の小さな実装だけを含める。
     foreach($file in @('Tools/Project/Managed-Runtime.ps1','Tools/Project/Deploy-MonoRuntime.ps1',
         'Managed/Nexus.Managed/MonoCompatibility.cs','Managed/Nexus.Managed/MonoInterop.cs',
