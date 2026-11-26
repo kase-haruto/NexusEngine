@@ -43,6 +43,8 @@ Cloudflare CLIとGit Credential ManagerのGitHub認証を使用。認証情報�
 
 通常の紹介ページ更新も、本番setupを保持するため`Publish-Website.cmd -LauncherSetup ...`を使用してください。
 
+2026-11-27 に SDK 1.7.0 を GitHub Releases の最新版として公開し、公開 ZIP のサイズと SHA-256 を確認しました。旧版を含む Web／Launcher カタログを準備済みです。Cloudflare 認証後に本番へ反映します。[1.7.0 配布検証](../Docs/Release-1.7.0-Verification.md)
+
 ## ランチャーのGitHub対応
 
 GitHubは添付URLをCDNへ302転送します。`Project/Launcher/Standalone/Distribution.cs`でHTTPSのみ・認証情報なし・最大5回の転送を許可しています。HTTP降格と無限転送を拒否し、従来のサイズ・SHA-256・SDK識別検査も維持します。

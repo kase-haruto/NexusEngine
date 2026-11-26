@@ -31,5 +31,15 @@
   "verification_log": "Generated/Release142Checks/publish-website.log",
   "final_site_verification": "Generated/Release142Checks/final-public-site.json",
   "launcher_reused": true,
-  "verification_document": "Project/Docs/Release-1.4.2-Verification.md"
+  "verification_document": "Project/Docs/Release-1.4.2-Verification.md",
+  "latest_sdk_publication": {
+    "version": "1.7.0",
+    "release_url": "https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-e851c4eac1a0",
+    "github_download_verified": true,
+    "sdk_build_id": "2e0077f1-7583-4dd2-9a80-110a4f07650d",
+    "verified_at": "2026-11-27",
+    "verification_document": "Project/Docs/Release-1.7.0-Verification.md",
+    "launcher_catalog_latest_observed": "1.5.6",
+    "website_update": "pending_cloudflare_login"
+  }
 }

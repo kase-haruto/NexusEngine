@@ -122,5 +122,10 @@
     "bytes": 197091764,
     "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-297ae1d900a7/nexus-1.5.0-Release.zip",
     "sha256": "cf17fbfc9b47a22bade34fd3ab2294747224d75307ea44cc2d0017e75ec4c1b9"
+  },
+  "engines/nexus-1.7.0-Release.zip": {
+    "url": "https://github.com/kase-haruto/NexusEngine/releases/download/distribution-e851c4eac1a0/nexus-1.7.0-Release.zip",
+    "bytes": 197545598,
+    "sha256": "c8609cab951fe85f5e1823b1364ece5ed35a42ab4ef91c09228763e32d2baa70"
   }
 }
