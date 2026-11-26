@@ -243,6 +243,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
     <ClCompile Include="Graphics\Resource\Depthstencil\DepthstencilBuffer.cpp" />
     <ClCompile Include="Graphics\Renderer\GraphicsSystem.cpp" />
     <ClCompile Include="Graphics\Backend\DirectX12\Viewport\ViewportTarget.cpp" />
+    <ClCompile Include="Graphics\Backend\DirectX12\Viewport\RenderCaptureService.cpp" />
     <ClInclude Include="Graphics\Backend\DirectX12\Viewport\ViewportTarget.h" />
     <ClInclude Include="Graphics\Viewport\ViewportImage.h" />
     <ClCompile Include="Graphics\Backend\DirectX12\PostProcess\PostProcessBackend.cpp" />
@@ -609,6 +610,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(OutDir)Resources"</Command>
   <ItemGroup>
     <ClCompile Include="Editor\Services\SceneEditService.cpp" />
     <ClCompile Include="Editor\Services\EditorDocumentService.cpp" />
+    <ClCompile Include="Editor\Services\ProjectThumbnailService.cpp" />
     <ClCompile Include="Editor\Gui\EditorChrome.cpp" />
     <ClInclude Include="Editor\Services\SceneEditService.h" />
     <ClInclude Include="Editor\Services\EntityConsoleCommands.h" />

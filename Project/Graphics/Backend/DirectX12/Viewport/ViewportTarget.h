@@ -25,6 +25,8 @@ public:
     void EndWrite(ID3D12GraphicsCommandList* commands) const noexcept;
     /** \brief GPU idle保証後、allocatorより先に解放する */
     void Shutdown() noexcept;
+    /** \brief Backend内で同一Queueから転送するための借用参照 */
+    ID3D12Resource* Resource() const noexcept;
     D3D12_CPU_DESCRIPTOR_HANDLE Rtv() const noexcept { return rtv_.cpuHandle; }
     ViewportImage Image() const noexcept { return {static_cast<uintptr_t>(srv_.gpuHandle.ptr), width_, height_}; }
 private:

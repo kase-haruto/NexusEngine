@@ -77,6 +77,7 @@
 
     <ClCompile Include="..\Editor\Services\SourceFileActions.cpp" />
     <ClCompile Include="..\Editor\Services\EditorDocumentService.cpp" />
+    <ClCompile Include="..\Editor\Services\ProjectThumbnailService.cpp" />
     <ClCompile Include="..\Editor\Services\EditorSettings.cpp" />
     <ClCompile Include="..\Editor\Services\LocalizationService.cpp" />
     <ClCompile Include="..\Editor\Services\PropertyEditService.cpp" />

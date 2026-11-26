@@ -57,13 +57,18 @@ internal static class ProjectTemplatePreview
     /** \brief 欠落・破損・未対応Sourceではnullを返し、Preview unavailableへFallbackする */
     internal static Image? Load(ProjectTemplateDescriptor template)
     {
-        if (template.PreviewKind is not ("image" or "thumbnail")) return null;
+        return template.PreviewKind is "image" or "thumbnail" ? LoadFile(template.PreviewImage) : null;
+    }
+
+    /** \brief TemplateカードとProjectカードで画像の読込み・検証を共有する */
+    internal static Image? LoadFile(string path)
+    {
         try
         {
-            var file = new FileInfo(template.PreviewImage);
+            var file = new FileInfo(path);
             if (!file.Exists || file.Length > 8 * 1024 * 1024) return null;
-            using var stream = file.OpenRead();
-            using var image = Image.FromStream(stream);
+            using var stream = File.Open(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var image = Image.FromStream(stream, useEmbeddedColorManagement: true, validateImageData: true);
             if (image.Width > 4096 || image.Height > 4096) return null;
             // ファイルハンドルとGDI+の遅延読込をUIの寿命へ持ち込まない。
             return new Bitmap(image);

@@ -24,6 +24,7 @@
 #include "GraphicsRenderExtension.h"
 #include "Graphics/Backend/DirectX12/PostProcess/PostProcessBackend.h"
 #include "Graphics/Backend/DirectX12/Viewport/ViewportTarget.h"
+#include "Graphics/Backend/DirectX12/Viewport/RenderCaptureService.h"
 
 namespace NexusEngine {
 	namespace {
@@ -59,6 +60,9 @@ namespace NexusEngine {
         SkyRenderer sky, cameraPreviewSky;
         bool skyInitialized = false, cameraPreviewSkyInitialized = false;
 		ViewportTarget viewportTarget; //< GPU idle後にdescriptor allocatorより先に破棄する
+        RenderCaptureService capture; //< Queue idle後までReadbackを所有する
+        bool captureRequested = false; //< 次のViewport resolveで消費する
+        bool captureFailed = false; //< Editorへの完了通知を保持する
 		ViewportTarget cameraPreviewTarget;
 		DepthStencilBuffer cameraPreviewDepth;
 		PostProcessBackend cameraPreviewPost;
@@ -244,6 +248,7 @@ namespace NexusEngine {
 		impl_->transientDescriptors.Shutdown();
 		impl_->cameraPreviewDescriptors.Shutdown();
 		impl_->postProcess.Shutdown();
+        impl_->capture.ReleaseAfterIdle();
 		impl_->viewportTarget.Shutdown();
 		impl_->bindlessDescriptors.Shutdown();
 		// 表示資源からDeviceへ向かって初期化と逆順に破棄する。
@@ -259,6 +264,30 @@ namespace NexusEngine {
 	/////////////////////////////////////////////////////////////////////////////////////////
 	// 現在のBackBufferをClearしてPresentする
 	/////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////
+    // Editor等の呼出元から次のSDR Viewport出力を予約する
+    ////////////////////////////////////////////////////////////////////////////////
+    bool GraphicsSystem::RequestViewportCapture() noexcept {
+        if(!impl_ || !impl_->viewportEnabled || impl_->captureRequested || impl_->capture.Busy()) {
+            return false;
+        }
+        impl_->captureRequested = true;
+        return true;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // 通常描画ではFence完了を待たず、回収可能な画像だけを返す
+    ////////////////////////////////////////////////////////////////////////////////
+    std::optional<DecodedImage> GraphicsSystem::CollectViewportCapture() {
+        if(!impl_) {
+            return {};
+        }
+        if(std::exchange(impl_->captureFailed, false)) {
+            return DecodedImage{};
+        }
+        return impl_->capture.Collect(impl_->commandQueue.GetCompletedFenceValue());
+    }
+
 	Result<void> GraphicsSystem::RenderFrame() {
         if(impl_) {
             auto effects = SynchronizeScreenEffects(impl_->engineEffects);
@@ -368,7 +397,16 @@ namespace NexusEngine {
 		}
 		if(impl_->viewportEnabled) impl_->viewportTarget.BeginWrite(frame.commandList.Get());
 		impl_->postProcess.Resolve(frame.commandList.Get(), impl_->viewportEnabled ? impl_->viewportTarget.Rtv() : rtv, impl_->postProcessSettings);
-		if(impl_->viewportEnabled) impl_->viewportTarget.EndWrite(frame.commandList.Get());
+        bool captureRecorded = false;
+        if(impl_->viewportEnabled) {
+            // Resolve後のUNORM出力はtone mappingとsRGB変換済み。ImGuiはこの後に別RTへ描く。
+            if(std::exchange(impl_->captureRequested, false)) {
+                captureRecorded = impl_->capture.Record(*impl_->device.GetDevice(), *frame.commandList.Get(),
+                    *impl_->viewportTarget.Resource(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+                impl_->captureFailed = !captureRecorded;
+            }
+            impl_->viewportTarget.EndWrite(frame.commandList.Get());
+        }
 		GraphicsContext previewContext(frame.commandList.Get(), &impl_->bindlessDescriptors,
 			&impl_->cameraPreviewDescriptors, frameIndex, 640, 360);
 		if(impl_->cameraPreviewActive && impl_->cameraPreviewRenderer) {
@@ -427,6 +465,9 @@ namespace NexusEngine {
 			return std::unexpected(std::move(signalResult.error()));
 		}
 		frame.fenceValue = *signalResult;
+        if(captureRecorded) {
+            impl_->capture.Submitted(*signalResult);
+        }
 
 		// 描画CommandのFence値を確定した後に、DXGIへ表示を要求する。
 		auto presentResult = impl_->swapChain.Present(impl_->enableVSync);

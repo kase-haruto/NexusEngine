@@ -283,7 +283,27 @@ Result<ProjectContext> ProjectTemplates::Create(const std::filesystem::path& roo
                 auto saved = WriteFileAtomically(*destination, bytes, false); if(!saved) return saved;
             }
             // Levelの要求条件はTemplateが所有する。UI名やIDでScene内容を分岐しない。
-            return ValidateStartup(context.StartupLevel(), definition->value("requiresCamera", false));
+            auto valid = ValidateStartup(context.StartupLevel(), definition->value("requiresCamera", false));
+            if(!valid) {
+                return valid;
+            }
+            // 生成後にSceneが変更された場合は、共通画像の撮影対象にできない。
+            // Preview用メタデータの書込み失敗でProject生成を中断しない。
+            try {
+                const auto hash = Sha256File(context.StartupLevel());
+                const auto metadata = ResolveProjectPath(context.Root(), ".nexus-preview");
+                std::error_code error;
+                if(hash && metadata) {
+                    std::filesystem::create_directories(*metadata, error);
+                    if(!error) {
+                        static_cast<void>(ProjectJson::Write(*metadata / "Template.json",
+                            Json{{"id", projectTemplate.id}, {"initialLevelSha256", *hash}}));
+                    }
+                }
+            } catch(...) {
+                // Previewは任意のため、初期Levelの検証結果を維持する。
+            }
+            return {};
         } catch(const std::exception& exception) { return std::unexpected(Invalid(exception.what())); }
     });
 }

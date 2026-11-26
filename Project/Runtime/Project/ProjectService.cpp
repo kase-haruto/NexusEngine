@@ -76,7 +76,7 @@ Result<ProjectContext> ProjectService::Create(const std::filesystem::path& root,
             }
             if(!shared) ignore += std::string("/") + generated + "/\n";
         }
-        ignore += "*.user\n/Nexus.Engine.local.props\n";
+        ignore += "*.user\n/Nexus.Engine.local.props\n/.nexus-preview/ProjectThumbnail.png\n/.nexus-preview/LastLaunch.txt\n";
         auto ignored = WriteFileAtomically(staging / ".gitignore", ignore, false);
         if(!ignored) return std::unexpected(ignored.error());
         auto published = PublishDirectory(staging, destination);

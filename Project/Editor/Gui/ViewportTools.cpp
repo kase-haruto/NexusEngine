@@ -244,11 +244,20 @@ void ViewportTools::Prepare(RenderScene& frame, float aspect) {
             yaw_ = std::atan2(forward.x,forward.z); pitch_ = -std::asin(std::clamp(forward.y,-1.0f,1.0f));
         }
     }
+    frame.camera = ResolveEditCamera(aspect);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// 現在の編集Cameraを読み取る。Play/Preview中にも視点を動かさず利用できる
+////////////////////////////////////////////////////////////////////////////////
+std::optional<RenderCamera> ViewportTools::ResolveEditCamera(float aspect) const {
     const auto world = MakeAffineMatrix(Vector3::One(), Quaternion::FromEulerRadians({pitch_,yaw_,0}), position_);
     const auto view = TryInverse(world);
-    if(!view || aspect <= 0) return;
+    if(!view || aspect <= 0) {
+        return {};
+    }
     const auto projection = MakePerspectiveFovMatrix(fieldOfView_*0.01745329252f,aspect,0.05f,100000.0f);
-    frame.camera = RenderCamera{{}, *view, projection, Multiply(*view,projection)};
+    return RenderCamera{{}, *view, projection, Multiply(*view,projection)};
 }
 bool ViewportTools::Pick(float x, float y, bool toggle) {
     if(session_.IsPlaying() || session_.HasAnimationPreview() || IsManipulating() || gizmoOwnsMouse_ || blockedUntilRelease_ || !frame_ || !frame_->camera ||

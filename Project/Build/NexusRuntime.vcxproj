@@ -36,6 +36,7 @@
     <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\ShadowBackend.cpp" />
     <ClCompile Include="..\Graphics\Backend\DirectX12\Shadow\ShadowMapTechnique.cpp" />
     <ClCompile Include="..\Graphics\Backend\DirectX12\Viewport\ViewportTarget.cpp" />
+    <ClCompile Include="..\Graphics\Backend\DirectX12\Viewport\RenderCaptureService.cpp" />
     <ClCompile Include="..\Graphics\Core\CommandQueue.cpp" />
     <ClCompile Include="..\Graphics\Descriptor\BindlessDescriptorTable.cpp" />
     <ClCompile Include="..\Graphics\Descriptor\DescriptorAllocator.cpp" />

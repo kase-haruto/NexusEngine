@@ -51,8 +51,8 @@ public sealed class LauncherForm : Form
     Control? downloadHeader, downloadVersions, catalogFetch;
     CancellationTokenSource? operation;
     string Tool => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, settings.ProjectTool));
-    string EngineRegistry => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexusEngine", "Engines", "Registry.json");
-    string ProjectRegistry => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexusEngine", "Projects", "RecentProjects.json");
+    string EngineRegistry => Path.Combine(Distribution.LocalAppData, "NexusEngine", "Engines", "Registry.json");
+    string ProjectRegistry => Path.Combine(Distribution.LocalAppData, "NexusEngine", "Projects", "RecentProjects.json");
     public LauncherForm(bool preview = false)
     {
         Text = "NexusEngine Launcher"; ClientSize = new(1180, 820); MinimumSize = new(900, 640);
@@ -111,6 +111,7 @@ public sealed class LauncherForm : Form
             var tool = Tool; var configuration = projects.Configuration;
             // プロセス生成と出力待ちをUIスレッドから離し、起動中も画面の描画・移動を維持する。
             await Task.Run(() => Distribution.Run(tool, ["open", p.File, EngineRegistry, configuration], token), token);
+            projects.RecordLaunch(p, ProjectPreviewMetadata.RecordLaunch(p));
         }, "プロジェクトをビルドしてエディタを起動しています…", allowNavigation: true);
         projects.RefreshProjects += () => Work(_ => { RefreshLocal(); return Task.CompletedTask; });
         projects.ChangeEngine += () =>
@@ -144,6 +145,25 @@ public sealed class LauncherForm : Form
             await Distribution.Run(Tool, ["register", file], token);
             RefreshLocal();
             SelectPage(pages[1].Page);
+            projects.SelectProject(file);
+            var created = entries.FirstOrDefault(p => string.Equals(p.File, file, StringComparison.OrdinalIgnoreCase));
+            if (created is not null && ProjectPreviewMetadata.DefaultImage(created) is string preview)
+            {
+                using var existing = ProjectTemplatePreview.LoadFile(preview);
+                if (existing is not { Width: 640, Height: 360 })
+                {
+                    // 初回だけ通常のEditorを開く。Levelのロード・撮影はEditorの起動処理が担当する。
+                    try
+                    {
+                        await Task.Run(() => Distribution.Run(Tool, ["open", created.File, EngineRegistry, engine.Configuration], token), token);
+                        projects.RecordLaunch(created, ProjectPreviewMetadata.RecordLaunch(created));
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        status.Text = $"プロジェクトを作成しました。エディタ起動は「開く」から再試行できます。{ex.Message}";
+                    }
+                }
+            }
         });
         var git = Page("Gitから追加", "WORKSPACE / SOURCE CONTROL");
         var url = new TextBox { Width = 720 }; var cloneParent = new TextBox { Width = 600, Text = creation.ParentDirectory }; var folder = new TextBox { Width = 400 };
@@ -357,7 +377,8 @@ public sealed class LauncherForm : Form
             {
                 var e = p.GetProperty("engine");
                 var match = installed.FirstOrDefault(i => i.Association == e.GetProperty("association").GetString() && i.Id == e.GetProperty("id").GetString() && (string.IsNullOrEmpty(e.GetProperty("version").GetString()) || i.Version == e.GetProperty("version").GetString()));
-                entries.Add(new(p.GetProperty("file").GetString()!, p.GetProperty("name").GetString()!, e.GetProperty("version").GetString()!, match?.Configuration ?? "Release", e.GetProperty("id").GetString()!, e.GetProperty("association").GetString()!));
+                entries.Add(ProjectPreviewMetadata.Read(new(p.GetProperty("file").GetString()!, p.GetProperty("name").GetString()!, e.GetProperty("version").GetString()!, match?.Configuration ?? "Release", e.GetProperty("id").GetString()!, e.GetProperty("association").GetString()!)
+                    { ResolvedEngineVersion = match?.Version }));
             }
         }
         inventory.Items.Clear(); inventory.Items.AddRange(installed.Cast<object>().ToArray());

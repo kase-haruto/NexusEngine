@@ -23,6 +23,8 @@ namespace NexusEngine {
 		void SetModel(const ModelAssetData& model, const ModelInstance& pose);
 		/** \brief 編集時だけCameraを上書きする。Runtime再生Cameraは保持する */
 		void Prepare(RenderScene& frame, float aspect);
+        /** \brief 現在の編集Cameraから行列を求める。位置・回転には触れない */
+        std::optional<RenderCamera> ResolveEditCamera(float aspect) const;
 		/** \brief 正規化Viewport座標からCamera/Light/環境アイコン、または最近傍の三角形を選択する */
 		bool Pick(float x, float y, bool toggle);
 		/** \brief 選択の境界へ編集Cameraを寄せる */

@@ -19,6 +19,10 @@ public sealed record Installed(string Manifest, string Id, string Version, strin
 }
 public sealed record ProjectEntry(string File, string Name, string Version, string Configuration, string EngineId = "nexus", string Association = "installed")
 {
+    public string? TemplateId { get; init; }
+    public string? Languages { get; init; }
+    public string? ResolvedEngineVersion { get; init; }
+    public DateTimeOffset? LastLaunch { get; init; }
     public override string ToString() => $"{Name}  /  {Version} ({Configuration})  /  {File}";
 }
 
@@ -26,6 +30,16 @@ public static class Distribution
 {
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, WriteIndented = true };
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
+    // NativeのProject ToolとEditorと同じ、現在のプロセスの保存場所を使用する。
+    internal static string LocalAppData
+    {
+        get
+        {
+            var path = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+            return Path.IsPathFullyQualified(path ?? "") ? path! :
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        }
+    }
     public static string DataRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexusEngine", "Launcher");
     public static Settings LoadSettings() => JsonSerializer.Deserialize<Settings>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "launcher.json")), Json) ?? throw new InvalidDataException("launcher.json が不正です。");
     public static Uri Https(string value)

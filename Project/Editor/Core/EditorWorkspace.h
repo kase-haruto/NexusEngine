@@ -92,6 +92,8 @@ namespace NexusEngine {
 			return toolbar_;
 		}
 		ViewportSession&	 Viewport() { return viewport_; }
+        /** \brief 保存・終了の確定状態を描画側へ伝える */
+        EditorDocumentService& Documents() noexcept;
 		ViewportTools&		 ViewportEditor() { return viewportTools_; }
 		AssetPropertyWidget& AssetEditor() { return assetEditor_; }
 		/** \brief 起動時のEditor拡張から専門ページを登録する */

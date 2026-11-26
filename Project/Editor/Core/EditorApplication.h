@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorWorkspace.h"
+#include "Editor/Services/ProjectThumbnailService.h"
 #include "Core/Framework/FrameworkUpdateClient.h"
 #include "Editor/Gui/Core/GuiContext.h"
 #include "Editor/ImGui/ImGuiRenderer.h"
@@ -103,6 +104,7 @@ namespace NexusEngine {
 			intptr_t  lParam) noexcept;
 
 	private:
+        ProjectThumbnailService projectThumbnail_; //< 保存と終了に連動するPreview処理
 		ApplicationPaths paths_; //< ホストが選択したGame / Engineのルート
         InputFrame frameInput_; //< Platform値の借用コピー。Editorのfocus判定後だけPlayへ渡す
 		ModelAssetLibrary::ReloadStartup startupLoader_; //< 旧Level互換用。具体的なSample処理はホストから注入する

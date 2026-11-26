@@ -803,11 +803,27 @@ namespace NexusEngine {
                                                                               {}});
                 workspace_->Menu().RegisterTool({"tools.rendererDiagnostics", "tools.rendererDiagnostics"});
                 workspace_->Viewport().SetCameraPreviewTexture(ImGuiRenderer::CameraPreviewTexture);
+                if(const auto* document = session_.GetLevelDocument()) {
+                    projectThumbnail_.Initialize(paths_, document->GetFilePath().value_or(std::filesystem::path{}));
+                    if(projectThumbnail_.Enabled()) {
+                        workspace_->Documents().EnableSavePreview();
+                    }
+                }
 
                 return {};
         }
 
         Result<void> EditorApplication::Update(const float deltaTime) {
+            if(workspace_) {
+                auto& documents = workspace_->Documents();
+                projectThumbnail_.ObserveSave(documents.SaveRevision());
+                if(documents.SavePreviewPending() && projectThumbnail_.ReadyToSwitchScene()) {
+                    documents.CompleteSavePreview();
+                }
+                if(projectThumbnail_.ReadyToExit(documents.ExitRequested())) {
+                    PostQuitMessage(0);
+                }
+            }
             // Platform入力は編集Worldへ渡さない。Game View外では保持キーも解除する。
             auto input = frameInput_;
             const auto previous = session_.GetPlayLevel() ? session_.GetPlayLevel()->Input() : InputFrame{};
@@ -978,6 +994,20 @@ namespace NexusEngine {
             if(effect.shaderPath.is_relative() && !paths_.projectRoot.empty()) effect.shaderPath = paths_.projectRoot / effect.shaderPath;
         renderScene_.grid.enabled = workspace_ && workspace_->EditorPreferences().grid && !session_.IsPlaying();
 		if(workspace_) workspace_->ViewportEditor().Prepare(renderScene_, aspect);
+        if(graphicsSystem_ && workspace_) {
+            const bool ready = extracted && !session_.IsPlaying() && !assetBuild_.valid() &&
+                resolvedAssetRequestRevision_ == assetRequestRevision_;
+            if(projectThumbnail_.PrepareCapture(*graphicsSystem_, ready)) {
+                // HDR Sceneへ直接描くEditor補助だけを撮影Frameから除外する。
+                // ImGui/アイコン/GizmoはResolveとコピーの後に別のRTへ描画される。
+                renderScene_.grid.enabled = false;
+                renderScene_.debugLines.clear();
+                for(auto& item : renderScene_.primitives) {
+                    item.selected = false;
+                }
+                renderScene_.camera = workspace_->ViewportEditor().ResolveEditCamera(aspect);
+            }
+        }
 		const bool previewRequested = extracted && graphicsSystem_ && workspace_ && session_.GetCameraPreview().IsValid() && workspace_->Viewport().IsCameraPreviewVisible();
 		if(graphicsSystem_) { auto prepared = PrepareCameraPreview(previewRequested); if(!prepared) return prepared; }
 		if(extracted && graphicsSystem_ && workspace_ && session_.GetCameraPreview().IsValid()) {
@@ -1026,7 +1056,10 @@ namespace NexusEngine {
 		guiContext_.SetTheme(UI::CurrentEditorTheme());
 		imguiRenderer_.BeginFrame();
 		guiContext_.BeginFrame();
-		ShowGui();
+        if(!projectThumbnail_.WaitingForInitialFrame() &&
+            (!workspace_ || (!workspace_->Documents().ExitRequested() && !workspace_->Documents().SavePreviewPending()))) {
+            ShowGui();
+        }
 		if(showDemoWindow_) ImGui::ShowDemoWindow(&showDemoWindow_);
 	}
 

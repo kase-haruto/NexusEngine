@@ -14,6 +14,8 @@
   <ItemGroup>
     <Content Include="../../Templates/**/*" Exclude="../../Templates/Samples/**/*;../../Templates/Behaviour/**/*" Link="Templates/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- Previewと初期LevelはTemplate資源として独立配布し、既存SDKのinventoryを変更しない。 -->
+    <Content Include="../../Resources/Editor/Icons/project.png" Link="PreviewAssets/project.png"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="launcher.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Remove-Launcher.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

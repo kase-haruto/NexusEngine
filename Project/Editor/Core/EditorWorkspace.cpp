@@ -349,6 +349,13 @@ void EditorWorkspace::RememberLevel(const std::filesystem::path& path) {
     settings_.user.recentLevels = recent_;
     if(!settings_.SaveUser()) notifications_.Push(text_.Text("settings.saveFailed"), true);
 }
+////////////////////////////////////////////////////////////////////////////////
+// 文書の状態はWorkspaceが所有し、描画ループは保存と終了にだけ利用する
+////////////////////////////////////////////////////////////////////////////////
+EditorDocumentService& EditorWorkspace::Documents() noexcept {
+    return documents_;
+}
+
 void EditorWorkspace::RequestExit() {
     if(curveDocument_.IsDirty() && !curveExitApproved_) {
         curveExitRequested_ = true;
@@ -717,7 +724,6 @@ void EditorWorkspace::Draw() {
         ImGui::EndPopup();
     }
     DrawEditorNotifications(notifications_);
-    if(documents_.ExitRequested()) PostQuitMessage(0);
 }
 void EditorWorkspace::Shutdown() {
     if(!initialized_) return;

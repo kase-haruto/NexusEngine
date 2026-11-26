@@ -6,6 +6,7 @@
 #include <memory>
 #include <stop_token>
 #include <span>
+#include <optional>
 
 // engine
 #include "Foundation/Error/Result.h"
@@ -13,6 +14,7 @@
 #include "Graphics/PostProcess/PostProcessGraph.h"
 #include "Graphics/Device/GraphicsCapabilities.h"
 #include "Graphics/Viewport/ViewportImage.h"
+#include "Graphics/Resource/WicImageDecoder.h"
 
 namespace NexusEngine {
 	class IGraphicsRenderer;
@@ -48,6 +50,10 @@ namespace NexusEngine {
 		 * \return フレーム描画結果
 		 */
 		[[nodiscard]] Result<void> RenderFrame();
+        /** \brief 次のローカルViewport出力を一度だけ取得する */
+        bool RequestViewportCapture() noexcept;
+        /** \brief 完了済みのコピーだけを回収する。空画像は転送失敗 */
+        std::optional<DecodedImage> CollectViewportCapture();
 		/** ライブコーディング前のフレーム境界で、投入済み GPU 処理の完了を待つ。 */
 		[[nodiscard]] Result<void> WaitForIdle();
 		/**

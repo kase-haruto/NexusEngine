@@ -56,6 +56,13 @@ void ViewportTarget::BeginWrite(ID3D12GraphicsCommandList* commands) const noexc
 void ViewportTarget::EndWrite(ID3D12GraphicsCommandList* commands) const noexcept {
     Transition(commands, resource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
+////////////////////////////////////////////////////////////////////////////////
+// Readbackの記録は所有側と同じDirect Queue上で行う
+////////////////////////////////////////////////////////////////////////////////
+ID3D12Resource* ViewportTarget::Resource() const noexcept {
+    return resource_.Get();
+}
+
 void ViewportTarget::Shutdown() noexcept {
     resource_.Reset();
     if(resources_ && srv_.IsValid()) static_cast<void>(resources_->Free(srv_));
