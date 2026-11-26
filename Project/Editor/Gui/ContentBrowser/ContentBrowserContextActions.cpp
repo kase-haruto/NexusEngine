@@ -3,7 +3,9 @@
 #include "Editor/Services/ContentBrowserActions.h"
 #include "Editor/Services/LocalizationService.h"
 #include "Editor/Services/SceneEditService.h"
+#include "Editor/Services/EditorCommandRegistry.h"
 #include "Editor/Core/EditorSession.h"
+#include "Runtime/Scene/Components/NameComponent.h"
 #include "Foundation/Utility/String/ConvertString.h"
 #include <algorithm>
 #include <cstdio>
@@ -214,26 +216,66 @@ void ContentBrowserPanel::DrawEntryActions(const EditorContext &context, const A
         }
     }
     if (type.source && sources_) {
-        const auto types = SourceFileActions::TypesFor(sources_->Root(), entry.path, context.types);
-        const bool editable = !context.session.IsPlaying() && !context.selection.All().empty();
-        if (ImGui::BeginMenu(context.text.Text("source.attach").c_str(), editable && !types.empty())) {
-            for (const auto &id : types) {
-                const auto *component = context.types.Find(id);
-                if (!component) {
-                    continue;
-                }
-                auto *level = context.session.GetLevel();
-                const bool attached = level && std::ranges::all_of(context.selection.All(), [&](PersistentId entity) {
-                                          return component->contains(level->FindEntity(entity));
-                                      });
-                if (ImGui::MenuItem(context.text.Label(component->labelKey, id).c_str(), nullptr, attached,
-                                    !attached)) {
-                    attach_ = id;
-                }
+        DrawSourceAttachment(context, entry.path);
+    }
+}
+
+void ContentBrowserPanel::DrawSourceAttachment(const EditorContext &context, const std::filesystem::path &file) {
+    if (!ImGui::BeginMenu(context.text.Text("source.attach").c_str())) {
+        return;
+    }
+
+    // 実行ボタンの前に、共通のシーン選択から実際に変更されるオブジェクトを表示する。
+    auto *level = context.session.GetLevel();
+    const auto targets = context.selection.All();
+    const bool validTargets = level && !targets.empty() && std::ranges::all_of(targets, [&](PersistentId id) {
+        return level->FindEntity(id).IsAlive();
+    });
+    if (validTargets) {
+        ImGui::TextDisabled("%s", context.text.Text("source.attach.targets").c_str());
+        for (const auto id : targets) {
+            const auto *name = level->FindEntity(id).GetComponent<NameComponent>();
+            ImGui::BulletText("%s", name && !name->name.empty() ? name->name.c_str()
+                                                              : context.text.Text("source.attach.unnamed").c_str());
+        }
+        ImGui::Separator();
+    } else {
+        ImGui::TextDisabled("%s", context.text.Text("source.attach.noSelection").c_str());
+    }
+
+    const auto build = creation_ ? creation_->GetBuildState() : SourceCreationService::BuildState::Idle;
+    const bool busy = build == SourceCreationService::BuildState::Building ||
+                      context.commands.IsChecked("project.reloadCSharp") ||
+                      context.commands.IsChecked("project.reloadCpp");
+    if (busy) {
+        ImGui::TextDisabled("%s", context.text.Text("source.build.running").c_str());
+    } else if (build == SourceCreationService::BuildState::Failed) {
+        ImGui::TextDisabled("%s", context.text.Text("source.build.failed").c_str());
+    } else if (context.session.IsPlaying() || context.commands.IsChecked("project.runStandalone")) {
+        ImGui::TextDisabled("%s", context.text.Text("source.attach.stopPlay").c_str());
+    } else {
+        const auto types = SourceFileActions::TypesFor(sources_->Root(), file, context.types);
+        if (types.empty()) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetFontSize() * 26);
+            ImGui::TextUnformatted(context.text.Text("source.attach.unregistered").c_str());
+            ImGui::PopTextWrapPos();
+        }
+        for (const auto &id : types) {
+            const auto *component = context.types.Find(id);
+            if (!component || !component->contains) {
+                continue;
             }
-            ImGui::EndMenu();
+            const bool attached = validTargets && std::ranges::all_of(targets, [&](PersistentId target) {
+                return component->contains(level->FindEntity(target));
+            });
+            if (ImGui::MenuItem(context.text.Label(component->labelKey, id).c_str(), nullptr, attached,
+                                validTargets && !attached)) {
+                attach_ = id;
+                attachSelectionRevision_ = context.selection.Revision();
+            }
         }
     }
+    ImGui::EndMenu();
 }
 void ContentBrowserPanel::DrawDialogs(const EditorContext &context) {
     auto &catalog = *roots_[rootIndex_].catalog;

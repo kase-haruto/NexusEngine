@@ -310,6 +310,7 @@ void ContentBrowserPanel::Draw(const EditorContext &context) {
     SyncRoots();
     services_->Poll();
     DrawToolbar(context);
+    DrawSourceBuild(context);
     if (!ImGui::BeginTable("browser", state_.showSources ? 2 : 1,
                            ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
         return;
@@ -339,8 +340,9 @@ void ContentBrowserPanel::Draw(const EditorContext &context) {
     DrawMutation(context);
     if (attach_) {
         const auto *type = context.types.Find(*attach_);
-        if (!type || !context.sceneEdits.AddComponent(*type)) {
-            NEXUS_LOG_WARNING("ContentBrowser", context.text.Text("edit.rejected"));
+        if (!type || attachSelectionRevision_ != context.selection.Revision() ||
+            !context.sceneEdits.AddComponent(*type)) {
+            error_ = context.text.Text("edit.rejected");
         }
         attach_.reset();
     }

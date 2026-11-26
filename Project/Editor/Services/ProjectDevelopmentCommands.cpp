@@ -36,8 +36,10 @@ struct ProjectDevelopmentJob {
     /** \brief 完了を所有Threadで回収する。futureの例外も既存Consoleへ値として通知する */
     void Poll(EditorWorkspace& workspace) {
         if(future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            bool buildSucceeded = false;
             try {
                 auto result = future.get();
+                buildSucceeded = result.has_value();
                 if(sourceCreation && !pendingSource.empty()) {
                     if(result) {
                         sourceCreation->Complete(pendingSource);
@@ -55,13 +57,25 @@ struct ProjectDevelopmentJob {
                 sourceCreation->Complete(std::unexpected(Error(ErrorCategory::Framework, 246, status)));
                 pendingSource.clear();
             }
+            if (sourceCreation && sourceCreation->GetBuildState() == SourceCreationService::BuildState::Building) {
+                sourceCreation->SetBuildState(buildSucceeded ? SourceCreationService::BuildState::Succeeded
+                                                              : SourceCreationService::BuildState::Failed,
+                                              buildSucceeded ? std::string{} : status);
+            }
         }
     }
     /** \brief 描画上の無効化に加えて実行直前にも競合を確認する。Worldはworkerへ渡さない */
     void Start(EditorWorkspace& workspace, std::string action, std::vector<std::wstring> arguments = {}) {
         if(future.valid() || workspace.Session().IsPlaying() || workspace.Commands().IsChecked("project.runStandalone") || workspace.IsProjectOperationActive()) return;
+        const bool build = action == "Build" || action == "Rebuild" || action == "RebuildScripts";
+        if (build && sourceCreation) {
+            sourceCreation->SetBuildState(SourceCreationService::BuildState::Building);
+        }
         try {
-            auto id = CreateUuid(); if(!id) { status = id.error().GetMessageText(); workspace.Report(std::unexpected(id.error())); return; }
+            auto id = CreateUuid();
+            if (!id) {
+                throw std::runtime_error(id.error().GetMessageText());
+            }
             log = project->Root() / "Build/Logs/Project" / (*id + ".log"); std::filesystem::create_directories(log.parent_path());
             cancel = std::stop_source{}; status = "Working...";
             future = std::async(std::launch::async, [project = project, engine = engine, options = options, action, arguments = std::move(arguments), log = log, stop = cancel.get_token()]() mutable -> Result<void> {
@@ -93,6 +107,9 @@ struct ProjectDevelopmentJob {
             });
         } catch(const std::exception& exception) { status = exception.what(); workspace.Report(std::unexpected(Error(ErrorCategory::Framework, 246, status))); }
           catch(...) { status = "Cannot start project operation."; workspace.Report(std::unexpected(Error(ErrorCategory::Framework, 246, status))); }
+        if (build && sourceCreation && !future.valid()) {
+            sourceCreation->SetBuildState(SourceCreationService::BuildState::Failed, status);
+        }
     }
 };
 /*-----------------------------------------------------------------------------------------
@@ -187,6 +204,14 @@ void RegisterProjectDevelopmentCommands(EditorWorkspace& workspace, std::shared_
     // Panelを開く操作は許可したまま、Job寿命だけを他の開始条件へ公開する。
     development.isChecked = [job] { return job->future.valid(); };
     workspace.Commands().Register("project.development", std::move(development));
+    workspace.Commands().Register("project.build", {
+        [job, &workspace] {
+            job->Start(workspace, "Build");
+        },
+        [&workspace] {
+            return !workspace.Session().IsPlaying() && !workspace.IsProjectOperationActive() &&
+                   !workspace.Commands().IsChecked("project.runStandalone");
+        }});
     workspace.Menu().RegisterTool({"Project Modules / Build / Package", "project.development"});
     workspace.AddFramePoller([job, &workspace] { job->Poll(workspace); });
     workspace.Toolbar().RegisterSection({"project.operations", 215, 7, [job](const auto&, const auto&) { if(job->future.valid()) ImGui::TextUnformatted("Project operation..."); }});

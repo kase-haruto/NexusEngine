@@ -106,7 +106,10 @@ void ContentBrowserPanel::DrawSourceCreation(const EditorContext &context) {
             if (sources_) {
                 sources_->Refresh();
                 sources_->Navigate(creation_->CreatedFile().parent_path());
-                Navigate(1, sources_->Current());
+                const auto root = services_->RootFor(creation_->CreatedFile());
+                if (root && Navigate(*root, sources_->Current())) {
+                    state_.selection = {creation_->CreatedFile()};
+                }
             }
             if (sourceOpen_ && open_) {
                 Open(creation_->CreatedFile());
@@ -192,6 +195,39 @@ void ContentBrowserPanel::DrawSourceCreation(const EditorContext &context) {
     // 非同期生成失敗も、modalを閉じた後にBrowser内へ残して通知する。
     if (!sourceError_.empty()) {
         ImGui::TextWrapped("%s", sourceError_.c_str());
+    }
+}
+
+void ContentBrowserPanel::DrawSourceBuild(const EditorContext &context) {
+    if (!creation_ || !creation_->Available() || !roots_[rootIndex_].source || roots_[rootIndex_].readOnly) {
+        return;
+    }
+    const auto state = creation_->GetBuildState();
+    ImGui::BeginDisabled(!context.commands.CanExecute("project.build"));
+    if (ImGui::Button(context.text.Text("source.build.action").c_str())) {
+        context.commands.Execute("project.build");
+    }
+    ImGui::EndDisabled();
+    const char *key = nullptr;
+    switch (state) {
+    case SourceCreationService::BuildState::Idle:
+        break;
+    case SourceCreationService::BuildState::Building:
+        key = "source.build.running";
+        break;
+    case SourceCreationService::BuildState::Succeeded:
+        key = "source.build.succeeded";
+        break;
+    case SourceCreationService::BuildState::Failed:
+        key = "source.build.failed";
+        break;
+    }
+    if (key) {
+        ImGui::SameLine();
+        ImGui::TextWrapped("%s", context.text.Text(key).c_str());
+    }
+    if (state == SourceCreationService::BuildState::Failed && !creation_->BuildError().empty()) {
+        ImGui::TextWrapped("%s", creation_->BuildError().c_str());
     }
 }
 

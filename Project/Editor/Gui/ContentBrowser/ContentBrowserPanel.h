@@ -51,6 +51,8 @@ class ContentBrowserPanel final : public IEditorPanel {
     void ChooseFolder(size_t root, const std::filesystem::path &path, bool toggle);
 
     void DrawEntryActions(const EditorContext &context, const AssetEntry &entry);
+    void DrawSourceAttachment(const EditorContext &context, const std::filesystem::path &file);
+    void DrawSourceBuild(const EditorContext &context);
     void DrawAssetView(const EditorContext &context);
     void DrawDialogs(const EditorContext &context);
     void DrawCreateMenu(const EditorContext &context, const std::filesystem::path &directory);
@@ -107,6 +109,7 @@ class ContentBrowserPanel final : public IEditorPanel {
     bool archiveRequested_ = false, moveRequested_ = false;
     std::shared_ptr<size_t> fileRevision_;
     std::optional<std::string> attach_;
+    size_t attachSelectionRevision_ = 0;
     std::optional<ContentLocation> pendingNavigate_;
 };
 } // namespace NexusEngine

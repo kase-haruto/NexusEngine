@@ -30,6 +30,11 @@ struct SourceCreationRequest {
 /** Browserと既存Project jobの値による接続。生成・登録はAdd-GameSourceへ委譲する。 */
 class SourceCreationService final {
 public:
+    enum class BuildState { Idle, Building, Succeeded, Failed };
+    /** ProjectのBuildだけを追跡し、生成やPackageの結果を混同しない。 */
+    void SetBuildState(BuildState state, std::string error = {});
+    BuildState GetBuildState() const noexcept;
+    const std::string &BuildError() const noexcept;
     void Configure(std::filesystem::path project, std::function<bool()> ready,
         std::function<Result<void>(const SourceCreationRequest&)> create);
     bool Available() const noexcept;
@@ -47,6 +52,8 @@ private:
     std::function<bool()> ready_;
     std::function<Result<void>(const SourceCreationRequest&)> create_;
     std::string error_;
+    BuildState buildState_ = BuildState::Idle;
+    std::string buildError_;
     uint64_t revision_ = 0;
 };
 class SourceFileActions final {

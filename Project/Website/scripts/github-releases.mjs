@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repo = 'kase-haruto/NexusEngine';
 const api = `https://api.github.com/repos/${repo}`;
-const credential = execFileSync('git', ['credential', 'fill'], { cwd: resolve(root, '../..'), input: `protocol=https\nhost=github.com\nusername=kase-haruto\npath=${repo}.git\n\n`, encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' }, stdio: ['pipe', 'pipe', 'pipe'] });
+const credential = execFileSync('git', ['credential', 'fill'], { cwd: resolve(root, '../..'), input: `protocol=https\nhost=github.com\npath=${repo}.git\n\n`, encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' }, stdio: ['pipe', 'pipe', 'pipe'] });
 const token = credential.split(/\r?\n/).find(line => line.startsWith('password='))?.slice(9);
 if (!token) throw new Error('GitHub authentication is required. Sign in through Git Credential Manager.');
 const headers = { Authorization: `Bearer ${token}`, 'User-Agent': 'NexusEngine-Website', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
@@ -23,8 +23,13 @@ const repository = await call(api);
 if (repository.private || !repository.permissions?.push) throw new Error('A public repository with write access is required.');
 if (process.argv.includes('--check')) console.log(`Authenticated write access confirmed: ${repo} (public).`);
 else {
-const uploads = JSON.parse(await readFile(resolve(root, 'upload-manifest.json'), 'utf8'));
-if (uploads.length < 2 || !uploads.some(item => item.key.startsWith('engines/')) || uploads.filter(item => item.key.startsWith('launcher/')).length !== 1) throw new Error('Build the SDKs and the production installer first.');
+const manifest = JSON.parse(await readFile(resolve(root, 'upload-manifest.json'), 'utf8'));
+const engineOnly = process.argv.includes('--engine-only');
+const uploads = engineOnly ? manifest.filter(item => item.key.startsWith('engines/')) : manifest;
+if (!uploads.some(item => item.key.startsWith('engines/')) ||
+    (!engineOnly && uploads.filter(item => item.key.startsWith('launcher/')).length !== 1)) {
+  throw new Error(engineOnly ? 'Build the SDK first.' : 'Build the SDKs and the production installer first.');
+}
 for (const item of uploads) {
   const hash = createHash('sha256'); for await (const chunk of createReadStream(item.file)) hash.update(chunk);
   if (hash.digest('hex') !== item.sha256 || (await stat(item.file)).size !== item.bytes || item.bytes >= 2 * 1024 ** 3) throw new Error('Artifact failed validation.');
@@ -43,7 +48,11 @@ const versions = uploads
   })
   .join(' / ');
 const launcher = uploads.find(item => item.key.startsWith('launcher/'));
-const body = 'NexusEngine Windows x64配布物。SDK ' + versions + 'とLauncher ' + (launcher.version || '') + ' setupを添付しています。\n\n' + (launcher.changes ? launcher.changes + '\n\n' : '') + '導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、タグが指すコミットのソースであり、SDK生成時の作業ツリーや各旧SDKのソースとの一致を保証しません。実行用ファイルは添付のSDK ZIPとlauncherSetup.exeを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
+const contents = launcher ? `SDK ${versions}とLauncher ${launcher.version || ''} setup` : `SDK ${versions}`;
+const notes = engineOnly && uploads.length === 1 && /^\d+\.\d+\.\d+$/.test(versions)
+  ? (await readFile(resolve(root, '../Docs', `Release-${versions}.md`), 'utf8')) + '\n\n'
+  : '';
+const body = `NexusEngine Windows x64配布物。添付ファイルは${contents}です。\n\n` + notes + (launcher?.changes ? launcher.changes + '\n\n' : '') + '導入方法・変更点: https://nexus-engine.nexus-engine-website.workers.dev/\n\nこのタグは配布バッチを識別します。GitHubが自動生成するSource codeアーカイブは、タグが指すコミットのソースです。実行用ファイルはSDK ZIPを使用してください。\n\nSHA-256:\n' + uploads.map(item => `- ${item.key.split('/').at(-1)}: ${item.sha256}`).join('\n');
 if (!release) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: resolve(root, '../..'), encoding: 'utf8' }).trim();
   // ローカルだけの開発commitを公開するために、別作業のソースをpushしない。
@@ -57,7 +66,8 @@ if (!release) {
   } else if (!commitResponse.ok) {
     throw new Error(`Cannot verify release target commit: HTTP ${commitResponse.status}`);
   }
-  release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: targetCommit, name: 'NexusEngine Windows SDK / Launcher', body, draft: true }) });
+  const name = engineOnly ? `NexusEngine ${versions} Windows x64` : 'NexusEngine Windows SDK / Launcher';
+  release = await call(api + '/releases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: tag, target_commitish: targetCommit, name, body, draft: true }) });
   console.log(`Created draft release: ${tag}`);
 }
 // 前のsetupも版一覧から導入できるよう、検証済みの公開履歴を残す。

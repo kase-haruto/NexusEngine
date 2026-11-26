@@ -65,6 +65,16 @@ void SourceCreationService::Configure(std::filesystem::path project, std::functi
 bool SourceCreationService::Available() const noexcept {
     return !project_.empty() && static_cast<bool>(create_);
 }
+void SourceCreationService::SetBuildState(BuildState state, std::string error) {
+    buildState_ = state;
+    buildError_ = std::move(error);
+}
+SourceCreationService::BuildState SourceCreationService::GetBuildState() const noexcept {
+    return buildState_;
+}
+const std::string &SourceCreationService::BuildError() const noexcept {
+    return buildError_;
+}
 bool SourceCreationService::CanCreate() const {
     return Available() && (!ready_ || ready_());
 }
