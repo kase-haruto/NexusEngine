@@ -16,4 +16,5 @@
 - SHA-256 `c8609cab951fe85f5e1823b1364ece5ed35a42ab4ef91c09228763e32d2baa70`
 - [GitHub Releases](https://github.com/kase-haruto/NexusEngine/releases/tag/distribution-e851c4eac1a0) に最新版として公開した。公開 ZIP をダウンロードし、サイズと SHA-256 を照合した。
 - Launcher 1.3.2 の公開済みセットアップはローカルファイルのサイズと SHA-256 を公開カタログと照合した。
-- 既存版を含む Web／Launcher 用カタログを生成した。SDK 18 版とセットアップ 6 版を含み、Cloudflare の静的アセットのドライランに成功した。本番サイトは 1.5.6 を返しており、Cloudflare の認証後に配備と公開カタログの再検証が必要。
+- Cloudflare Workers の静的アセットとして本番に反映した。Web と Launcher の両カタログで 1.7.0 が最新版として公開されていることを確認した。旧版を含め SDK 18 版、セットアップ 6 版が掲載されている。
+- Launcher の配布テストで本番カタログから SDK 18 版を読み込み、GitHub の HTTPS リダイレクト経由で 1.7.0 をダウンロードして検証した。

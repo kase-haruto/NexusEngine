@@ -39,7 +39,10 @@
     "sdk_build_id": "2e0077f1-7583-4dd2-9a80-110a4f07650d",
     "verified_at": "2026-11-27",
     "verification_document": "Project/Docs/Release-1.7.0-Verification.md",
-    "launcher_catalog_latest_observed": "1.5.6",
-    "website_update": "pending_cloudflare_login"
+    "launcher_catalog_latest_observed": "1.7.0",
+    "website_update": "deployed",
+    "deployment_version": "a51e6958-9096-495a-b744-9bad128a279f",
+    "public_sdk_versions": 18,
+    "public_setup_versions": 6
   }
 }

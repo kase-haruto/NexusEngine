@@ -14,8 +14,19 @@ if(-not $LauncherOutput) { $LauncherOutput = Join-Path $repository ('Generated/L
 $previousRoot = $env:NEXUS_RELEASE_ROOT
 $previousSetup = $env:NEXUS_LAUNCHER_SETUP
 $previousOrigin = $env:NEXUS_SITE_ORIGIN
+$previousCloudflareToken = $env:CLOUDFLARE_API_TOKEN
+$previousCloudflareAccount = $env:CLOUDFLARE_ACCOUNT_ID
 Push-Location $siteRoot
 try {
+    # CI can supply its own credentials. Locally, use the encrypted Windows credential if configured.
+    if (!$env:CLOUDFLARE_API_TOKEN -and $env:LOCALAPPDATA) {
+        $credentialPath = Join-Path $env:LOCALAPPDATA 'NexusEngine/Release/CloudflareDeployment.xml'
+        if (Test-Path -LiteralPath $credentialPath -PathType Leaf) {
+            $credential = Import-Clixml -LiteralPath $credentialPath
+            $env:CLOUDFLARE_ACCOUNT_ID = $credential.UserName
+            $env:CLOUDFLARE_API_TOKEN = $credential.GetNetworkCredential().Password
+        }
+    }
     if(-not $LauncherSetup) {
         & (Join-Path $repository 'Project/Tools/Project/Build-Distribution.ps1') -CatalogUrl ([uri]::new($SiteOrigin, '/releases.json')) -OutputDirectory $LauncherOutput
         if($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
@@ -26,13 +37,13 @@ try {
     $env:NEXUS_SITE_ORIGIN = $SiteOrigin.AbsoluteUri
     & node scripts/build.mjs
     if($LASTEXITCODE -ne 0) { throw 'Website build failed.' }
-    & npm.cmd test
+    & node --test 'tests/*.test.mjs'
     if($LASTEXITCODE -ne 0) { throw 'Website tests failed.' }
     & node scripts/github-releases.mjs
     if($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed.' }
     & node scripts/build.mjs
     if($LASTEXITCODE -ne 0) { throw 'Published catalog generation failed.' }
-    & npx.cmd --no-install wrangler deploy
+    & node node_modules/wrangler/bin/wrangler.js deploy
     if($LASTEXITCODE -ne 0) { throw 'Website deployment failed.' }
     & node scripts/verify-public.mjs
     if($LASTEXITCODE -ne 0) { throw 'Public download verification failed.' }
@@ -41,5 +52,7 @@ try {
     $env:NEXUS_RELEASE_ROOT = $previousRoot
     $env:NEXUS_LAUNCHER_SETUP = $previousSetup
     $env:NEXUS_SITE_ORIGIN = $previousOrigin
+    $env:CLOUDFLARE_API_TOKEN = $previousCloudflareToken
+    $env:CLOUDFLARE_ACCOUNT_ID = $previousCloudflareAccount
     Pop-Location
 }
